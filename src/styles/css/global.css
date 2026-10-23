@@ -1,0 +1,427 @@
+@import './reset.css';
+@import './nprogress.css';
+@import './transition.css';
+
+html,
+body,
+#app {
+  height: 100%;
+  text-autospace: normal;
+  font-size: 13px;
+}
+
+html {
+  overflow-x: hidden;
+  color: rgb(var(--base-text-color));
+}
+
+/* Compact navigation shared by vertical, horizontal and hybrid layouts. */
+.n-menu {
+  --kubeforecast-menu-item-height: 30px;
+}
+
+.n-menu .n-menu-item {
+  height: var(--kubeforecast-menu-item-height) !important;
+  margin-top: 1px !important;
+  margin-bottom: 1px !important;
+}
+
+.n-menu .n-menu-item-content {
+  height: var(--kubeforecast-menu-item-height) !important;
+  font-size: 12px;
+}
+
+.n-menu .n-menu-item-content__icon {
+  font-size: 16px !important;
+}
+
+.n-menu .n-submenu-children {
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+/* Keep list pages information-dense: controls and table rows should not dominate the viewport. */
+.n-form-item .n-form-item-label {
+  font-size: 12px;
+}
+
+/* The extra label height only belongs above the control. Side labels (modal
+   forms) keep Naive's own line height so they stay aligned with their input. */
+.n-form-item.n-form-item--top-labelled .n-form-item-label {
+  min-height: 20px;
+  padding-bottom: 3px;
+}
+
+/* A label may carry a "?" help icon (IconTooltip). Laying the text and icon out
+   as one centred inline row keeps every field aligned whether or not it has one. */
+.n-form-item .n-form-item-label .n-form-item-label__text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.n-button,
+.n-input,
+.n-base-selection,
+.n-pagination {
+  font-size: 12px;
+}
+
+.n-data-table {
+  font-size: 12px;
+}
+
+.n-data-table .n-data-table-th,
+.n-data-table .n-data-table-td {
+  line-height: 1.35;
+}
+
+.n-card.rounded-16px {
+  border-radius: 10px;
+}
+
+.n-card.mb-16px {
+  margin-bottom: 10px;
+}
+
+.n-tabs .n-tabs-tab,
+.n-breadcrumb,
+.n-layout-header {
+  font-size: 13px;
+}
+
+/* Unified compact search bars for list pages. */
+.list-search-card.n-card .n-card__content {
+  padding: 8px 12px 10px;
+}
+
+.list-search-card.rounded-16px {
+  border-radius: 10px;
+}
+
+.list-search-card.mb-16px,
+.list-search-card.mb-12px {
+  margin-bottom: 10px;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item__header {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item__header-main {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  line-height: 32px;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item__content-inner {
+  padding-top: 0;
+}
+
+/* Keep the search actions in the title row while the panel is open. Since the
+ * actions remain inside the collapsible content, closing the panel hides them. */
+.list-search-collapse.n-collapse .n-collapse-item {
+  position: relative;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item--active .list-search-actions {
+  position: absolute !important;
+  top: 1px;
+  right: 0;
+  z-index: 1;
+  width: auto !important;
+  max-width: calc(100% - 100px) !important;
+  margin: 0 !important;
+  visibility: visible;
+  opacity: 1;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item--active .list-search-actions .n-form-item-label {
+  display: none;
+}
+
+.list-search-collapse.n-collapse .n-collapse-item:not(.n-collapse-item--active) .list-search-actions {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.list-search-form.n-form.n-form--inline .n-form-item {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  row-gap: 3px;
+}
+
+.list-search-form .n-form-item-label {
+  display: none !important;
+  justify-content: flex-end;
+  min-height: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  line-height: 0 !important;
+}
+
+.list-search-form .n-form-item-label__text {
+  line-height: 0;
+}
+
+.list-search-form .n-form-item-blank {
+  min-height: 32px !important;
+}
+
+.list-search-row.n-grid,
+.list-search-row {
+  --list-search-field-width: 220px;
+  --list-search-medium-field-width: 160px;
+  --list-search-short-field-width: 120px;
+  --list-search-switch-width: 96px;
+  --list-search-control-height: 32px;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  grid-template-columns: none !important;
+  gap: 10px 24px !important;
+  align-items: flex-end !important;
+}
+
+.list-search-row > .n-grid-item,
+.list-search-row > .list-search-item,
+.list-search-row > .list-search-main,
+.list-search-row > .list-search-select-field {
+  flex: 0 0 var(--list-search-field-width) !important;
+  width: var(--list-search-field-width) !important;
+  max-width: var(--list-search-field-width) !important;
+  margin: 0 !important;
+}
+
+.list-search-row > .list-search-medium-field {
+  flex-basis: var(--list-search-medium-field-width) !important;
+  width: var(--list-search-medium-field-width) !important;
+  max-width: var(--list-search-medium-field-width) !important;
+}
+
+.list-search-row > .list-search-short-field {
+  flex-basis: var(--list-search-short-field-width) !important;
+  width: var(--list-search-short-field-width) !important;
+  max-width: var(--list-search-short-field-width) !important;
+}
+
+.list-search-row > .list-search-switch-field {
+  flex: 0 0 var(--list-search-switch-width) !important;
+  width: var(--list-search-switch-width) !important;
+  max-width: var(--list-search-switch-width) !important;
+  margin: 0 !important;
+}
+
+.list-search-switch-field .n-form-item-blank {
+  display: flex;
+  align-items: center;
+}
+
+.list-search-row > .n-grid-item:last-child,
+.list-search-row > .list-search-actions {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: none !important;
+  align-items: flex-end !important;
+  margin: 0 0 0 auto !important;
+  padding: 0 !important;
+}
+
+.list-search-row > .n-grid-item:last-child > .n-space,
+.list-search-actions {
+  display: flex !important;
+  width: auto !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  margin: 0 !important;
+}
+
+.list-search-actions .n-space {
+  align-items: center !important;
+}
+
+.list-search-actions .n-button {
+  --n-height: var(--list-search-control-height) !important;
+  height: var(--list-search-control-height) !important;
+  min-height: var(--list-search-control-height) !important;
+}
+
+.list-search-form .n-form-item-blank {
+  width: 100%;
+}
+
+.list-search-form .n-form-item-blank > *,
+.list-search-row .n-input,
+.list-search-row .n-select,
+.list-search-row .n-base-selection,
+.list-search-row .n-input-wrapper {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.list-search-row .n-input,
+.list-search-row .n-base-selection,
+.list-search-actions .n-button {
+  --n-height: var(--list-search-control-height) !important;
+}
+
+.list-search-row .n-input,
+.list-search-row .n-base-selection {
+  height: var(--list-search-control-height) !important;
+  min-height: var(--list-search-control-height) !important;
+}
+
+.list-search-row .n-input-wrapper,
+.list-search-row .n-input__input,
+.list-search-row .n-input__placeholder,
+.list-search-row .n-base-selection-label,
+.list-search-row .n-base-selection-input,
+.list-search-row .n-base-selection-placeholder,
+.list-search-actions .n-button__content {
+  min-height: 0 !important;
+  height: 100% !important;
+  align-items: center;
+}
+
+.list-search-row .n-input__input-el,
+.list-search-row .n-base-selection-input__content {
+  line-height: var(--list-search-control-height) !important;
+}
+
+/* Optical alignment for compact controls: Naive UI's select text sits about
+ * one pixel above adjacent labels/buttons at this height. */
+.list-search-row .n-base-selection-input__content,
+.list-search-row .n-base-selection-placeholder {
+  transform: translateY(1px);
+}
+
+.list-search-row .n-base-selection {
+  min-width: 100% !important;
+}
+
+@media (max-width: 720px) {
+  .list-search-row > .n-grid-item,
+  .list-search-row > .list-search-item,
+  .list-search-row > .list-search-main,
+  .list-search-row > .list-search-select-field,
+  .list-search-row > .list-search-medium-field,
+  .list-search-row > .list-search-short-field,
+  .list-search-row > .list-search-switch-field,
+  .list-search-row > .n-grid-item:last-child,
+  .list-search-row > .list-search-actions {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+  }
+
+  .list-search-row > .n-grid-item:last-child > .n-space,
+  .list-search-actions {
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+}
+/* Keep rows compact while giving column resizing a full-height header target. */
+.n-data-table .n-data-table-th {
+  height: 44px;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  user-select: none;
+}
+
+.n-data-table-resize-button {
+  top: 0 !important;
+  right: -12px !important;
+  bottom: 0 !important;
+  width: 24px !important;
+  height: 100% !important;
+  z-index: 40 !important;
+  cursor: col-resize !important;
+  touch-action: none;
+}
+
+.n-data-table-resize-button::after {
+  top: 8px !important;
+  left: 50% !important;
+  width: 2px !important;
+  height: calc(100% - 16px) !important;
+  transform: translateX(-50%) !important;
+  opacity: 0.55;
+  transition:
+    top 0.15s ease,
+    height 0.15s ease,
+    width 0.15s ease,
+    opacity 0.15s ease,
+    background-color 0.15s ease !important;
+  pointer-events: none;
+}
+
+.n-data-table-resize-button:hover::after,
+.n-data-table-resize-button--active::after {
+  top: 0 !important;
+  width: 3px !important;
+  height: 100% !important;
+  opacity: 1;
+}
+
+/* Create / edit forms: the label, its help and the control read as one field, with
+   little air between fields. Naive sets the feedback height inline, hence !important. */
+.n-form:not(.list-search-form) .n-form-item {
+  --n-feedback-height: 16px !important;
+}
+
+.n-form:not(.list-search-form) .n-form-item.n-form-item--top-labelled .n-form-item-label {
+  min-height: 0;
+  padding-bottom: 2px;
+}
+
+/* Edit dialogs use the width of the page: fields sit in columns instead of one long scrolling column. */
+.n-card.edit-modal-wide {
+  width: min(1360px, 96vw);
+}
+
+/* The judgement of a strategy: the conditions of every group and their numbers in one view. */
+.n-card.judge-modal-wide {
+  width: min(1200px, 96vw);
+}
+
+.n-card.edit-modal-full {
+  width: 96vw;
+}
+
+/* Every edit dialog with a form: wider, fields in two columns, long fields (text areas, lists, tables) across both. */
+.n-card.n-modal:has(.n-form > .n-form-item) {
+  min-width: min(900px, 96vw);
+}
+
+.n-card.n-modal .n-form:not(.list-search-form):not(.n-form--inline):has(> .n-form-item) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+}
+
+.n-card.n-modal .n-form > .n-form-item:has(textarea),
+.n-card.n-modal .n-form > .n-form-item:has(.n-dynamic-input),
+.n-card.n-modal .n-form > .n-form-item:has(.n-dynamic-tags),
+.n-card.n-modal .n-form > .n-form-item:has(.n-data-table),
+.n-card.n-modal .n-form > .n-form-item:has(.n-transfer) {
+  grid-column: 1 / -1;
+}
+
+.n-card.n-modal > .n-card__content {
+  max-height: calc(90vh - 130px);
+  overflow-y: auto;
+}
