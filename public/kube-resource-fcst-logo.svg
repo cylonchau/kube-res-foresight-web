@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
-  <title id="title">KubeForecast</title>
+  <title id="title">kube-resource-fcst</title>
   <desc id="desc">Kubernetes cluster, Pod resources and a scale-up arrow</desc>
   <defs>
     <linearGradient id="background" x1="18" y1="110" x2="110" y2="18" gradientUnits="userSpaceOnUse">

@@ -3,19 +3,17 @@ import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NFormItemGi, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
-import RecordDetailModal from '@/components/business/record-detail-modal.vue';
+import EvaluationDetail from '@/components/business/evaluation-detail.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
-import {
-  sourceMetricOptions,
-  useForecastModules,
-  windowStart,
-  useWindowOptions
-} from '@/hooks/business/use-forecast-modules';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { sourceMetricOptions, useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { fetchGetEvaluations } from '@/service/api';
+import { fetchGetEvaluations, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { formatDecimal } from '@/utils/format';
 
 defineOptions({ name: 'ForecastResultsEvaluations' });
 
@@ -24,14 +22,13 @@ const { modules, moduleOptions, moduleName, loadModules } = useForecastModules()
 const search = reactive({
   moduleId: null as number | null,
   metric: null as string | null,
-  hours: (24 * 7) as number | null
+  range: lastHours(24 * 7) as [number, number] | null
 });
 
 const metricOptions = computed(() => sourceMetricOptions(modules.value, search.moduleId));
-const hoursOptions = useWindowOptions();
 
 const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
-const number = (value: number) => (Number.isFinite(value) ? value.toPrecision(4) : '-');
+const number = (value: number) => formatDecimal(value);
 
 // the list below reads the sort parameters, and a change of the sort searches it again
 let searchList: () => void = () => {};
@@ -40,7 +37,7 @@ const list = usePagedList<Api.Forecast.Evaluation>(async (page, pageSize) => {
   const { data } = await fetchGetEvaluations({
     module_id: search.moduleId ?? undefined,
     metric: search.metric ?? undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize,
     ...sortParams()
@@ -51,13 +48,32 @@ searchList = () => {
   list.search();
 };
 
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  const { data, error } = await fetchBatchDeleteRecords({ kind: 'evaluations', ids: checkedRowKeys.value });
+  if (error || !data) return;
+  window.$message?.success(t('common.batchDone', { done: data.done }));
+  checkedRowKeys.value = [];
+  await list.reload();
+}
+
 function resetSearch() {
-  Object.assign(search, { moduleId: null, metric: null, hours: 24 * 7 });
+  Object.assign(search, { moduleId: null, metric: null, range: lastHours(24 * 7) });
 }
 
 const detail = ref<Api.Forecast.Evaluation | null>(null);
 
+/** the unit of the metric an evaluation is of, from the source it was made on */
+const KIND_UNIT: Record<string, string> = { cpu: 'cores', memory: 'bytes' };
+function unitOf(e: Api.Forecast.Evaluation) {
+  const source = modules.value.find(item => item.id === e.module_id)?.sources?.find(item => item.key === e.metric);
+  return source ? KIND_UNIT[source.kind] || '' : '';
+}
+
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   prediction_time: {
     title: t('page.forecast.evaluation.predictionTime'),
     key: 'prediction_time',
@@ -147,7 +163,7 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_evaluation_runs',
   columnMap,
-  defaultKeys: ['prediction_time', 'module', 'algorithm_id', 'wape', 'peak_under', 'operate']
+  defaultKeys: ['__selection__', 'prediction_time', 'module', 'algorithm_id', 'wape', 'peak_under', 'operate']
 });
 
 onMounted(async () => {
@@ -181,15 +197,12 @@ onMounted(async () => {
           :placeholder="t('common.selectField', { field: t('page.datasource.mappings.metric') })"
         />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="3"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.results.evaluationsTitle')"
       :help="t('page.forecast.results.evaluationsHelp')"
       :cfg="cfg"
@@ -199,30 +212,16 @@ onMounted(async () => {
       :empty-hint="t('page.forecast.results.evaluationsEmpty')"
       @refresh="list.reload"
       @sorter="handleSorterChange"
-    />
-    <RecordDetailModal
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
+    <EvaluationDetail
       :show="Boolean(detail)"
-      :title="detail ? `${detail.algorithm_id} · ${moduleName(detail.module_id)} · ${detail.metric}` : ''"
-      :items="
-        detail
-          ? [
-              { label: t('page.forecast.runs.time'), value: detail ? formatDateTime(detail.prediction_time) : '' },
-              { label: t('page.forecast.evaluation.points'), value: detail?.points },
-              { label: 'MAE', value: detail?.mae },
-              { label: 'WAPE', value: detail ? `${(detail.wape * 100).toFixed(2)}%` : '' },
-              { label: t('page.forecast.ranking.bias'), value: detail?.bias },
-              {
-                label: t('page.forecast.evaluation.peakUnder'),
-                value: detail ? `${(detail.peak_under * 100).toFixed(2)}%` : ''
-              },
-              {
-                label: t('page.forecast.detail.coverage'),
-                value: detail ? `${(detail.coverage * 100).toFixed(1)}%` : ''
-              },
-              { label: t('common.createTime'), value: detail ? formatDateTime(detail.created_at) : '' }
-            ]
-          : []
-      "
+      :evaluation="detail"
+      :module-name="detail ? moduleName(detail.module_id) : ''"
+      :unit="detail ? unitOf(detail) : ''"
       @update:show="value => !value && (detail = null)"
     />
   </div>

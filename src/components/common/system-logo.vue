@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import logoSrc from '@/assets/svg-icon/kubeforecast-logo.svg';
+import logoSrc from '@/assets/svg-icon/kube-resource-fcst-logo.svg';
 
 interface Props {
   small?: boolean;
@@ -10,7 +10,7 @@ const props = withDefaults(defineProps<Props>(), { small: false });
 
 <template>
   <div class="app-logo flex-center" :data-small="props.small || undefined">
-    <img :src="logoSrc" alt="KubeForecast" class="size-full object-contain" />
+    <img :src="logoSrc" alt="kube-resource-fcst" class="size-full object-contain" />
   </div>
 </template>
 

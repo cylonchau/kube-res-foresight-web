@@ -3,19 +3,18 @@ import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NFormItemGi, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
+import BacktestMetrics from '@/components/business/backtest-metrics.vue';
 import RecordDetailModal from '@/components/business/record-detail-modal.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
-import {
-  sourceMetricOptions,
-  useForecastModules,
-  windowStart,
-  useWindowOptions
-} from '@/hooks/business/use-forecast-modules';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { sourceMetricOptions, useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { fetchSearchBacktests } from '@/service/api';
+import { fetchSearchBacktests, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { formatPercent } from '@/utils/format';
 
 defineOptions({ name: 'ForecastResultsBacktests' });
 
@@ -25,7 +24,7 @@ const search = reactive({
   moduleId: null as number | null,
   metric: null as string | null,
   promoted: null as string | null,
-  hours: (24 * 7) as number | null
+  range: lastHours(24 * 7) as [number, number] | null
 });
 
 const metricOptions = computed(() => sourceMetricOptions(modules.value, search.moduleId));
@@ -33,21 +32,12 @@ const promotedOptions = computed(() => [
   { label: t('page.forecast.evaluation.promoted'), value: 'true' },
   { label: t('page.forecast.results.notPromoted'), value: 'false' }
 ]);
-const hoursOptions = useWindowOptions();
 
-const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
+const percent = (value: number) => formatPercent(value, 1);
 const yesNo = (value: boolean) =>
   h(NTag, { size: 'small', bordered: false, type: value ? 'success' : 'default' }, () =>
     t(value ? 'common.yesOrNo.yes' : 'common.yesOrNo.no')
   );
-
-function pretty(raw: string) {
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
-}
 
 function parse<T>(raw: string): T | null {
   try {
@@ -69,7 +59,7 @@ const list = usePagedList<Api.Forecast.BacktestRun>(async (page, pageSize) => {
     module_id: search.moduleId ?? undefined,
     metric: search.metric ?? undefined,
     promoted: search.promoted === null ? undefined : search.promoted === 'true',
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize,
     ...sortParams()
@@ -80,13 +70,32 @@ searchList = () => {
   list.search();
 };
 
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  const { data, error } = await fetchBatchDeleteRecords({ kind: 'backtests', ids: checkedRowKeys.value });
+  if (error || !data) return;
+  window.$message?.success(t('common.batchDone', { done: data.done }));
+  checkedRowKeys.value = [];
+  await list.reload();
+}
+
 function resetSearch() {
-  Object.assign(search, { moduleId: null, metric: null, promoted: null, hours: 24 * 7 });
+  Object.assign(search, { moduleId: null, metric: null, promoted: null, range: lastHours(24 * 7) });
 }
 
 const detail = ref<Api.Forecast.BacktestRun | null>(null);
 
+const KIND_UNIT: Record<string, string> = { cpu: 'cores', memory: 'bytes' };
+/** the unit of the metric a backtest ran on, from the source it was made on */
+function unitOf(run: Api.Forecast.BacktestRun) {
+  const source = modules.value.find(item => item.id === run.module_id)?.sources?.find(item => item.key === run.metric);
+  return source ? KIND_UNIT[source.kind] || '' : '';
+}
+
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   created_at: {
     title: t('common.createTime'),
     key: 'created_at',
@@ -176,7 +185,7 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_backtest',
   columnMap,
-  defaultKeys: ['created_at', 'module', 'algorithm_id', 'wape', 'promoted', 'operate']
+  defaultKeys: ['__selection__', 'created_at', 'module', 'algorithm_id', 'wape', 'promoted', 'operate']
 });
 
 onMounted(async () => {
@@ -222,15 +231,12 @@ onMounted(async () => {
           :placeholder="t('common.selectField', { field: t('page.forecast.evaluation.promoted') })"
         />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="4"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.results.backtestsTitle')"
       :help="t('page.forecast.results.backtestsHelp')"
       :cfg="cfg"
@@ -240,7 +246,11 @@ onMounted(async () => {
       :empty-hint="t('page.forecast.results.backtestsEmpty')"
       @refresh="list.reload"
       @sorter="handleSorterChange"
-    />
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
     <RecordDetailModal
       :show="Boolean(detail)"
       :title="detail ? `${detail.algorithm_id} · ${moduleName(detail.module_id)} · ${detail.metric}` : ''"
@@ -261,17 +271,19 @@ onMounted(async () => {
               { label: t('page.forecast.detail.step'), value: detail ? `${detail.step_seconds}s` : '' },
               { label: t('page.forecast.runs.horizonSteps'), value: detail?.horizon_steps },
               { label: t('page.forecast.detail.cutoffs'), value: detail?.cutoffs },
-              { label: t('page.forecast.detail.metrics'), value: detail ? pretty(detail.metrics) : '', pre: true },
-              {
-                label: t('page.forecast.detail.baselineMetrics'),
-                value: detail ? pretty(detail.baseline_metrics) : '',
-                pre: true
-              },
               { label: t('page.forecast.runs.reason'), value: detail?.reason, pre: true }
             ]
           : []
       "
       @update:show="value => !value && (detail = null)"
-    />
+    >
+      <BacktestMetrics
+        v-if="detail"
+        :metrics="detail.metrics"
+        :baseline-metrics="detail.baseline_metrics"
+        :baseline-id="detail.baseline_id"
+        :unit="unitOf(detail)"
+      />
+    </RecordDetailModal>
   </div>
 </template>

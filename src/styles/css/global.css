@@ -17,17 +17,17 @@ html {
 
 /* Compact navigation shared by vertical, horizontal and hybrid layouts. */
 .n-menu {
-  --kubeforecast-menu-item-height: 30px;
+  --kube-resource-fcst-menu-item-height: 30px;
 }
 
 .n-menu .n-menu-item {
-  height: var(--kubeforecast-menu-item-height) !important;
+  height: var(--kube-resource-fcst-menu-item-height) !important;
   margin-top: 1px !important;
   margin-bottom: 1px !important;
 }
 
 .n-menu .n-menu-item-content {
-  height: var(--kubeforecast-menu-item-height) !important;
+  height: var(--kube-resource-fcst-menu-item-height) !important;
   font-size: 12px;
 }
 

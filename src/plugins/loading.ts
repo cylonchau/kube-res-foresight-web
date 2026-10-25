@@ -37,7 +37,7 @@ export function setupLoading() {
     })
     .join('\n');
 
-  const logoSrc = '/kubeforecast-logo.svg';
+  const logoSrc = '/kube-resource-fcst-logo.svg';
 
   const loading = `
 <div class="fixed-center flex-col bg-layout" style="${cssVars}">
@@ -48,7 +48,7 @@ export function setupLoading() {
   </div>
   <div class="flex items-center justify-center gap-12px px-20px py-8px rounded-16px bg-primary/5 border border-primary/15 shadow-sm select-none">
     <div class="w-40px h-40px shrink-0 flex items-center justify-center">
-      <img src="${logoSrc}" alt="KubeForecast" class="w-full h-full object-contain drop-shadow-sm" />
+      <img src="${logoSrc}" alt="kube-resource-fcst" class="w-full h-full object-contain drop-shadow-sm" />
     </div>
     <h2 class="m-0 text-22px font-bold text-primary tracking-wide leading-normal pt-1px">${$t('system.title')}</h2>
   </div>

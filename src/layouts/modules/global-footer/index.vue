@@ -5,6 +5,6 @@ const currentYear = new Date().getFullYear();
 
 <template>
   <DarkModeContainer class="h-full flex-center">
-    <span>Copyright &copy; {{ currentYear }} KubeForecast</span>
+    <span>Copyright &copy; {{ currentYear }} kube-resource-fcst</span>
   </DarkModeContainer>
 </template>

@@ -14,6 +14,7 @@ import {
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import PromqlTester, { type QueryConfig } from '@/components/business/promql-tester.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import {
   fetchApplyMetricPreset,
@@ -69,6 +70,27 @@ function emptyForm() {
   };
 }
 const form = reactive(emptyForm());
+// ---- run the PromQL before it is saved
+const testerVisible = ref(false);
+const tested = ref(false);
+const testerInitial = computed<Partial<QueryConfig>>(() => ({
+  datasource_id: form.datasource_id,
+  query: form.query,
+  level: form.level || 'workload',
+  metric: form.metric || 'custom',
+  unit: catalog.value.metrics.find(item => item.metric === form.metric)?.unit,
+  step_seconds: form.step_seconds
+}));
+function applyTested(config: QueryConfig) {
+  Object.assign(form, {
+    datasource_id: config.datasource_id,
+    query: config.query,
+    level: config.level,
+    metric: config.metric,
+    step_seconds: config.step_seconds
+  });
+  tested.value = true;
+}
 
 const datasourceOptions = computed(() => {
   const current = props.editing;
@@ -122,6 +144,7 @@ const title = computed(() => {
 watch(show, async visible => {
   if (!visible) return;
   Object.assign(form, emptyForm());
+  tested.value = false;
   const [options, metricCatalog, presetList] = await Promise.all([
     fetchGetDatasourceOptions(),
     fetchGetMetricCatalog(),
@@ -156,6 +179,18 @@ watch(show, async visible => {
 });
 
 async function save() {
+  // a query that was not written by a template of the library, or that was changed, has to run before it is stored
+  if (
+    !tested.value &&
+    !props.preset &&
+    form.query.trim() &&
+    form.datasource_id &&
+    form.query.trim() !== (props.editing?.query ?? '')
+  ) {
+    message.warning(t('page.monitoring.queryTest.mustTest'));
+    testerVisible.value = true;
+    return;
+  }
   if (!form.datasource_id || !form.name.trim() || !form.metric || !form.level || !form.query.trim()) {
     message.warning(t('page.datasource.mappings.required'));
     return;
@@ -288,7 +323,14 @@ async function save() {
             :rows="5"
             class="font-mono"
             :placeholder="t('common.inputField', { field: t('page.datasource.mappings.query') })"
+            @update:value="tested = false"
           />
+          <NButton class="mt-6px" type="primary" ghost @click="testerVisible = true">
+            {{ t('page.monitoring.queryTest.test') }}
+          </NButton>
+          <NTag v-if="tested" class="ml-8px mt-6px" size="small" type="success" :bordered="false">
+            {{ t('page.monitoring.queryTest.stage_ok') }}
+          </NTag>
         </NFormItem>
         <template v-if="!preset">
           <NFormItem :label="t('page.datasource.connections.enabled')">
@@ -311,4 +353,5 @@ async function save() {
       </NSpace>
     </template>
   </NModal>
+  <PromqlTester v-model:show="testerVisible" :initial="testerInitial" @apply="applyTested" />
 </template>

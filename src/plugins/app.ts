@@ -25,7 +25,7 @@ export function setupAppErrorHandle(app: App) {
  * `index.html` and its correct hashes.
  */
 export function setupChunkLoadErrorReload() {
-  const RELOAD_GUARD_KEY = 'kubeforecast-chunk-reload-at';
+  const RELOAD_GUARD_KEY = 'kube-resource-fcst-chunk-reload-at';
   const RELOAD_GUARD_WINDOW_MS = 10_000;
 
   window.addEventListener('vite:preloadError', event => {

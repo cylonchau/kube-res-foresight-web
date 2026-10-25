@@ -4,31 +4,32 @@ import { NButton, NFormItemGi, NInput, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import RecordDetailModal from '@/components/business/record-detail-modal.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
-import { useForecastModules, windowStart, useWindowOptions } from '@/hooks/business/use-forecast-modules';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { fetchGetAdmissions } from '@/service/api';
+import { fetchGetAdmissions, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { formatBytes, formatMilli } from '@/utils/format';
 
 defineOptions({ name: 'ForecastActionsAdmissions' });
 
-const MIB = 1024 * 1024;
 const { t } = useI18n();
 const { moduleOptions, moduleName, loadModules } = useForecastModules();
 const search = reactive({
   moduleId: null as number | null,
   applied: null as 'true' | 'false' | null,
   keyword: '',
-  hours: (24 * 7) as number | null
+  range: lastHours(24 * 7) as [number, number] | null
 });
 
 const appliedOptions = computed(() => [
   { label: t('page.forecast.admissions.applied'), value: 'true' },
   { label: t('page.forecast.admissions.refused'), value: 'false' }
 ]);
-const hoursOptions = useWindowOptions();
 
 // the list below reads the sort parameters, and a change of the sort searches it again
 let searchList: () => void = () => {};
@@ -38,7 +39,7 @@ const list = usePagedList<Api.Forecast.Admission>(async (page, pageSize) => {
     module_id: search.moduleId ?? undefined,
     applied: search.applied === null ? undefined : search.applied === 'true',
     keyword: search.keyword.trim() || undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize,
     ...sortParams()
@@ -49,18 +50,30 @@ searchList = () => {
   list.search();
 };
 
-function resetSearch() {
-  Object.assign(search, { moduleId: null, applied: null, keyword: '', hours: 24 * 7 });
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  const { data, error } = await fetchBatchDeleteRecords({ kind: 'admissions', ids: checkedRowKeys.value });
+  if (error || !data) return;
+  window.$message?.success(t('common.batchDone', { done: data.done }));
+  checkedRowKeys.value = [];
+  await list.reload();
 }
 
-const cpu = (value: number) => (value ? `${value} m` : '-');
-const memory = (value: number) => (value ? `${Math.round(value / MIB)} MiB` : '-');
+function resetSearch() {
+  Object.assign(search, { moduleId: null, applied: null, keyword: '', range: lastHours(24 * 7) });
+}
+
+const cpu = (value: number) => (value ? formatMilli(value) : '-');
+const memory = (value: number) => (value ? formatBytes(value) : '-');
 const change = (now: number, before: number, format: (value: number) => string) =>
   before && now && before !== now ? `${format(before)} → ${format(now)}` : format(now);
 
 const detail = ref<Api.Forecast.Admission | null>(null);
 
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   created_at: {
     title: t('common.createTime'),
     key: 'created_at',
@@ -112,6 +125,35 @@ const columnMap: Record<string, any> = {
     width: 190,
     render: (row: Api.Forecast.Admission) => change(row.memory_bytes, row.original_memory_bytes, memory)
   },
+  limits: {
+    title: t('page.forecast.admissions.limits'),
+    key: 'limits',
+    width: 200,
+    render: (row: Api.Forecast.Admission) =>
+      row.limit_cpu_milli || row.limit_memory_bytes
+        ? `${cpu(row.limit_cpu_milli)} / ${memory(row.limit_memory_bytes)}`
+        : '-'
+  },
+  mode: {
+    title: t('page.forecast.modules.mode'),
+    key: 'mode',
+    width: 110,
+    align: 'center',
+    render: (row: Api.Forecast.Admission) => (row.mode ? t(`page.forecast.modules.mode_${row.mode}`) : '-')
+  },
+  algorithm: {
+    title: t('page.forecast.recommendations.algorithm'),
+    key: 'algorithm',
+    width: 150,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.Admission) => row.algorithm || '-'
+  },
+  workload_kind: {
+    title: t('page.forecast.modules.workloadKind'),
+    key: 'workload_kind',
+    width: 120,
+    render: (row: Api.Forecast.Admission) => row.workload_kind || '-'
+  },
   gpu: {
     title: 'GPU',
     key: 'gpu',
@@ -135,7 +177,23 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_admissions',
   columnMap,
-  defaultKeys: ['created_at', 'target', 'applied', 'cpu', 'reason', 'module', 'memory', 'gpu', 'version', 'operate']
+  defaultKeys: [
+    '__selection__',
+    'created_at',
+    'target',
+    'applied',
+    'cpu',
+    'memory',
+    'limits',
+    'mode',
+    'algorithm',
+    'reason',
+    'module',
+    'gpu',
+    'version',
+    'workload_kind',
+    'operate'
+  ]
 });
 
 onMounted(async () => {
@@ -167,15 +225,12 @@ onMounted(async () => {
       <NFormItemGi :span="4" :label="t('common.keyword')">
         <NInput v-model:value="search.keyword" clearable @keyup.enter="list.search" />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="3"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.admissions.title')"
       :help="t('page.forecast.admissions.help')"
       :cfg="cfg"
@@ -185,7 +240,11 @@ onMounted(async () => {
       :empty-hint="t('page.forecast.admissions.empty')"
       @refresh="list.reload"
       @sorter="handleSorterChange"
-    />
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
     <RecordDetailModal
       :show="Boolean(detail)"
       :title="detail ? `${detail.namespace}/${detail.workload}${detail.container ? ' / ' + detail.container : ''}` : ''"
@@ -201,10 +260,21 @@ onMounted(async () => {
                   : ''
               },
               { label: t('page.forecast.detail.version'), value: detail?.version },
-              { label: 'CPU', value: detail ? `${detail.cpu_milli}m (${detail.original_cpu_milli}m)` : '' },
+              { label: t('page.forecast.modules.workloadKind'), value: detail?.workload_kind },
+              {
+                label: t('page.forecast.modules.mode'),
+                value: detail?.mode ? t(`page.forecast.modules.mode_${detail.mode}`) : ''
+              },
+              { label: t('page.forecast.recommendations.algorithm'), value: detail?.algorithm },
+              { label: 'CPU requests', value: detail ? change(detail.cpu_milli, detail.original_cpu_milli, cpu) : '' },
               {
                 label: t('page.forecast.admissions.memory'),
-                value: detail ? `${detail.memory_bytes} (${detail.original_memory_bytes})` : ''
+                value: detail ? change(detail.memory_bytes, detail.original_memory_bytes, memory) : ''
+              },
+              { label: 'CPU limits', value: detail ? cpu(detail.limit_cpu_milli) : '' },
+              {
+                label: t('page.forecast.admissions.limitMemory'),
+                value: detail ? memory(detail.limit_memory_bytes) : ''
               },
               { label: 'GPU', value: detail?.gpu },
               { label: t('page.forecast.admissions.reason'), value: detail?.reason, pre: true }

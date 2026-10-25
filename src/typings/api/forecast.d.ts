@@ -513,6 +513,90 @@ declare namespace Api {
       not_collected?: boolean;
     }
 
+    type RecordKind = 'scores' | 'backtests' | 'evaluations' | 'trainings' | 'executions' | 'admissions';
+
+    interface BatchResult {
+      done: number;
+      failed: Array<{ id: string; error: string }>;
+    }
+
+    interface Candle {
+      time: string;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      mean: number;
+      count: number;
+    }
+
+    /** a metric read from Prometheus for a window; `missing` only when Prometheus returned no sample in all of it */
+    interface LiveSeries {
+      metric: string;
+      unit: string;
+      step_seconds: number;
+      bucket_seconds: number;
+      candles: Candle[];
+      quality: Quality;
+      missing: boolean;
+      query: string;
+    }
+
+    interface ComparePoint {
+      time: string;
+      value: number;
+      predicted_at: string;
+      replicas: number | null;
+    }
+
+    interface Compare {
+      metric: string;
+      unit: string;
+      actual: LiveSeries | null;
+      actual_replicas: LiveSeries | null;
+      algorithms: Array<{ algorithm_id: string; points: ComparePoint[] }>;
+      replica_basis: string;
+      bucket_seconds: number;
+      from: string;
+      to: string;
+      actual_error?: string;
+    }
+
+    interface QueryTestRequest {
+      datasource_id: number;
+      query: string;
+      level?: string;
+      metric?: string;
+      unit?: string;
+      step_seconds?: number;
+      module_id?: number;
+      namespace?: string;
+      workload?: string;
+      service?: string;
+      container?: string;
+      from?: string;
+      to?: string;
+      scale?: number;
+      precision?: number;
+    }
+
+    interface QueryTestResult {
+      ok: boolean;
+      /** template, datasource, syntax, query, empty or ok */
+      stage: string;
+      error?: string;
+      rendered?: string;
+      unit?: string;
+      samples: number;
+      min: number;
+      max: number;
+      mean: number;
+      last: number;
+      points: Array<{ time: string; value: number }>;
+      from: string;
+      to: string;
+    }
+
     interface CollectResult {
       metric: Metric;
       from: string;
@@ -689,6 +773,19 @@ declare namespace Api {
       score: number | null;
       rank: number;
       source_usage: SourceUsage[];
+      mode: Mode;
+      /** the metrics of the dataset the algorithm runs on for this module */
+      dataset: Array<{
+        key: string;
+        name: string;
+        kind: string;
+        category: string;
+        unit: string;
+        step_seconds: number;
+        mapping: string;
+        query: string;
+        enabled: boolean;
+      }>;
     }
 
     interface AlgorithmUsage {
@@ -889,6 +986,11 @@ declare namespace Api {
       gpu: number;
       original_cpu_milli: number;
       original_memory_bytes: number;
+      limit_cpu_milli: number;
+      limit_memory_bytes: number;
+      workload_kind: string;
+      mode: string;
+      algorithm: string;
     }
 
     /** one source's line of the multi-metric calculation, see multimetric.Row */

@@ -2,12 +2,14 @@
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard, NFormItemGi, NInput, NModal, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import TimeRangeField from '@/components/business/time-range-field.vue';
 import RankLane from '@/components/business/rank-lane.vue';
 import ScoreBreakdown from '@/components/business/score-breakdown.vue';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
-import { useForecastModules, useWindowOptions, windowStart } from '@/hooks/business/use-forecast-modules';
+import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchGetHistoryRankings } from '@/service/api';
@@ -17,14 +19,17 @@ defineOptions({ name: 'ForecastRankingHistory' });
 
 const { t, locale } = useI18n();
 const { moduleOptions, loadModules } = useForecastModules();
-const hoursOptions = useWindowOptions();
 
-const search = reactive({ moduleId: null as number | null, algorithm: '', hours: (24 * 30) as number | null });
+const search = reactive({
+  moduleId: null as number | null,
+  algorithm: '',
+  range: lastHours(24 * 30) as [number, number] | null
+});
 const list = usePagedList<Api.Forecast.HistoryRanking>(async (page, pageSize) => {
   const { data } = await fetchGetHistoryRankings({
     module_id: search.moduleId ?? undefined,
     algorithm: search.algorithm.trim() || undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize
   });
@@ -34,7 +39,29 @@ const list = usePagedList<Api.Forecast.HistoryRanking>(async (page, pageSize) =>
 const detail = ref<Api.Forecast.HistoryRanking | null>(null);
 const detailRow = ref<Api.Forecast.HistoryRankingRow | null>(null);
 
+const rowKey = (row: Api.Forecast.HistoryRanking) => `${row.module_id}/${row.at}`;
+const checkedRowKeys = ref<string[]>([]);
+const batchActions = computed(() => [{ key: 'export', label: t('page.forecast.metrics.exportCsv') }]);
+
+/** The checked evaluations as a CSV: one line per algorithm of each, with its rank and score. */
+function exportChecked() {
+  const keys = new Set(checkedRowKeys.value);
+  const lines = ['evaluated_at,module,algorithm,rank,score,windows,in_use'];
+  for (const entry of list.rows.value.filter(item => keys.has(rowKey(item)))) {
+    for (const r of entry.rows)
+      lines.push(
+        [entry.at, entry.module_name, r.algorithm, r.rank, r.score.toFixed(3), r.windows, r.selected].join(',')
+      );
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  link.download = 'kube-resource-fcst-ranking-history.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   at: {
     title: t('page.forecast.scores.scoredAt'),
     key: 'at',
@@ -94,7 +121,12 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.HistoryRanking) =>
       h(
         NButton,
-        { size: 'small', onClick: () => ((detail.value = row), (detailRow.value = row.rows[0] ?? null)) },
+        {
+          size: 'small',
+          type: 'primary',
+          ghost: true,
+          onClick: () => ((detail.value = row), (detailRow.value = row.rows[0] ?? null))
+        },
         () => t('common.detail')
       )
   }
@@ -102,7 +134,7 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_ranking_history',
   columnMap,
-  defaultKeys: ['at', 'module', 'best', 'selected', 'ranking', 'window', 'operate']
+  defaultKeys: ['__selection__', 'at', 'module', 'best', 'selected', 'ranking', 'window', 'operate']
 });
 
 // ---- the score of each algorithm over time, for one module
@@ -134,7 +166,7 @@ async function loadTrend() {
     page_size: 200,
     module_id: search.moduleId,
     algorithm: search.algorithm.trim() || undefined,
-    from: windowStart(search.hours)
+    ...rangeParams(search.range)
   });
   trend.value = [...(data?.list || [])].reverse();
   await draw();
@@ -165,7 +197,7 @@ function run() {
 }
 
 function resetSearch() {
-  Object.assign(search, { moduleId: null, algorithm: '', hours: 24 * 30 });
+  Object.assign(search, { moduleId: null, algorithm: '', range: lastHours(24 * 30) });
   run();
 }
 
@@ -192,12 +224,8 @@ onMounted(async () => {
       <NFormItemGi :span="6" :label="t('page.forecast.modules.algorithm')">
         <NInput v-model:value="search.algorithm" clearable @keyup.enter="run" />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="4"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
 
@@ -207,16 +235,21 @@ onMounted(async () => {
     </NCard>
 
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.ranking.historyTitle')"
       :help="t('page.forecast.ranking.historyHelp')"
       :cfg="cfg"
       :loading="list.loading.value"
       :data="list.rows.value"
-      :row-key="(row: any) => `${row.module_id}/${row.at}`"
+      :row-key="rowKey"
       :pagination="list.pagination"
       :empty-hint="t('page.forecast.scores.empty')"
       @refresh="run"
-    />
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="exportChecked" />
+      </template>
+    </ListTablePanel>
 
     <NModal
       :show="Boolean(detail)"

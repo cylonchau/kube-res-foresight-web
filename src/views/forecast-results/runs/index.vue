@@ -3,31 +3,27 @@ import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NCard, NDescriptions, NDescriptionsItem, NFormItemGi, NInput, NModal, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import TimeRangeField from '@/components/business/time-range-field.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
-import {
-  sourceMetricOptions,
-  useForecastModules,
-  useWindowOptions,
-  windowStart
-} from '@/hooks/business/use-forecast-modules';
+import { sourceMetricOptions, useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
-import { fetchGetTrainingRuns, fetchGetTrainingSummary } from '@/service/api';
+import { fetchGetTrainingRuns, fetchGetTrainingSummary, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 
 defineOptions({ name: 'ForecastRuns' });
 
 const { t } = useI18n();
 const { modules, moduleOptions, moduleName, loadModules } = useForecastModules();
-const hoursOptions = useWindowOptions();
 
 const search = reactive({
   moduleId: null as number | null,
   metric: null as string | null,
   algorithm: '',
   status: null as string | null,
-  hours: 24 as number | null
+  range: lastHours(24) as [number, number] | null
 });
 const metricOptions = computed(() => sourceMetricOptions(modules.value, search.moduleId));
 const statusOptions = computed(() =>
@@ -40,12 +36,23 @@ const list = usePagedList<Api.Forecast.TrainingRun>(async (page, pageSize) => {
     metric: search.metric ?? undefined,
     algorithm_id: search.algorithm.trim() || undefined,
     status: search.status ?? undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize
   });
   return data;
 });
+
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  const { data, error } = await fetchBatchDeleteRecords({ kind: 'trainings', ids: checkedRowKeys.value });
+  if (error || !data) return;
+  window.$message?.success(t('common.batchDone', { done: data.done }));
+  checkedRowKeys.value = [];
+  await list.reload();
+}
 
 // ---- the overview: what the records say at a glance
 const summary = ref<Api.Forecast.TrainingSummary | null>(null);
@@ -56,7 +63,7 @@ async function loadSummary() {
     metric: search.metric ?? undefined,
     algorithm_id: search.algorithm.trim() || undefined,
     status: search.status ?? undefined,
-    from: windowStart(search.hours)
+    ...rangeParams(search.range)
   });
   summary.value = data || null;
 }
@@ -93,6 +100,7 @@ const pretty = (raw: string) => {
 };
 
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   prediction_time: {
     title: t('page.forecast.runs.time'),
     key: 'prediction_time',
@@ -107,7 +115,15 @@ const columnMap: Record<string, any> = {
     ellipsis: { tooltip: true },
     render: (row: Api.Forecast.TrainingRun) => moduleName(row.module_id)
   },
-  metric: { title: t('page.forecast.sources.key'), key: 'metric', width: 120 },
+  metric: {
+    title: t('page.forecast.runs.dataset'),
+    key: 'metric',
+    width: 170,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.TrainingRun) =>
+      modules.value.find(item => item.id === row.module_id)?.sources?.find(source => source.key === row.metric)?.name ||
+      row.metric
+  },
   algorithm: { title: t('page.forecast.modules.algorithm'), key: 'algorithm_id', width: 160, resizable: true },
   status: {
     title: t('common.status'),
@@ -169,6 +185,7 @@ const cfg = useTableColumnConfig({
   pageCode: 'forecast_runs',
   columnMap,
   defaultKeys: [
+    '__selection__',
     'prediction_time',
     'module',
     'metric',
@@ -185,7 +202,7 @@ const cfg = useTableColumnConfig({
 });
 
 function resetSearch() {
-  Object.assign(search, { moduleId: null, metric: null, algorithm: '', status: null, hours: 24 });
+  Object.assign(search, { moduleId: null, metric: null, algorithm: '', status: null, range: lastHours(24) });
   run();
 }
 
@@ -218,12 +235,8 @@ onMounted(async () => {
       <NFormItemGi class="list-search-select-field list-search-short-field" :span="3" :label="t('common.status')">
         <NSelect v-model:value="search.status" clearable :options="statusOptions" />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="3"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <NCard :bordered="false" size="small" class="flex-shrink-0 card-wrapper rounded-16px shadow-sm">
@@ -240,7 +253,19 @@ onMounted(async () => {
             <div class="overview__value">{{ summary?.total ?? '-' }}</div>
           </div>
           <div>
-            <div class="overview__label">{{ t('page.forecast.runs.successRate') }}</div>
+            <div class="overview__label">
+              {{ t('page.forecast.runs.hitRate') }}
+              <IconTooltip icon="mdi-help-circle" placement="top">
+                <div class="max-w-380px leading-22px">
+                  <div>{{ t('page.forecast.runs.hitRateHelp') }}</div>
+                  <div class="mt-4px">
+                    {{ t('page.forecast.runs.status_ok') }}: {{ t('page.forecast.runs.meaning_ok') }}
+                  </div>
+                  <div>{{ t('page.forecast.runs.status_skipped') }}: {{ t('page.forecast.runs.meaning_skipped') }}</div>
+                  <div>{{ t('page.forecast.runs.status_failed') }}: {{ t('page.forecast.runs.meaning_failed') }}</div>
+                </div>
+              </IconTooltip>
+            </div>
             <div class="overview__value">{{ successRate === null ? '-' : `${successRate.toFixed(1)}%` }}</div>
           </div>
           <div>
@@ -290,6 +315,7 @@ onMounted(async () => {
       </div>
     </NCard>
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.runs.title')"
       :help="t('page.forecast.runs.help')"
       :cfg="cfg"
@@ -298,7 +324,11 @@ onMounted(async () => {
       :pagination="list.pagination"
       :empty-hint="t('page.forecast.runs.empty')"
       @refresh="refresh"
-    />
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
 
     <NModal
       :show="Boolean(detail)"

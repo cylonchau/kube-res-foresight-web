@@ -1,214 +1,269 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { NFormItemGi, NSelect, NTag, useMessage } from 'naive-ui';
+import { NButton, NCard, NFormItemGi, NSelect, NSwitch, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
+import BatchActions from '@/components/business/batch-actions.vue';
+import CompareChart from '@/components/business/compare-chart.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
-import MetricAnalysis from '@/components/business/metric-analysis.vue';
+import ListTablePanel from '@/components/business/list-table-panel.vue';
+import TimeRangeField from '@/components/business/time-range-field.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
-import { AUX_METRICS, useForecastModules } from '@/hooks/business/use-forecast-modules';
-import { fetchGetAlgorithms, fetchGetForecastMetricCatalog, fetchQueryForecastMetric } from '@/service/api';
-import { type MetricResult, seriesName } from '@/utils/metric-series';
+import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
+import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
+import { fetchCompareModule } from '@/service/api';
+import { formatDateTime } from '@/utils/date';
+import { formatDecimal, formatMetric } from '@/utils/format';
+import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
 defineOptions({ name: 'MonitoringCurves' });
 
-const { t, locale } = useI18n();
-const message = useMessage();
+/**
+ * The curve of one metric of a module's dataset, read from Prometheus at the moment of the request for the chosen range (the
+ * history from before the module existed included): candles (open, high, low, close of each bucket) or a line, zoom, tooltip.
+ */
+const { t } = useI18n();
 const route = useRoute();
-const GROUPS = ['usage', 'prediction', 'performance', 'execution'] as const;
-
 const { modules, moduleOptions, loadModules } = useForecastModules();
-const catalog = ref<Api.Forecast.MetricDef[]>([]);
-const algorithms = ref<string[]>([]);
-const loading = ref(false);
-const results = ref<MetricResult[]>([]);
 
-const form = reactive({
+const search = reactive({
   moduleId: null as number | null,
-  name: 'usage_cpu_cores',
-  kind: 'cpu' as string,
-  algorithms: [] as string[],
-  hours: 24
+  metric: null as string | null,
+  range: lastHours(24) as [number, number] | null,
+  candle: true
 });
+const loading = ref(false);
+const compare = ref<Api.Forecast.Compare | null>(null);
+const checkedRowKeys = ref<string[]>([]);
 
-const text = (value: { zh: string; en: string }) => (locale.value === 'en-US' ? value.en : value.zh);
-const current = computed(() => catalog.value.find(item => item.name === form.name));
-const needsKind = computed(() => Boolean(current.value?.labels.includes('metric')));
-const needsAlgorithm = computed(() => Boolean(current.value?.labels.includes('algorithm')));
-const selected = computed(() => modules.value.find(item => item.id === form.moduleId));
-
+const selected = computed(() => modules.value.find(item => item.id === search.moduleId));
 const metricOptions = computed(() =>
-  GROUPS.map(group => ({
-    type: 'group' as const,
-    label: t(`page.forecast.metrics.group_${group}`),
-    key: group,
-    children: catalog.value
-      .filter(item => item.group === group)
-      .map(item => ({ label: `${text(item.help)} (${item.name})`, value: item.name }))
-  }))
-);
-const kindOptions = computed(() =>
   (selected.value?.sources || [])
     .filter(source => source.enabled)
-    .map(source => ({ label: `${source.name} (${source.key})`, value: source.key }))
+    .map(source => ({ label: source.name, value: source.key }))
 );
-const algorithmOptions = computed(() => algorithms.value.map(value => ({ label: value, value })));
-const rangeOptions = computed(() =>
-  [6, 24, 24 * 7, 24 * 30, 24 * 90].map(value => ({
-    label: t('page.forecast.history.lastHours', { hours: value }),
-    value
-  }))
-);
+const actual = computed(() => compare.value?.actual ?? null);
+const unit = computed(() => compare.value?.unit || '');
 
-const nameOf = (item: MetricResult, labels: Record<string, string>) =>
-  seriesName(item.def, labels, item.actual, t('page.forecast.metrics.actual'), text(item.def.help));
+const pagination = reactive({
+  page: 1,
+  pageSize: getAdaptivePageSize(),
+  showSizePicker: true,
+  pageSizes: getAdaptivePageSizes(),
+  onChange: (page: number) => (pagination.page = page),
+  onUpdatePageSize: (size: number) => {
+    pagination.pageSize = size;
+    pagination.page = 1;
+  }
+});
 
 async function load() {
-  const def = current.value;
-  if (!form.moduleId || !def) {
-    results.value = [];
+  if (!search.moduleId || !search.metric || !search.range) {
+    compare.value = null;
     return;
   }
   loading.value = true;
   try {
-    const to = new Date();
-    const from = new Date(to.getTime() - form.hours * 3600 * 1000);
-    const base = { module_id: form.moduleId, from: from.toISOString(), to: to.toISOString() };
-    const filters = form.algorithms.length && needsAlgorithm.value ? form.algorithms : [undefined];
-    const answers = await Promise.all(
-      filters.map(async algorithm => ({
-        response: await fetchQueryForecastMetric({
-          ...base,
-          name: def.name,
-          metric: needsKind.value ? form.kind : undefined,
-          algorithm
-        })
-      }))
-    );
-    results.value = answers
-      .filter(answer => answer.response.data)
-      .map(answer => ({ def, result: answer.response.data! }));
-    if (results.value.some(item => item.result.truncated)) message.warning(t('page.forecast.metrics.truncated'));
+    const { data, error } = await fetchCompareModule(search.moduleId, {
+      metric: search.metric,
+      ...rangeParams(search.range),
+      predictions: false
+    });
+    compare.value = error ? null : data;
+    checkedRowKeys.value = [];
+    pagination.page = 1;
   } finally {
     loading.value = false;
   }
 }
 
-function resetForm() {
-  Object.assign(form, {
-    moduleId: modules.value[0]?.id ?? null,
-    name: 'usage_cpu_cores',
-    kind: kindOptions.value[0]?.value ?? 'cpu',
-    algorithms: [],
-    hours: 24
-  });
+watch(
+  () => search.moduleId,
+  () => {
+    compare.value = null;
+    if (!metricOptions.value.some(item => item.value === search.metric))
+      search.metric = metricOptions.value[0]?.value ?? null;
+  }
+);
+
+function resetSearch() {
+  search.moduleId = modules.value[0]?.id ?? null;
+  search.metric = metricOptions.value[0]?.value ?? null;
+  search.range = lastHours(24);
+  search.candle = true;
   load();
 }
 
-// a hint of which auxiliary metrics the chosen module actually has data for
-const mappedHint = computed(() =>
-  (selected.value?.sources || [])
-    .filter(source => source.enabled && (AUX_METRICS as string[]).includes(source.kind))
-    .map(source => t(`page.datasource.mappings.metric_${source.kind}`))
-    .join(', ')
+// ---- the values behind the chart, a bucket per row
+interface Row {
+  key: string;
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  mean: number;
+  count: number;
+}
+const rows = computed<Row[]>(() =>
+  [...(actual.value?.candles || [])].reverse().map(c => ({
+    key: c.time,
+    time: c.time,
+    open: c.open,
+    high: c.high,
+    low: c.low,
+    close: c.close,
+    mean: c.mean,
+    count: c.count
+  }))
 );
+const value = (row: number) => formatMetric(row, unit.value);
+const cfg = useTableColumnConfig({
+  pageCode: 'monitoring_curves_points',
+  columnMap: {
+    __selection__: { type: 'selection', width: 42, minWidth: 42 },
+    time: {
+      title: t('page.forecast.compare.time'),
+      key: 'time',
+      width: 180,
+      render: (row: Row) => formatDateTime(row.time)
+    },
+    open: {
+      title: t('page.forecast.compare.open'),
+      key: 'open',
+      width: 130,
+      align: 'right',
+      render: (row: Row) => value(row.open)
+    },
+    high: {
+      title: t('page.forecast.compare.high'),
+      key: 'high',
+      width: 130,
+      align: 'right',
+      render: (row: Row) => value(row.high)
+    },
+    low: {
+      title: t('page.forecast.compare.low'),
+      key: 'low',
+      width: 130,
+      align: 'right',
+      render: (row: Row) => value(row.low)
+    },
+    close: {
+      title: t('page.forecast.compare.close'),
+      key: 'close',
+      width: 130,
+      align: 'right',
+      render: (row: Row) => value(row.close)
+    },
+    mean: {
+      title: t('page.forecast.metrics.mean'),
+      key: 'mean',
+      width: 130,
+      align: 'right',
+      render: (row: Row) => value(row.mean)
+    },
+    count: { title: t('page.forecast.metrics.points'), key: 'count', width: 90, align: 'center' }
+  },
+  defaultKeys: ['__selection__', 'time', 'open', 'high', 'low', 'close', 'mean', 'count']
+});
 
-/** The source keys on offer follow the chosen module. */
-function onModuleChange() {
-  form.algorithms = [];
-  if (!kindOptions.value.some(item => item.value === form.kind)) form.kind = kindOptions.value[0]?.value ?? '';
+const batchActions = computed(() => [{ key: 'export', label: t('page.forecast.metrics.exportCsv') }]);
+function exportChecked() {
+  const keys = new Set(checkedRowKeys.value);
+  const lines = ['time,open,high,low,close,mean,count'];
+  for (const r of rows.value.filter(item => keys.has(item.key))) {
+    lines.push(
+      [
+        r.time,
+        formatDecimal(r.open),
+        formatDecimal(r.high),
+        formatDecimal(r.low),
+        formatDecimal(r.close),
+        formatDecimal(r.mean),
+        r.count
+      ].join(',')
+    );
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  link.download = 'kubeforecast-curve.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
-watch(() => form.moduleId, onModuleChange);
-
 onMounted(async () => {
-  const [, cat, algos] = await Promise.all([
-    loadModules(),
-    fetchGetForecastMetricCatalog(),
-    fetchGetAlgorithms({ page: 1, page_size: 200 })
-  ]);
-  catalog.value = cat.data?.list || [];
-  algorithms.value = (algos.data?.list || []).map(item => item.id);
-  // the catalog page sends the metric to draw
-  const wanted = typeof route.query.name === 'string' ? route.query.name : '';
-  if (wanted && catalog.value.some(item => item.name === wanted)) form.name = wanted;
+  cfg.initColumnConfig();
+  await loadModules();
   const fromRoute = Number(route.query.module_id);
-  form.moduleId = modules.value.find(item => item.id === fromRoute)?.id ?? modules.value[0]?.id ?? null;
-  onModuleChange();
+  search.moduleId = modules.value.find(item => item.id === fromRoute)?.id ?? modules.value[0]?.id ?? null;
+  search.metric = metricOptions.value[0]?.value ?? null;
   await load();
 });
 </script>
 
 <template>
   <div class="h-full flex-col gap-12px overflow-auto">
-    <ListSearchCard :model="form" :action-span="needsKind || needsAlgorithm ? 24 : 8" @search="load" @reset="resetForm">
+    <ListSearchCard :model="search" :action-span="4" @search="load" @reset="resetSearch">
       <NFormItemGi class="list-search-select-field" :span="6" :label="t('page.forecast.modules.name')">
-        <NSelect v-model:value="form.moduleId" filterable :options="moduleOptions" />
+        <NSelect v-model:value="search.moduleId" filterable :options="moduleOptions" />
       </NFormItemGi>
-      <NFormItemGi class="list-search-select-field" :span="7" :label="t('page.forecast.metrics.metric')">
-        <NSelect v-model:value="form.name" :options="metricOptions" filterable />
+      <NFormItemGi class="list-search-select-field" :span="5" :label="t('page.datasource.mappings.metric')">
+        <NSelect v-model:value="search.metric" filterable :options="metricOptions" />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="3"
-        :label="t('page.forecast.metrics.range')"
-      >
-        <NSelect v-model:value="form.hours" :options="rangeOptions" />
+      <NFormItemGi :span="7" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
-      <NFormItemGi
-        v-if="needsKind"
-        class="list-search-select-field list-search-short-field"
-        :span="3"
-        :label="t('page.datasource.mappings.metric')"
-      >
-        <NSelect v-model:value="form.kind" :options="kindOptions" />
-      </NFormItemGi>
-      <NFormItemGi
-        v-if="needsAlgorithm"
-        class="list-search-select-field"
-        :span="5"
-        :label="t('page.forecast.modules.algorithm')"
-      >
-        <NSelect
-          v-model:value="form.algorithms"
-          multiple
-          clearable
-          filterable
-          :max-tag-count="2"
-          :options="algorithmOptions"
-          :placeholder="t('page.forecast.metrics.allAlgorithms')"
-        />
+      <NFormItemGi :span="2" :label="t('page.forecast.compare.candle')">
+        <NSwitch v-model:value="search.candle" />
       </NFormItemGi>
     </ListSearchCard>
 
-    <MetricAnalysis
-      :results="results"
-      :name-of="nameOf"
-      :loading="loading"
-      :title="t('page.forecast.metrics.chart')"
-      :help="t('page.forecast.metrics.curvesHelp')"
-      page-code="monitoring_curves"
-      :chart-height="360"
-      @refresh="load"
-    >
-      <template #meta>
-        <template v-if="current">
-          <span class="text-13px font-normal opacity-80">{{ text(current.value) }}</span>
-          <NTag size="small" :bordered="false">{{ results[0]?.result.unit || current.unit }}</NTag>
-          <NTag size="small" :bordered="false" type="info">
-            {{
-              current.retention_days
-                ? t('page.forecast.metrics.retentionNote', { days: current.retention_days })
-                : t('page.forecast.metrics.lookback')
-            }}
+    <NCard :bordered="false" size="small" class="rounded-16px shadow-sm">
+      <div class="mb-8px flex flex-wrap items-center gap-8px">
+        <span class="text-14px font-medium">{{ t('page.forecast.metrics.chart') }}</span>
+        <IconTooltip icon="mdi-help-circle" placement="top">
+          <div class="max-w-380px leading-22px">{{ t('page.forecast.metrics.curvesHelp') }}</div>
+        </IconTooltip>
+        <template v-if="actual">
+          <NTag size="small" :bordered="false" :type="actual.missing ? 'error' : 'success'">
+            {{ actual.missing ? t('page.forecast.history.missing') : t('page.forecast.metrics.fromPrometheus') }}
+          </NTag>
+          <NTag size="small" :bordered="false">
+            {{ t('page.forecast.history.present') }} {{ actual.quality.present }} / {{ actual.quality.expected }}
+          </NTag>
+          <NTag size="small" :bordered="false">
+            {{ t('page.forecast.compare.bucket', { seconds: actual.bucket_seconds }) }}
           </NTag>
         </template>
-        <IconTooltip v-if="mappedHint" icon="mdi-help-circle" placement="top">
-          <div class="max-w-360px leading-22px">
-            {{ t('page.forecast.metrics.mappedHint', { metrics: mappedHint }) }}
-          </div>
-        </IconTooltip>
-      </template>
-    </MetricAnalysis>
+        <NTag v-if="compare?.actual_error" size="small" type="error" :bordered="false">
+          {{ t('page.forecast.compare.actualError', { error: compare.actual_error }) }}
+        </NTag>
+      </div>
+      <CompareChart :actual="actual" :algorithms="[]" :unit="unit" :candle="search.candle" :height="380" />
+    </NCard>
+
+    <div class="h-460px flex flex-col">
+      <ListTablePanel
+        v-model:checked-row-keys="checkedRowKeys"
+        :title="t('page.forecast.metrics.pointsTitle')"
+        :help="t('page.forecast.metrics.pointsHelp')"
+        :cfg="cfg"
+        :loading="loading"
+        :data="rows"
+        :pagination="pagination"
+        :remote="false"
+        :row-key="(row: any) => row.key"
+        :empty-hint="t('page.forecast.metrics.empty')"
+        @refresh="load"
+      >
+        <template #suffix>
+          <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="exportChecked" />
+          <NButton size="small" :disabled="!rows.length" @click="checkedRowKeys = rows.map(r => r.key)">
+            {{ t('common.selectAll') }}
+          </NButton>
+        </template>
+      </ListTablePanel>
+    </div>
   </div>
 </template>

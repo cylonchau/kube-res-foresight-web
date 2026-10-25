@@ -23,6 +23,8 @@ import {
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import DurationInput from '@/components/advanced/duration-input.vue';
+import PromqlTester, { type QueryConfig } from '@/components/business/promql-tester.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
@@ -153,6 +155,7 @@ const visible = ref(false);
 const editing = ref<Api.Forecast.DatasetSource>();
 const origin = ref<'mapping' | 'custom'>('mapping');
 const mappingChoices = ref<Array<{ label: string; value: number }>>([]);
+const mappingList = ref<Api.Datasource.MetricMapping[]>([]);
 const datasourceOptions = ref<Array<{ label: string; value: number }>>([]);
 
 function emptyForm() {
@@ -191,12 +194,59 @@ const levelOptions = ['workload', 'namespace', 'service', 'pod', 'container', 'c
 
 async function loadMappings(kind: string | null) {
   mappingChoices.value = [];
+  mappingList.value = [];
   if (!kind) return;
   const { data } = await fetchGetMetricMappings({ page: 1, page_size: 200, metric: kind });
+  mappingList.value = data?.list || [];
   mappingChoices.value = (data?.list || []).map(item => ({
     label: `${item.name} (${item.datasource_name}, ${stepLabel(item.step_seconds)})`,
     value: item.id
   }));
+}
+
+// ---- the query test: a PromQL is run against its datasource before it is saved
+const testerVisible = ref(false);
+const testerInitial = ref<Partial<QueryConfig>>({});
+const testerOnly = ref(false);
+/** a PromQL of one's own has to pass the test, and a changed one has to pass it again */
+const customTested = ref(false);
+watch(
+  () => [form.custom.query, form.custom.datasource_id, form.custom.level, form.custom.step_seconds, form.custom.unit],
+  () => (customTested.value = false)
+);
+
+function openTester() {
+  const mapping =
+    origin.value === 'mapping' || editing.value
+      ? mappingList.value.find(item => item.id === form.mapping_id)
+      : undefined;
+  testerOnly.value = Boolean(mapping);
+  testerInitial.value = mapping
+    ? {
+        datasource_id: mapping.datasource_id,
+        query: mapping.query,
+        level: mapping.level,
+        metric: mapping.metric,
+        unit: mapping.unit,
+        step_seconds: mapping.step_seconds,
+        scale: form.scale,
+        precision: form.precision
+      }
+    : { ...form.custom, metric: form.kind || 'custom', scale: form.scale, precision: form.precision };
+  testerVisible.value = true;
+}
+
+function applyTested(config: QueryConfig) {
+  Object.assign(form.custom, {
+    datasource_id: config.datasource_id,
+    query: config.query,
+    level: config.level,
+    unit: config.unit,
+    step_seconds: config.step_seconds
+  });
+  form.scale = config.scale;
+  form.precision = config.precision;
+  customTested.value = true;
 }
 
 function open(row?: Api.Forecast.DatasetSource) {
@@ -239,6 +289,11 @@ async function save() {
   const custom = origin.value === 'custom' && !editing.value;
   if (!form.name.trim() || !form.kind) {
     message.warning(t('page.forecast.sources.required'));
+    return;
+  }
+  if (custom && form.custom.datasource_id && form.custom.query.trim() && !customTested.value) {
+    message.warning(t('page.monitoring.queryTest.mustTest'));
+    openTester();
     return;
   }
   if (custom ? !form.custom.datasource_id || !form.custom.query.trim() : !form.mapping_id) {
@@ -417,7 +472,23 @@ const collectColumns = computed<any[]>(() => [
   }
 ]);
 
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  if (!selected.value) return;
+  let done = 0;
+  for (const id of checkedRowKeys.value) {
+    const { error } = await fetchDeleteModuleSource(selected.value.id, id);
+    if (!error) done += 1;
+  }
+  message.success(t('common.batchDone', { done }));
+  checkedRowKeys.value = [];
+  await Promise.all([load(), loadModules()]);
+}
+
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   name: {
     title: t('page.forecast.sources.name'),
     key: 'name',
@@ -561,6 +632,7 @@ const cfg = useTableColumnConfig({
   pageCode: 'monitoring_datasets',
   columnMap,
   defaultKeys: [
+    '__selection__',
     'name',
     'category',
     'query',
@@ -635,6 +707,8 @@ onMounted(async () => {
     </NCard>
 
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
+      :row-key="(row: any) => row.id"
       :title="t('page.monitoring.datasets.title')"
       :help="t('page.monitoring.datasets.help')"
       :cfg="cfg"
@@ -644,6 +718,18 @@ onMounted(async () => {
       :empty-hint="t('page.monitoring.datasets.empty')"
       @add="open()"
       @refresh="load"
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
+
+    <PromqlTester
+      v-model:show="testerVisible"
+      :initial="testerInitial"
+      :module-id="search.moduleId"
+      :test-only="testerOnly"
+      @apply="applyTested"
     />
 
     <!-- source -->
@@ -705,6 +791,9 @@ onMounted(async () => {
               :options="mappingChoices"
               :placeholder="t('page.forecast.sources.mappingPlaceholder')"
             />
+            <NButton class="ml-8px" :disabled="!form.mapping_id" @click="openTester">
+              {{ t('page.monitoring.queryTest.test') }}
+            </NButton>
           </NFormItem>
           <template v-else>
             <NFormItem :label="t('page.datasource.connections.name')">
@@ -725,6 +814,12 @@ onMounted(async () => {
                 :autosize="{ minRows: 3, maxRows: 8 }"
                 :placeholder="queryExample"
               />
+              <NButton class="mt-6px" type="primary" ghost @click="openTester">
+                {{ t('page.monitoring.queryTest.test') }}
+              </NButton>
+              <NTag v-if="customTested" class="ml-8px mt-6px" size="small" type="success" :bordered="false">
+                {{ t('page.monitoring.queryTest.stage_ok') }}
+              </NTag>
             </NFormItem>
             <NFormItem :label="t('page.monitoring.datasets.level')">
               <NSelect v-model:value="form.custom.level" :options="levelOptions" />

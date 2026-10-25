@@ -137,8 +137,20 @@ export function sourceMetricOptions(modules: Api.Forecast.Module[], moduleId: nu
   const seen = new Map<string, string>();
   for (const module of picked) {
     for (const source of forecastSources(module)) {
-      if (!seen.has(source.key)) seen.set(source.key, moduleId ? `${source.name} (${source.key})` : source.key);
+      if (!seen.has(source.key)) seen.set(source.key, moduleId ? source.name : source.key);
     }
   }
   return [...seen].map(([value, label]) => ({ label, value }));
+}
+
+/** The `from` and `to` parameters (RFC3339) of a [start, end] range picked with the time range field; empty when not set. */
+export function rangeParams(range: [number, number] | null | undefined): { from?: string; to?: string } {
+  if (!range) return {};
+  return { from: new Date(range[0]).toISOString(), to: new Date(range[1]).toISOString() };
+}
+
+/** A range of the last N hours as the picker holds it, for the default of a page. */
+export function lastHours(hours: number): [number, number] {
+  const end = Date.now();
+  return [end - hours * 3600 * 1000, end];
 }

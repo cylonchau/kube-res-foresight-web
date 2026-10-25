@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NTag } from 'naive-ui';
+import { NCheckbox, NTag } from 'naive-ui';
 
 defineOptions({ name: 'RankLane' });
 
@@ -34,6 +34,8 @@ interface Props {
   active?: boolean;
   /** one line under the name (window, time, ...) */
   caption?: string;
+  /** show a checkbox so the lane can be part of a batch */
+  selectable?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -42,8 +44,10 @@ const props = withDefaults(defineProps<Props>(), {
   movement: null,
   parts: () => [],
   active: false,
-  caption: ''
+  caption: '',
+  selectable: false
 });
+const checked = defineModel<boolean>('checked', { default: false });
 
 const level = computed(() => {
   if (props.score === null) return 'none';
@@ -64,8 +68,13 @@ const partLevel = (value: number | null) => {
 <template>
   <div
     class="rank-lane"
-    :class="{ 'rank-lane--active': active, [`rank-lane--top${rank}`]: rank !== null && rank <= 3 }"
+    :class="{
+      'rank-lane--selectable': selectable,
+      'rank-lane--active': active,
+      [`rank-lane--top${rank}`]: rank !== null && rank <= 3
+    }"
   >
+    <NCheckbox v-if="selectable" v-model:checked="checked" />
     <div class="rank-lane__badge">
       <span class="rank-lane__rank">{{ rank ?? '-' }}</span>
       <span
@@ -283,6 +292,10 @@ const partLevel = (value: number | null) => {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.rank-lane--selectable {
+  grid-template-columns: 24px 56px minmax(220px, 1.4fr) minmax(0, 2fr) auto;
 }
 
 @media (max-width: 1100px) {

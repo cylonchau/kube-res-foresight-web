@@ -15,12 +15,14 @@ import {
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import BatchActions from '@/components/business/batch-actions.vue';
+import PromqlTester, { type QueryConfig } from '@/components/business/promql-tester.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import MetricMappingForm from '@/components/business/metric-mapping-form.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
+  fetchBatchDeleteMetricMappings,
   fetchDeleteMetricMapping,
   fetchGetForecastMetricCatalog,
   fetchGetMetricMappings,
@@ -57,7 +59,6 @@ interface Row {
 
 const { t, locale } = useI18n();
 const message = useMessage();
-const router = useRouter();
 const ORIGINS: Origin[] = ['mapping', 'preset', 'platform'];
 
 const mappings = ref<Api.Datasource.MetricMapping[]>([]);
@@ -182,14 +183,45 @@ async function remove(row: Row) {
 
 const detail = ref<Row | null>(null);
 
-/** The curve of a platform metric is drawn on its own page. */
-function drawCurve(row: Row) {
-  router.push({ path: '/monitoring/curves', query: { name: row.name } });
+// ---- run the PromQL of a mapping or a template against a datasource
+const testerVisible = ref(false);
+const testerInitial = ref<Partial<QueryConfig>>({});
+function openTester(row: Row) {
+  const source = row.mapping ?? row.preset;
+  if (!source) return;
+  testerInitial.value = {
+    datasource_id: row.mapping?.datasource_id ?? null,
+    query: source.query,
+    level: source.level,
+    metric: source.metric,
+    unit: source.unit,
+    step_seconds: source.step_seconds
+  };
+  testerVisible.value = true;
+}
+
+// ---- checked mappings can be deleted together
+const checkedRowKeys = ref<string[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+async function runBatch() {
+  const ids = checkedRowKeys.value
+    .filter(key => key.startsWith('mapping:'))
+    .map(key => Number(key.slice('mapping:'.length)));
+  if (!ids.length) {
+    message.warning(t('page.forecast.metrics.onlyMappings'));
+    return;
+  }
+  const { error } = await fetchBatchDeleteMetricMappings(ids);
+  if (error) return;
+  message.success(t('common.deleteSuccess'));
+  checkedRowKeys.value = [];
+  await load();
 }
 
 const originType = { mapping: 'success', preset: 'info', platform: 'default' } as const;
 
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   name: {
     title: t('page.forecast.metrics.name'),
     key: 'name',
@@ -259,12 +291,15 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 230,
+    width: 300,
     fixed: 'right',
     align: 'center',
     render: (row: Row) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
         h(NButton, { size: 'small', onClick: () => (detail.value = row) }, () => t('page.forecast.metrics.detail')),
+        row.mapping || row.preset
+          ? h(NButton, { size: 'small', onClick: () => openTester(row) }, () => t('page.monitoring.queryTest.test'))
+          : null,
         row.origin === 'mapping'
           ? [
               h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => openForm(row.mapping) }, () =>
@@ -285,16 +320,25 @@ const columnMap: Record<string, any> = {
                 { size: 'small', type: 'primary', ghost: true, onClick: () => openForm(undefined, row.preset) },
                 () => t('page.datasource.presets.apply')
               )
-            : h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => drawCurve(row) }, () =>
-                t('page.forecast.metrics.queryThis')
-              )
+            : null
       ])
   }
 };
 const cfg = useTableColumnConfig({
   pageCode: 'monitoring_metric_catalog',
   columnMap,
-  defaultKeys: ['name', 'origin', 'metric', 'level', 'unit', 'datasource', 'query', 'enabled', 'actions']
+  defaultKeys: [
+    '__selection__',
+    'name',
+    'origin',
+    'metric',
+    'level',
+    'unit',
+    'datasource',
+    'query',
+    'enabled',
+    'actions'
+  ]
 });
 
 onMounted(() => {
@@ -336,6 +380,7 @@ onMounted(() => {
     </ListSearchCard>
 
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.metrics.catalog')"
       :help="t('page.forecast.metrics.catalogHint')"
       :cfg="cfg"
@@ -347,7 +392,13 @@ onMounted(() => {
       show-add
       @add="openForm()"
       @refresh="load"
-    />
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
+
+    <PromqlTester v-model:show="testerVisible" :initial="testerInitial" test-only />
 
     <MetricMappingForm v-model:show="formVisible" :editing="editing" :preset="fromPreset" @saved="load" />
 

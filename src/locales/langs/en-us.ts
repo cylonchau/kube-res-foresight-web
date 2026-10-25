@@ -1,6 +1,6 @@
 const local = {
   system: {
-    title: 'KubeForecast',
+    title: 'kube-resource-fcst',
     updateTitle: 'System Version Update Notification',
     updateContent: 'A new version of the system has been detected. Do you want to refresh the page immediately?',
     updateConfirm: 'Refresh immediately',
@@ -24,6 +24,12 @@ const local = {
     addSuccess: 'Add Success',
     backToHome: 'Back to home',
     batchDelete: 'Delete',
+    batchActions: 'Batch actions',
+    batchDone: '{done} done',
+    batchPartial: '{done} done, {failed} left alone: {reason}',
+    startTime: 'Start time',
+    endTime: 'End time',
+    timeRange: 'Time range',
     compact: 'Compact',
     confirmBatchDelete: 'Are you sure you want to delete the selected items?',
     cancel: 'Cancel',
@@ -306,9 +312,9 @@ const local = {
     forecast_ranking: 'Current ranking',
     'forecast_ranking-history': 'Ranking history',
     'forecast-results_runs': 'Training records',
-    monitoring_datasets: 'Prometheus metric datasets',
+    monitoring_datasets: 'Metrics dataset',
     'forecast-results': 'Forecast results',
-    'forecast-results_history': 'History and data gaps',
+    'forecast-results_history': 'History data',
     'forecast-results_backtests': 'Rolling backtests',
     'forecast-results_evaluations': 'Measured accuracy',
     'forecast-results_leaderboard': 'Algorithm leaderboard',
@@ -328,8 +334,29 @@ const local = {
   },
   page: {
     monitoring: {
+      queryTest: {
+        title: 'Test a PromQL query',
+        module: 'Module for the variables',
+        moduleHint:
+          "The template variables ({'{{namespace}}'}, {'{{workload}}'}, ...) are filled from the workload of the chosen module, so what is tested is the query the module will collect. Without a module the variables stay empty and only a query without variables can run.",
+        queryHint:
+          'Write a Prometheus query; template variables are allowed. The variables are checked first, then Prometheus parses and runs the query; a syntax error, a failed query and "no data" are reported separately.',
+        run: 'Run query',
+        apply: 'Use this query',
+        hint: 'Choose the datasource, write the PromQL and run it: it can be used once it passes. The result is shaped with the scale and precision below, exactly as the dataset stores it.',
+        required: 'Choose a datasource and write a PromQL',
+        samples: 'Samples',
+        stage_ok: 'Query ok',
+        stage_empty: 'Ran, but no data',
+        stage_template: 'Template error',
+        stage_datasource: 'Datasource unavailable',
+        stage_syntax: 'PromQL syntax error',
+        stage_query: 'Query failed',
+        test: 'Test query',
+        mustTest: 'A PromQL of your own has to be tested first: run the query and confirm it works before saving.'
+      },
       datasets: {
-        title: 'Prometheus metric datasets',
+        title: 'Metrics dataset',
         help: 'The dataset between a module and the algorithms: add several Prometheus metrics to a module (from Datasource > Metric mappings, or write the PromQL) and every enabled algorithm trains, forecasts and is scored on them, with no data kept per algorithm. Units, precision, sampling period and aggregation are handled here so that metrics of different scales cannot skew training.',
         empty: 'This module has no metric yet. Add a CPU, memory, GPU, network or custom PromQL metric to forecast.',
         keywordPlaceholder: 'Search name, key or PromQL',
@@ -406,6 +433,8 @@ const local = {
     forecast: {
       modules: {
         name: 'Module name',
+        title: 'Forecast modules',
+        help: 'A module is one workload that is forecast and scaled, with its own dataset (Prometheus metrics), history window, forecast period and replica range. Every enabled algorithm applies to every module. Enable, disable and batch delete are in the batch menu once rows are checked.',
         keywordPlaceholder: 'Search by module or workload',
         namespace: 'Namespace',
         workload: 'Workload',
@@ -433,11 +462,11 @@ const local = {
         maxCpu: 'Max CPU (m)',
         minMemory: 'Min memory (MiB)',
         maxMemory: 'Max memory (MiB)',
-        minReplicas: 'Min replicas',
-        maxReplicas: 'Max replicas',
+        minReplicas: 'Minimum replicas',
+        maxReplicas: 'Maximum replicas',
         fallbackCpu: 'Default CPU (m)',
         fallbackMemory: 'Default memory (MiB)',
-        fallbackReplicas: 'Default replicas',
+        fallbackReplicas: 'Default and fallback replicas',
         headroom: 'Headroom ratio',
         more: 'More',
         sectionPace: 'Replica change pace',
@@ -454,6 +483,12 @@ const local = {
         scaleDownCooldown: 'Scale-down cooldown (s)',
         scaleDownCooldownHint:
           'Seconds that must pass since the last scale-down action before the next one; stops replicas going up and down while the load flaps. 0 = no limit.',
+        minReplicasHint:
+          'A fixed setting of the module: scaling never goes below this replica count; the operator and the recommendations both use it as the floor.',
+        maxReplicasHint:
+          'A fixed setting of the module: scaling never goes above this replica count; with dynamic expansion it is the starting ceiling and the hard maximum below caps it.',
+        fallbackReplicasHint:
+          'The replica count the operator uses when there is no fresh forecast (model failure, too little data, expired recommendation); it never scales down below the current count because of it. 0 = unset: the current replicas are frozen.',
         limitCpuRatio: 'CPU limit ratio',
         limitMemoryRatio: 'Memory limit ratio',
         limitRatioHint:
@@ -554,7 +589,7 @@ const local = {
           'Below this share of the observed span being one contiguous history, the source is not forecast and falls back. Default 0.8.',
         maxMissingRatio: 'Allowed missing ratio',
         maxMissingRatioHint: 'More missing steps than this share of the observed span means no forecast. Default 0.3.',
-        recoverCycles: 'Cycles to recover',
+        recoverCycles: 'Cycles to re-enable',
         recoverCyclesHint:
           'After a degradation the forecast is used again only after this many healthy cycles in a row, so flaky data does not make the recommendation flap. Default 2.',
         sectionProtection: 'OOM protection and JVM heap pressure',
@@ -621,6 +656,11 @@ const local = {
         horizonMinutes: 'Forecast period (minutes)'
       },
       history: {
+        title: 'History data',
+        help: 'The actual values are queried from Prometheus for the chosen range, including the history from before the module existed, not only what was collected after it was enabled. The predicted values are what each algorithm forecast for that time, and the replicas belong to the same module and the same Pods. History counts as missing only when Prometheus has no sample in the whole range; a few steps without a sample are only gaps.',
+        pointsHelp:
+          'For every time point of the chart: the predicted value and replicas of each algorithm next to the actual value and replicas of the same time. Check rows to export them.',
+        missing: 'History missing',
         empty: 'Select a module and a metric',
         lastHours: 'Last {hours} hours',
         expected: 'Expected points',
@@ -636,7 +676,6 @@ const local = {
         gapFrom: 'From',
         gapTo: 'To',
         gapSteps: 'Steps',
-        title: 'Collected history',
         qualityHint:
           'Quality report: missing share, longest gap (steps), jumps, points off the step grid and the lag of the newest sample.',
         notCollected:
@@ -691,7 +730,8 @@ const local = {
         source_fallback: 'default',
         source_original: 'original',
         help: 'Every decision becomes an immutable version that records which source decided each field (algorithm, fixed period, fallback or the original kept) and why.',
-        executionsHelp: 'Reports from kubeforecast-operator after each scale, observation, hold, conflict or error.',
+        executionsHelp:
+          'Reports from kube-resource-fcst-operator after each scale, observation, hold, conflict or error.',
         empty: 'No snapshots yet: a module in Recommend mode or above writes one each cycle.',
         sourceLabel: 'Source',
         degraded: 'Degraded',
@@ -783,8 +823,10 @@ const local = {
         pointsHelp:
           'The exact value of every point in the chart, newest first and paged; at most the latest 20000 points are listed, export the CSV for all of them.',
         queryThis: 'View curve',
+        fromPrometheus: 'From Prometheus',
+        onlyMappings: 'Only mappings can be deleted in a batch; templates and platform exports are read-only.',
         curvesHelp:
-          'The curve of any catalog metric for a module: measured usage, the forecast of each algorithm, evaluation error, recommendations and execution. A curve is a view of a catalog metric and has no data of its own.',
+          'The real history curve of one metric of the dataset of a module: the range is queried from Prometheus when the page opens (the data from before the module existed included), and each candle is the open, high, low and close of one time bucket. Zoom and drag it, hover for the values; the list below is the same data and can be checked and exported.',
         keywordPlaceholder: 'Search by name, PromQL or meaning'
       },
       algorithms: {
@@ -888,9 +930,15 @@ const local = {
           type: 'Type',
           default: 'Default',
           range: 'Range',
-          description: 'Description'
+          description: 'Description',
+          isDefault: 'Default',
+          saved: 'Saved'
         },
-        usage: 'Usage and performance',
+        usage: 'Linked modules and datasets',
+        usageHelp:
+          'An enabled algorithm applies to every module: one card per module with the dataset the algorithm runs on there (the metrics of the Metrics dataset; hover for the PromQL), its composite score, and its backtest and measured accuracy on each metric.',
+        dataset: 'Dataset',
+        noModules: 'No module is enabled yet.',
         backtestWape: 'Backtest WAPE',
         measuredWape: 'Measured WAPE',
         trace: 'Trace',
@@ -1132,7 +1180,7 @@ const local = {
       },
       executions: {
         decisionVersion: 'Snapshot',
-        empty: 'No execution records yet: kubeforecast-operator reports after each reconcile.',
+        empty: 'No execution records yet: kube-resource-fcst-operator reports after each reconcile.',
         keywordPlaceholder: 'Target, namespace, reason',
         action_ScaleUp: 'Scale up',
         action_ScaleDown: 'Scale down',
@@ -1302,6 +1350,58 @@ const local = {
         empty:
           'No scores yet. Create algorithm instances, collect data, then use Score now, or wait for the scoring task.'
       },
+      evalMetric: {
+        choose: 'Choose the metrics to show',
+        unit: 'Unit',
+        accuracy: 'Accuracy',
+        wape: 'WAPE',
+        mae: 'MAE',
+        bias: 'Bias',
+        peak_under: 'Peak underestimate',
+        coverage: 'Coverage',
+        rmse: 'RMSE',
+        pinball: 'Pinball loss',
+        rmse_how:
+          'RMSE = square root of the mean squared error; it weighs large misses more, in the unit of the metric.',
+        pinball_how:
+          'Pinball loss: the error with over- and underestimates weighted by the forecast quantile, for quantile forecasts; lower is better.',
+        accuracy_how:
+          'Accuracy = 1 - WAPE (at least 0): how closely the forecast followed the actual values over the {points} points of this run.',
+        wape_how: 'WAPE = sum |actual - forecast| / sum |actual|, weighted over {points} points; lower is better.',
+        mae_how: 'MAE = mean |actual - forecast|, in the unit of the metric, averaged over {points} points.',
+        bias_how:
+          'Bias = mean (forecast - actual): positive means the forecast ran high, negative low. Unlike MAE, the signs cancel.',
+        peak_under_how:
+          'Peak underestimate = max(0, actual peak - forecast peak) / actual peak: 0 means the peak was not underestimated. Underestimating the peak is what hurts scaling most.',
+        coverage_how:
+          'Coverage = forecast points with an actual value to compare / all forecast points; below 100% some target times have no actual sample yet.'
+      },
+      compare: {
+        actual: 'Actual',
+        actualReplicas: 'Actual replicas',
+        predicted: 'Predicted',
+        predictedAt: 'predicted at',
+        predictedReplicas: 'predicted replicas',
+        replicas: 'Replicas',
+        open: 'open',
+        close: 'close',
+        low: 'low',
+        high: 'high',
+        empty: 'No data in the range: Prometheus has no such metric for it and no algorithm made a forecast for it.',
+        actualMissing: 'Prometheus has no data of this metric in the chosen range (history missing)',
+        actualError: 'Could not read Prometheus: {error}',
+        candle: 'Candles',
+        line: 'Line',
+        algorithms: 'Algorithms',
+        allAlgorithms: 'All algorithms with forecasts',
+        replicaBasis: 'How predicted replicas are derived',
+        sameObject: 'The actual values and the replicas come from the same module and the same Pods',
+        points: 'Point by point',
+        time: 'Time',
+        actualValue: 'Actual',
+        replicasNow: 'Actual replicas',
+        bucket: 'One candle = {seconds} s'
+      },
       ranking: {
         best: 'Best',
         challenger: 'Challenger',
@@ -1320,7 +1420,9 @@ const local = {
         notBeats: 'Does not beat the baseline',
         metric: 'Metric',
         bias: 'Bias',
-        metricsTitle: 'Error, accuracy and weight per metric',
+        metricsTitle: 'Standard metric ranking',
+        metricsHelp:
+          'For every metric, all algorithms with measured values are ranked on the same standard (accuracy = 1 - error), with error, MAE, RMSE, bias, peak underestimate and weight.',
         noMeasured:
           'Nothing has been measured yet: once the forecast range has passed, the evaluation job compares the forecast with the actuals of Prometheus and the result shows here.',
         order: 'Ranking',
@@ -1336,7 +1438,15 @@ const local = {
         overviewHelp:
           'Counted over the current filter: the number of runs, the success rate, how each algorithm fared, and the most common reasons a run produced no forecast.',
         total: 'Runs',
-        successRate: 'Success rate',
+        hitRate: 'Hit rate',
+        hitRateHelp:
+          'Hit rate = successful runs / all runs: under the current filter, how many real training runs produced a usable forecast. It is counted from the training records themselves, never from fixed numbers.',
+        meaning_ok: 'The algorithm trained on the window of history and produced a forecast, which is stored.',
+        meaning_skipped:
+          'Not run: too few samples, a covariate the algorithm needs is missing, or the dataset does not meet its requirements. Nothing is forced with made-up data; the reason is in the record.',
+        meaning_failed:
+          'The run failed or timed out (over the training budget) and produced no forecast; the metric keeps the last valid forecast or the fallback.',
+        dataset: 'Dataset',
         avgDuration: 'Average duration',
         lastRun: 'Latest run',
         byAlgorithm: 'Runs per algorithm (ok/skipped/failed)',
@@ -1373,6 +1483,8 @@ const local = {
         version: 'Version'
       },
       admissions: {
+        limits: 'Limits (CPU / memory)',
+        limitMemory: 'Memory limits',
         title: 'Admission decisions',
         help: 'Every time Kyverno asks the platform for a new Pod resources, the answer is recorded here: applied or not, the CPU/memory/GPU given, the original values and the reason. GPU applies to new Pods only.',
         empty: 'No admission records yet.',
@@ -1758,7 +1870,7 @@ const local = {
       bindWeChat: {
         title: 'Bind WeChat'
       },
-      title: 'KubeForecast - Kubernetes Resource Forecasting and Pod Scaling'
+      title: 'kube-resource-fcst - Kubernetes Resource Forecasting and Pod Scaling'
     },
     system: {
       title: 'System Parameters Management',

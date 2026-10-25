@@ -241,7 +241,7 @@ onMounted(load);
           <NSwitch v-model:value="form.clear_ca_cert" />
         </NFormItem>
         <NFormItem label="Bind DN">
-          <NInput v-model:value="form.bind_dn" placeholder="cn=svc-kubeforecast,ou=services,dc=example,dc=com" />
+          <NInput v-model:value="form.bind_dn" placeholder="cn=svc-kube-resource-fcst,ou=services,dc=example,dc=com" />
         </NFormItem>
         <NFormItem :label="t('page.ldap.bindPassword')">
           <NInput

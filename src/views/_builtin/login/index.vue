@@ -97,7 +97,7 @@ const bgColor = computed(() => {
         </div>
       </NCard>
     </div>
-    <footer class="login-footer">Copyright © {{ currentYear }} KubeForecast</footer>
+    <footer class="login-footer">Copyright © {{ currentYear }} kube-resource-fcst</footer>
   </div>
 </template>
 

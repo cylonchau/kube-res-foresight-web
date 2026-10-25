@@ -4,12 +4,14 @@ import { NButton, NFormItemGi, NInput, NSelect, NTag, useMessage } from 'naive-u
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
-import { useForecastModules, windowStart, useWindowOptions } from '@/hooks/business/use-forecast-modules';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { downloadAuditExport, fetchGetExecutions } from '@/service/api';
+import { downloadAuditExport, fetchGetExecutions, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 
 defineOptions({ name: 'ForecastActionsExecutions' });
@@ -22,7 +24,7 @@ const search = reactive({
   result: null as string | null,
   action: null as string | null,
   keyword: '',
-  hours: (24 * 7) as number | null
+  range: lastHours(24 * 7) as [number, number] | null
 });
 const exporting = ref(false);
 
@@ -35,7 +37,6 @@ const resultOptions = computed(() =>
 const actionOptions = computed(() =>
   ['ScaleUp', 'ScaleDown', 'None'].map(value => ({ label: t(`page.forecast.executions.action_${value}`), value }))
 );
-const hoursOptions = useWindowOptions();
 
 // the list below reads the sort parameters, and a change of the sort searches it again
 let searchList: () => void = () => {};
@@ -46,7 +47,7 @@ const list = usePagedList<Api.Forecast.Execution>(async (page, pageSize) => {
     result: search.result ?? undefined,
     action: search.action ?? undefined,
     keyword: search.keyword.trim() || undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize,
     ...sortParams()
@@ -57,8 +58,19 @@ searchList = () => {
   list.search();
 };
 
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  const { data, error } = await fetchBatchDeleteRecords({ kind: 'executions', ids: checkedRowKeys.value });
+  if (error || !data) return;
+  window.$message?.success(t('common.batchDone', { done: data.done }));
+  checkedRowKeys.value = [];
+  await list.reload();
+}
+
 function resetSearch() {
-  Object.assign(search, { moduleId: null, result: null, action: null, keyword: '', hours: 24 * 7 });
+  Object.assign(search, { moduleId: null, result: null, action: null, keyword: '', range: lastHours(24 * 7) });
 }
 
 async function exportCsv() {
@@ -68,7 +80,7 @@ async function exportCsv() {
       kind: 'executions',
       module_id: search.moduleId ?? undefined,
       result: search.result ?? undefined,
-      from: windowStart(search.hours)
+      ...rangeParams(search.range)
     });
   } catch (error) {
     message.error(String((error as Error).message || error));
@@ -87,6 +99,7 @@ const resultType = (result: string) =>
         : 'default';
 
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   created_at: {
     title: t('common.createTime'),
     key: 'created_at',
@@ -168,7 +181,7 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_execution',
   columnMap,
-  defaultKeys: ['created_at', 'module', 'target', 'desired', 'result', 'operate']
+  defaultKeys: ['__selection__', 'created_at', 'module', 'target', 'desired', 'result', 'operate']
 });
 
 const router = useRouter();
@@ -230,15 +243,12 @@ onMounted(async () => {
           :placeholder="t('page.forecast.executions.keywordPlaceholder')"
         />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="4"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.recommendations.executions')"
       :help="t('page.forecast.recommendations.executionsHelp')"
       :cfg="cfg"
@@ -250,6 +260,7 @@ onMounted(async () => {
       @sorter="handleSorterChange"
     >
       <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
         <NButton size="small" :loading="exporting" @click="exportCsv">
           {{ t('page.forecast.recommendations.export') }}
         </NButton>

@@ -2,20 +2,14 @@
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import {
   NButton,
-  NCard,
   NCheckbox,
   NCheckboxGroup,
-  NCode,
-  NCollapse,
-  NCollapseItem,
   NDataTable,
   NDatePicker,
   NDropdown,
   NForm,
   NFormItem,
   NFormItemGi,
-  NGi,
-  NGrid,
   NInput,
   NInputNumber,
   NModal,
@@ -28,33 +22,27 @@ import {
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
-import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
+import ListSearchCard from '@/components/business/list-search-card.vue';
+import ListTablePanel from '@/components/business/list-table-panel.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import DurationInput from '@/components/advanced/duration-input.vue';
-import { forecastSources } from '@/hooks/business/use-forecast-modules';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
-  fetchBacktestModule,
+  fetchBatchModules,
   fetchBypassModule,
-  fetchCollectModule,
   fetchCreateForecastModule,
   fetchCreateModuleSource,
   fetchCreatePeriod,
   fetchDeleteForecastModule,
   fetchDeletePeriod,
-  fetchEvaluateModule,
   fetchGetForecastModules,
   fetchGetModuleSources,
   fetchGetPeriods,
-  fetchPredictModule,
-  fetchRecommendModule,
   fetchResumeModule,
-  fetchScoreModule,
   fetchUpdateForecastModule,
   fetchUpdatePeriod
 } from '@/service/api';
-import RecommendationExplain from '@/components/business/recommendation-explain.vue';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
@@ -347,75 +335,35 @@ async function save() {
   }
 }
 
+const batchActions = computed(() => [
+  { key: 'enable', label: t('common.enable') },
+  { key: 'disable', label: t('common.disable') },
+  { key: 'delete', label: t('common.delete'), danger: true }
+]);
+
+async function runBatch(action: string) {
+  const { data, error } = await fetchBatchModules({
+    action: action as 'enable' | 'disable' | 'delete',
+    ids: checkedRowKeys.value
+  });
+  if (error || !data) return;
+  if (data.failed.length) {
+    message.warning(
+      t('common.batchPartial', { done: data.done, failed: data.failed.length, reason: data.failed[0].error })
+    );
+  } else {
+    message.success(t('common.batchDone', { done: data.done }));
+  }
+  checkedRowKeys.value = [];
+  await load();
+}
+
 async function remove(id: number) {
   const { error } = await fetchDeleteForecastModule(id);
   if (!error) {
     message.success(t('common.deleteSuccess'));
     await load();
   }
-}
-
-// ---- pipeline steps and their results
-const resultVisible = ref(false);
-const resultTitle = ref('');
-const resultDetail = ref<string | null>(null);
-const resultJson = ref('');
-const running = ref<number>();
-
-async function runStep(row: Api.Forecast.Module, step: string) {
-  running.value = row.id;
-  try {
-    let result: { data: unknown; error: unknown } | undefined;
-    switch (step) {
-      case 'collect':
-        result = await fetchCollectModule(row.id);
-        break;
-      case 'predict':
-        result = await fetchPredictModule(row.id);
-        break;
-      case 'evaluate':
-        result = await fetchEvaluateModule(row.id);
-        break;
-      case 'recommend':
-        result = await fetchRecommendModule(row.id);
-        break;
-      case 'backtest': {
-        const runs: unknown[] = [];
-        for (const source of forecastSources(row)) {
-          const { data, error } = await fetchBacktestModule(row.id, { metric: source.key });
-          if (!error && data) runs.push({ metric: source.key, runs: data });
-        }
-        result = { data: runs, error: null };
-        break;
-      }
-      case 'score':
-        result = await fetchScoreModule(row.id);
-        break;
-      default:
-        return;
-    }
-    if (result && !result.error) {
-      resultTitle.value = `${row.name} - ${t(`page.forecast.modules.step_${step}`)}`;
-      resultJson.value = JSON.stringify(result.data, null, 2);
-      const recommended = step === 'recommend' ? (result.data as { detail?: unknown } | null)?.detail : undefined;
-      resultDetail.value = recommended ? JSON.stringify(recommended) : null;
-      resultVisible.value = true;
-    }
-  } finally {
-    running.value = undefined;
-  }
-}
-
-/** Every step works on the module's own sources with every enabled algorithm: nothing has to be bound first. */
-function stepOptions(row: Api.Forecast.Module) {
-  return [
-    { label: t('page.forecast.modules.step_collect'), key: 'collect' },
-    { label: t('page.forecast.modules.step_predict'), key: 'predict' },
-    { label: t('page.forecast.modules.step_backtest'), key: 'backtest' },
-    { label: t('page.forecast.modules.step_score'), key: 'score' },
-    { label: t('page.forecast.modules.step_evaluate'), key: 'evaluate' },
-    { label: t('page.forecast.modules.step_recommend'), key: 'recommend', disabled: row.mode === 'observe' }
-  ];
 }
 
 /** Everything that is not used every day sits in one menu, so the operate column stays one row wide. */
@@ -425,9 +373,7 @@ function moreOptions(row: Api.Forecast.Module) {
     { label: t('page.forecast.modules.periods'), key: 'periods' },
     row.bypass
       ? { label: t('page.forecast.modules.resume'), key: 'resume' }
-      : { label: t('page.forecast.modules.bypass'), key: 'bypass' },
-    { type: 'divider', key: 'divider' },
-    { label: t('common.delete'), key: 'delete' }
+      : { label: t('page.forecast.modules.bypass'), key: 'bypass' }
   ];
 }
 
@@ -444,15 +390,6 @@ function moreAction(row: Api.Forecast.Module, key: string) {
       break;
     case 'bypass':
       bypassTarget.value = row;
-      break;
-    case 'delete':
-      window.$dialog?.warning({
-        title: t('common.delete'),
-        content: t('common.confirmDelete'),
-        positiveText: t('common.confirm'),
-        negativeText: t('common.cancel'),
-        onPositiveClick: () => remove(row.id)
-      });
       break;
     default:
   }
@@ -646,6 +583,7 @@ const periodColumns = computed(() => [
 
 // ---- table
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   id: { title: t('common.id'), key: 'id', width: 70, align: 'center' },
   name: { title: t('page.forecast.modules.name'), key: 'name', width: 170, resizable: true },
   namespace: { title: t('page.forecast.modules.namespace'), key: 'namespace', width: 140, resizable: true },
@@ -744,7 +682,7 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 280,
+    width: 250,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Module) =>
@@ -759,11 +697,11 @@ const columnMap: Record<string, any> = {
           () => t('page.forecast.modules.sources')
         ),
         h(
-          NDropdown,
-          { options: stepOptions(row), onSelect: (key: string) => runStep(row, key) },
+          NPopconfirm,
+          { onPositiveClick: () => remove(row.id) },
           {
-            default: () =>
-              h(NButton, { size: 'small', loading: running.value === row.id }, () => t('page.forecast.modules.run'))
+            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => t('common.delete')),
+            default: () => t('common.confirmDelete')
           }
         ),
         h(
@@ -774,123 +712,83 @@ const columnMap: Record<string, any> = {
       ])
   }
 };
-const defaultColumnKeys = ['name', 'workload_kind', 'workload', 'mode', 'enabled', 'status', 'actions'];
+const defaultColumnKeys = [
+  '__selection__',
+  'name',
+  'workload_kind',
+  'workload',
+  'mode',
+  'enabled',
+  'status',
+  'actions'
+];
 
-const {
-  columnChecks,
-  tableColumns,
-  density,
-  initColumnConfig,
-  handleColumnUpdate,
-  handleColumnWidthUpdate,
-  saveColumnConfig
-} = useTableColumnConfig({
-  pageCode: PAGE_CODE,
-  columnMap,
-  defaultKeys: defaultColumnKeys
-});
+const cfg = useTableColumnConfig({ pageCode: PAGE_CODE, columnMap, defaultKeys: defaultColumnKeys });
 
 const modalTitle = computed(() =>
   editing.value ? t('page.forecast.modules.editTitle') : t('page.forecast.modules.addTitle')
 );
 
 onMounted(() => {
-  initColumnConfig();
+  cfg.initColumnConfig();
   load();
 });
 </script>
 
 <template>
-  <div class="h-full flex-col overflow-hidden">
-    <NCard :bordered="false" size="small" class="list-search-card rounded-16px shadow-sm mb-12px">
-      <NCollapse class="list-search-collapse" :default-expanded-names="['1']">
-        <NCollapseItem :title="t('common.search')" name="1">
-          <NForm class="list-search-form" inline :model="searchParams" label-placement="top" :show-feedback="false">
-            <NGrid class="list-search-row" :cols="24" :x-gap="24">
-              <NFormItemGi :span="8" :label="t('page.datasource.connections.keyword')" path="keyword">
-                <NInput
-                  v-model:value="searchParams.keyword"
-                  clearable
-                  :placeholder="t('page.forecast.modules.keywordPlaceholder')"
-                  @keyup.enter="search"
-                />
-              </NFormItemGi>
-              <NFormItemGi
-                class="list-search-select-field list-search-short-field"
-                :span="5"
-                :label="t('page.forecast.modules.mode')"
-                path="mode"
-              >
-                <NSelect
-                  v-model:value="searchParams.mode"
-                  clearable
-                  :placeholder="t('common.selectField', { field: t('page.forecast.modules.mode') })"
-                  :options="modeOptions"
-                />
-              </NFormItemGi>
-              <NFormItemGi
-                class="list-search-select-field list-search-short-field"
-                :span="5"
-                :label="t('page.datasource.connections.enabled')"
-                path="enabled"
-              >
-                <NSelect
-                  v-model:value="searchParams.enabled"
-                  clearable
-                  :placeholder="t('common.selectField', { field: t('page.datasource.connections.enabled') })"
-                  :options="enabledOptions"
-                />
-              </NFormItemGi>
-              <NGi class="list-search-actions" :span="6">
-                <NSpace justify="end" class="w-full">
-                  <NButton @click="resetSearch">
-                    <template #icon><icon-ic-round-refresh /></template>
-                    {{ t('common.reset') }}
-                  </NButton>
-                  <NButton type="primary" @click="search">
-                    <template #icon><icon-ic-round-search /></template>
-                    {{ t('common.search') }}
-                  </NButton>
-                </NSpace>
-              </NGi>
-            </NGrid>
-          </NForm>
-        </NCollapseItem>
-      </NCollapse>
-    </NCard>
-
-    <NCard :bordered="false" size="small" class="flex-1 rounded-16px shadow-sm overflow-hidden">
-      <div class="h-full flex-col">
-        <TableHeaderOperation
-          v-model:columns="columnChecks"
-          v-model:density="density"
-          class="pb-12px"
-          :loading="loading"
-          :show-delete="false"
-          @add="open()"
-          @refresh="load"
+  <div class="h-full flex-col overflow-hidden gap-12px">
+    <ListSearchCard :model="searchParams" :action-span="6" @search="search" @reset="resetSearch">
+      <NFormItemGi :span="8" :label="t('page.datasource.connections.keyword')">
+        <NInput
+          v-model:value="searchParams.keyword"
+          clearable
+          :placeholder="t('page.forecast.modules.keywordPlaceholder')"
+          @keyup.enter="search"
         />
-        <div class="flex-1 overflow-hidden">
-          <ExpandableDataTable
-            v-model:columns="tableColumns"
-            remote
-            :data="rows"
-            :loading="loading"
-            :pagination="pagination"
-            :checked-row-keys="checkedRowKeys"
-            :row-key="row => row.id"
-            :size="density"
-            :scroll-x="1500"
-            class="h-full"
-            flex-height
-            @update:columns="handleColumnUpdate"
-            @unstable-column-resize="handleColumnWidthUpdate"
-            @update:checked-row-keys="keys => (checkedRowKeys = keys as number[])"
-            @mouseup="saveColumnConfig"
-          />
-        </div>
-      </div>
-    </NCard>
+      </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="5"
+        :label="t('page.forecast.modules.mode')"
+      >
+        <NSelect
+          v-model:value="searchParams.mode"
+          clearable
+          :placeholder="t('common.selectField', { field: t('page.forecast.modules.mode') })"
+          :options="modeOptions"
+        />
+      </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="5"
+        :label="t('page.datasource.connections.enabled')"
+      >
+        <NSelect
+          v-model:value="searchParams.enabled"
+          clearable
+          :placeholder="t('common.selectField', { field: t('page.datasource.connections.enabled') })"
+          :options="enabledOptions"
+        />
+      </NFormItemGi>
+    </ListSearchCard>
+
+    <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
+      :title="t('page.forecast.modules.title')"
+      :help="t('page.forecast.modules.help')"
+      :cfg="cfg"
+      :loading="loading"
+      :data="rows"
+      :pagination="pagination"
+      :row-key="(row: any) => row.id"
+      show-add
+      @add="open()"
+      @refresh="load"
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
 
     <!-- create / edit -->
     <NModal v-model:show="visible" preset="card" :title="modalTitle" class="edit-modal-wide">
@@ -1171,6 +1069,69 @@ onMounted(() => {
               <NInputNumber v-model:value="form.target_utilization" :min="0.1" :max="1" :step="0.05" class="w-full" />
             </NFormItem>
           </template>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.minReplicas') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.minReplicasHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.min_replicas" :min="0" :precision="0" class="w-full" />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.maxReplicas') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.max_replicas" :min="0" :precision="0" class="w-full" />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.fallbackReplicas') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fallbackReplicasHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.fallback_replicas" :min="0" :precision="0" class="w-full" />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.recoverCycles') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.recoverCyclesHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.maxReplicasMode') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasModeHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NSelect v-model:value="form.max_replicas_mode" :options="maxModeOptions" />
+          </NFormItem>
+          <template v-if="form.max_replicas_mode === 'dynamic'">
+            <NFormItem :label="t('page.forecast.modules.hardMaxReplicas')">
+              <NInputNumber v-model:value="form.hard_max_replicas" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+            <NFormItem :label="t('page.forecast.modules.expandStepRatio')">
+              <NInputNumber v-model:value="form.expand_step_ratio" :min="0.01" :max="5" :step="0.05" class="w-full" />
+            </NFormItem>
+          </template>
         </NForm>
 
         <div class="mb-8px mt-12px flex items-center gap-6px font-medium">
@@ -1186,22 +1147,8 @@ onMounted(() => {
           <NFormItem :label="t('page.forecast.modules.fallbackMemory')">
             <NInputNumber v-model:value="form.fallback_memory_mib" :min="0" class="w-full" />
           </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.fallbackReplicas')">
-            <NInputNumber v-model:value="form.fallback_replicas" :min="0" class="w-full" />
-          </NFormItem>
           <NFormItem :label="t('page.forecast.modules.fallbackGpu')">
             <NInputNumber v-model:value="form.fallback_gpu" :min="0" :precision="0" class="w-full" />
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.recoverCycles') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.recoverCyclesHint') }}</div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
           </NFormItem>
         </NForm>
 
@@ -1281,31 +1228,6 @@ onMounted(() => {
           <NFormItem :label="t('page.forecast.modules.maxMemory')">
             <NInputNumber v-model:value="form.max_memory_mib" :min="0" class="w-full" />
           </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.minReplicas')">
-            <NInputNumber v-model:value="form.min_replicas" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.maxReplicas')">
-            <NInputNumber v-model:value="form.max_replicas" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.maxReplicasMode') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasModeHint') }}</div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NSelect v-model:value="form.max_replicas_mode" :options="maxModeOptions" />
-          </NFormItem>
-          <template v-if="form.max_replicas_mode === 'dynamic'">
-            <NFormItem :label="t('page.forecast.modules.hardMaxReplicas')">
-              <NInputNumber v-model:value="form.hard_max_replicas" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem :label="t('page.forecast.modules.expandStepRatio')">
-              <NInputNumber v-model:value="form.expand_step_ratio" :min="0.01" :max="5" :step="0.05" class="w-full" />
-            </NFormItem>
-          </template>
           <NFormItem :label="t('page.forecast.modules.minGpu')">
             <NInputNumber v-model:value="form.min_gpu" :min="0" :precision="0" class="w-full" />
           </NFormItem>
@@ -1479,12 +1401,6 @@ onMounted(() => {
     </NModal>
 
     <!-- step result -->
-    <NModal v-model:show="resultVisible" preset="card" :title="resultTitle" class="edit-modal-wide">
-      <div class="max-h-60vh overflow-auto">
-        <RecommendationExplain v-if="resultDetail" class="mb-12px" :detail="resultDetail" />
-        <NCode :code="resultJson" language="json" word-wrap />
-      </div>
-    </NModal>
   </div>
 </template>
 

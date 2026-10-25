@@ -1,26 +1,31 @@
 <script setup lang="ts">
-import { h, onMounted, reactive, ref } from 'vue';
+import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NFormItemGi, NInput, NModal, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import TimeRangeField from '@/components/business/time-range-field.vue';
 import ScoreBreakdown from '@/components/business/score-breakdown.vue';
-import { useForecastModules, useWindowOptions, windowStart } from '@/hooks/business/use-forecast-modules';
+import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { fetchGetAlgorithmScores } from '@/service/api';
+import { fetchGetAlgorithmScores, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 
 defineOptions({ name: 'ForecastScoreRecords' });
 
 const { t } = useI18n();
 const { moduleOptions, loadModules } = useForecastModules();
-const hoursOptions = useWindowOptions();
 const percent = (value: number | undefined) =>
   value === undefined || value < 0 ? '-' : `${(value * 100).toFixed(1)}%`;
 
-const search = reactive({ moduleId: null as number | null, algorithm: '', hours: (24 * 7) as number | null });
+const search = reactive({
+  moduleId: null as number | null,
+  algorithm: '',
+  range: lastHours(24 * 7) as [number, number] | null
+});
 // the list below reads the sort parameters, and a change of the sort searches it again
 let searchList: () => void = () => {};
 const { handleSorterChange, sortParams } = useTableSort(() => searchList());
@@ -28,7 +33,7 @@ const list = usePagedList<Api.Forecast.AlgorithmScore>(async (page, pageSize) =>
   const { data } = await fetchGetAlgorithmScores({
     module_id: search.moduleId ?? undefined,
     algorithm: search.algorithm.trim() || undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize,
     ...sortParams()
@@ -39,6 +44,17 @@ searchList = () => {
   list.search();
 };
 
+const checkedRowKeys = ref<number[]>([]);
+const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
+
+async function runBatch() {
+  const { data, error } = await fetchBatchDeleteRecords({ kind: 'scores', ids: checkedRowKeys.value });
+  if (error || !data) return;
+  window.$message?.success(t('common.batchDone', { done: data.done }));
+  checkedRowKeys.value = [];
+  await list.reload();
+}
+
 const detail = ref<Api.Forecast.AlgorithmScore | null>(null);
 
 const accuracyOf = (row: Api.Forecast.AlgorithmScore, metric: Api.Forecast.BreakdownRow['metric']) => {
@@ -47,6 +63,7 @@ const accuracyOf = (row: Api.Forecast.AlgorithmScore, metric: Api.Forecast.Break
 };
 
 const columnMap: Record<string, any> = {
+  __selection__: { type: 'selection', width: 42, minWidth: 42 },
   created_at: {
     title: t('page.forecast.scores.scoredAt'),
     key: 'created_at',
@@ -146,6 +163,7 @@ const cfg = useTableColumnConfig({
   pageCode: 'forecast_score_records',
   columnMap,
   defaultKeys: [
+    '__selection__',
     'created_at',
     'module',
     'algorithm',
@@ -162,7 +180,7 @@ const cfg = useTableColumnConfig({
 });
 
 function resetSearch() {
-  Object.assign(search, { moduleId: null, algorithm: '', hours: 24 * 7 });
+  Object.assign(search, { moduleId: null, algorithm: '', range: lastHours(24 * 7) });
   list.search();
 }
 
@@ -188,15 +206,12 @@ onMounted(async () => {
       <NFormItemGi :span="6" :label="t('page.forecast.modules.algorithm')">
         <NInput v-model:value="search.algorithm" clearable @keyup.enter="list.search" />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="4"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
+      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.scores.recordsTitle')"
       :help="t('page.forecast.scores.recordsHelp')"
       :cfg="cfg"
@@ -206,7 +221,11 @@ onMounted(async () => {
       :empty-hint="t('page.forecast.scores.empty')"
       @refresh="list.reload"
       @sorter="handleSorterChange"
-    />
+    >
+      <template #suffix>
+        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+      </template>
+    </ListTablePanel>
 
     <NModal
       :show="Boolean(detail)"

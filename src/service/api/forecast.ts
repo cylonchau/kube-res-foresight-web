@@ -90,7 +90,7 @@ export function fetchGetModuleRequirements(moduleId: number) {
 }
 
 /** the error, accuracy and weight of every source and the composite per algorithm, against the actuals */
-export function fetchGetMetricScores(moduleId: number, params?: { since_hours?: number }) {
+export function fetchGetMetricScores(moduleId: number, params?: { since_hours?: number; from?: string; to?: string }) {
   return request<Api.Forecast.MetricScores>({
     url: `${base}/modules/${moduleId}/metric-scores`,
     method: 'get',
@@ -219,7 +219,10 @@ export function fetchSearchBacktests(
   return request<Api.Forecast.Paged<Api.Forecast.BacktestRun>>({ url: `${base}/backtests`, method: 'get', params });
 }
 
-export function fetchGetLeaderboard(moduleId: number, params: { kind: string; since_hours?: number }) {
+export function fetchGetLeaderboard(
+  moduleId: number,
+  params: { kind: string; since_hours?: number; from?: string; to?: string }
+) {
   return request<Api.Forecast.LeaderboardEntry[]>({
     url: `${base}/modules/${moduleId}/leaderboard`,
     method: 'get',
@@ -298,13 +301,13 @@ export async function downloadAuditExport(params: {
   // The base URL is "/" in production: "/" + "/api/..." would be a protocol-relative URL to a host named "api".
   const root = baseURL.replace(/\/+$/, '');
   const response = await fetch(`${root}${base}/audit/export?${query.toString()}`, {
-    headers: { Authorization: `Bearer ${localStg.get('token') || ''}`, 'X-KubeForecast-Client': 'web' }
+    headers: { Authorization: `Bearer ${localStg.get('token') || ''}`, 'X-kube-resource-fcst-Client': 'web' }
   });
   if (!response.ok) throw new Error(`export failed: ${response.status}`);
   const blob = await response.blob();
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `kubeforecast-${params.kind}.csv`;
+  link.download = `kube-resource-fcst-${params.kind}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -365,4 +368,39 @@ export function fetchGetAlgorithmScores(
 
 export function fetchGetAdmissions(params: ListWindow & { module_id?: number; applied?: boolean; keyword?: string }) {
   return request<Api.Forecast.Paged<Api.Forecast.Admission>>({ url: `${base}/admissions`, method: 'get', params });
+}
+
+/** enable, disable or delete several modules; items that cannot be done come back with their reason */
+export function fetchBatchModules(data: { action: 'enable' | 'disable' | 'delete'; ids: number[] }) {
+  return request<Api.Forecast.BatchResult>({ url: `${base}/modules/batch`, method: 'post', data });
+}
+
+/** enable, disable or delete several algorithms (only user-defined ones, once disabled, can be deleted) */
+export function fetchBatchAlgorithms(data: { action: 'enable' | 'disable' | 'delete'; ids: string[] }) {
+  return request<Api.Forecast.BatchResult>({ url: `${base}/algorithms/batch`, method: 'post', data });
+}
+
+/** delete rows of a record list: scores, backtests, evaluations, trainings, executions or admissions */
+export function fetchBatchDeleteRecords(data: { kind: Api.Forecast.RecordKind; ids: number[] }) {
+  return request<{ done: number }>({ url: `${base}/records/batch-delete`, method: 'post', data });
+}
+
+/** the actual values of a metric from Prometheus next to the forecasts of the algorithms, on one time grid */
+export function fetchCompareModule(
+  moduleId: number,
+  params: {
+    metric: string;
+    from?: string;
+    to?: string;
+    algorithms?: string;
+    max_points?: number;
+    predictions?: boolean;
+  }
+) {
+  return request<Api.Forecast.Compare>({ url: `${base}/modules/${moduleId}/compare`, method: 'get', params });
+}
+
+/** validate a PromQL and run it against its datasource for a short window; nothing is stored */
+export function fetchTestMetricQuery(data: Api.Forecast.QueryTestRequest) {
+  return request<Api.Forecast.QueryTestResult>({ url: `${base}/metric-queries/test`, method: 'post', data });
 }

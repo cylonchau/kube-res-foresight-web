@@ -1,6 +1,6 @@
 const local = {
   system: {
-    title: 'KubeForecast',
+    title: 'kube-resource-fcst',
     updateTitle: '系统版本更新通知',
     updateContent: '检测到系统有新版本发布，是否立即刷新页面？',
     updateConfirm: '立即刷新',
@@ -24,6 +24,12 @@ const local = {
     addSuccess: '添加成功',
     backToHome: '返回首页',
     batchDelete: '删除',
+    batchActions: '批量操作',
+    batchDone: '已完成 {done} 项',
+    batchPartial: '已完成 {done} 项，{failed} 项未处理：{reason}',
+    startTime: '开始时间',
+    endTime: '结束时间',
+    timeRange: '时间范围',
     compact: '紧凑型',
     confirmBatchDelete: '确认批量删除与所选项吗？',
     cancel: '取消',
@@ -302,9 +308,9 @@ const local = {
     forecast_ranking: '当前排名',
     'forecast_ranking-history': '历史排名',
     'forecast-results_runs': '训练记录',
-    monitoring_datasets: 'Prometheus 指标数据集',
+    monitoring_datasets: 'Metrics 数据集',
     'forecast-results': '预测结果',
-    'forecast-results_history': '历史数据与缺样',
+    'forecast-results_history': '历史数据',
     'forecast-results_backtests': '滚动回测记录',
     'forecast-results_evaluations': '实测评估记录',
     'forecast-results_leaderboard': '算法实测排行榜',
@@ -324,8 +330,29 @@ const local = {
   },
   page: {
     monitoring: {
+      queryTest: {
+        title: '测试 PromQL 查询',
+        module: '用于变量的模块',
+        moduleHint:
+          "模板里的 {'{{namespace}}'}、{'{{workload}}'} 等变量按所选模块的工作负载填充，所以测的就是模块将要采集的那条查询。不选则变量留空，只有不含变量的查询能跑。",
+        queryHint:
+          '写 Prometheus 查询，可以使用模板变量。执行时先检查变量，再交给 Prometheus 解析和执行；语法错误、查询失败和“没有数据”会分别说明。',
+        run: '执行查询',
+        apply: '使用这条查询',
+        hint: '填好数据源和 PromQL，点“执行查询”：通过后才能使用。查询结果会按下面的换算系数和精度处理，与数据集里实际保存的值一致。',
+        required: '请选择数据源并填写 PromQL',
+        samples: '样本数',
+        stage_ok: '查询成功',
+        stage_empty: '查询成功但没有数据',
+        stage_template: '模板错误',
+        stage_datasource: '数据源不可用',
+        stage_syntax: 'PromQL 语法错误',
+        stage_query: '查询失败',
+        test: '测试查询',
+        mustTest: '新增自定义 PromQL 前要先测试：执行查询并确认可用后才能保存。'
+      },
       datasets: {
-        title: 'Prometheus 指标数据集',
+        title: 'Metrics 数据集',
         help: '模块与算法之间的数据集：为模块添加多个 Prometheus 指标（来自「数据源 → 数据指标映射」，或直接写 PromQL），所有启用的算法自动使用它们训练、预测和评分，不需要给每个算法单独维护数据。指标的单位、精度、采样周期和聚合方式在这里统一处理，避免数据尺度不一致影响训练。',
         empty: '这个模块还没有指标。添加 CPU、内存、GPU、网络或自定义 PromQL 指标后，才能预测。',
         keywordPlaceholder: '搜索名称、键或 PromQL',
@@ -400,6 +427,8 @@ const local = {
     },
     forecast: {
       modules: {
+        title: '预测模块',
+        help: '一个模块就是一个被预测和扩缩容的工作负载，带有自己的数据集（Prometheus 指标）、历史窗口、预测周期和副本范围。所有已启用的算法自动应用到每个模块。启用与停用、批量删除在勾选后的“批量操作”里。',
         name: '模块名称',
         keywordPlaceholder: '搜索模块名称或工作负载',
         namespace: '命名空间',
@@ -427,11 +456,11 @@ const local = {
         maxCpu: 'CPU 上限(m)',
         minMemory: '内存下限(MiB)',
         maxMemory: '内存上限(MiB)',
-        minReplicas: '副本下限',
-        maxReplicas: '副本上限',
+        minReplicas: '最小副本数',
+        maxReplicas: '最大副本数',
         fallbackCpu: '默认 CPU(m)',
         fallbackMemory: '默认内存(MiB)',
-        fallbackReplicas: '默认副本',
+        fallbackReplicas: '默认及故障回退副本数',
         headroom: '余量系数',
         more: '更多',
         sectionPace: '副本调整节奏',
@@ -445,6 +474,10 @@ const local = {
         scaleUpCooldownHint: '距上一次扩容动作至少间隔多少秒才再次扩容。0 不限制。',
         scaleDownCooldown: '缩容冷却（秒）',
         scaleDownCooldownHint: '距上一次缩容动作至少间隔多少秒才再次缩容，防止负载抖动时来回增减。0 不限制。',
+        minReplicasHint: '模块固定配置：扩缩容永远不会低于这个副本数，operator 与推荐都以它为下限。',
+        maxReplicasHint: '模块固定配置：扩缩容永远不会超过这个副本数；选择“动态扩展”时它是起始上限，硬上限见下。',
+        fallbackReplicasHint:
+          '没有可用的新鲜预测（模型故障、数据不足、推荐过期）时 operator 使用的副本数；不会因它缩容到低于当前值。0 表示不设，冻结当前副本。',
         limitCpuRatio: 'CPU limit 比例',
         limitMemoryRatio: '内存 limit 比例',
         limitRatioHint:
@@ -539,7 +572,7 @@ const local = {
         fallbackMinHistoryHint: '最长连续可用历史占已观察区间的比例低于它时不预测，该指标走降级。默认 0.8。',
         maxMissingRatio: '允许缺样率',
         maxMissingRatioHint: '已观察区间内缺失步长超过这个比例时不预测。默认 0.3。',
-        recoverCycles: '恢复所需周期数',
+        recoverCycles: '恢复启用所需周期数',
         recoverCyclesHint:
           '降级后预测恢复正常，需要连续这么多个健康周期才回到算法结果，避免数据时断时续造成震荡。默认 2。',
         sectionProtection: 'OOM 保护与 JVM 堆压力',
@@ -601,6 +634,10 @@ const local = {
         horizonMinutes: '预测周期(分钟)'
       },
       history: {
+        title: '历史数据',
+        help: '实际值直接从 Prometheus 查询所选区间（包括模块创建之前已有的历史），不是只统计模块启用后采集的数据；预测值是各算法在对应时间点的预测，副本数来自同一个模块的同一组 Pod。只有 Prometheus 在整个区间都没有样本时才判定为历史缺失；区间里个别步长没有样本只算缺口。',
+        pointsHelp: '图中每个时间点：各算法的预测值与预测副本数，和同一时间的实际值与实际副本数。勾选行可导出所选。',
+        missing: '历史缺失',
         empty: '请选择模块和指标',
         lastHours: '最近 {hours} 小时',
         expected: '期望点数',
@@ -615,7 +652,6 @@ const local = {
         gapFrom: '起',
         gapTo: '止',
         gapSteps: '步数',
-        title: '采集到的历史',
         qualityHint: '质量报告：缺失比例、最长缺口（步数）、跳变数、偏离步长网格的点数、最新样本滞后。',
         notCollected: '这个指标还没有采集到数据：在预测模块里运行「采集历史」后再查看。'
       },
@@ -667,7 +703,7 @@ const local = {
         source_fallback: '默认值',
         source_original: '原值',
         help: '每次决策都会生成一个不可变的版本，记录每个字段由谁决定（算法、固定周期、默认值或保留原值）及依据。',
-        executionsHelp: 'kubeforecast-operator 每次实际扩缩、观察、暂缓、冲突或出错后上报的记录。',
+        executionsHelp: 'kube-resource-fcst-operator 每次实际扩缩、观察、暂缓、冲突或出错后上报的记录。',
         empty: '还没有推荐快照：预测模块进入 Recommend 及以上模式后每个周期生成一个。',
         sourceLabel: '决定来源',
         degraded: '降级',
@@ -758,8 +794,10 @@ const local = {
         pointsTitle: '数据点',
         pointsHelp: '图中每个点的精确数值，按时间倒序分页；最多显示最近 20000 个点，完整数据用右上角导出 CSV。',
         queryThis: '查看曲线',
+        fromPrometheus: '来自 Prometheus',
+        onlyMappings: '只有“数据映射”可以批量删除；内置模板与平台导出是只读的。',
         curvesHelp:
-          '按模块查看目录里任意指标的曲线：实测用量、各算法的预测值、评估误差、推荐与执行。曲线是目录指标的可视化，没有单独的数据。',
+          '模块数据集里一个指标的真实历史曲线：打开时直接向 Prometheus 查询所选区间（包括模块创建之前已有的数据），每根 K 线是一个时间桶的开、高、低、收。可缩放、拖动，悬停看数值；下方列表是同一份数据，可勾选导出。',
         keywordPlaceholder: '搜索指标名称、PromQL 或含义'
       },
       algorithms: {
@@ -857,9 +895,15 @@ const local = {
           type: '类型',
           default: '默认',
           range: '取值',
-          description: '说明'
+          description: '说明',
+          isDefault: '默认值',
+          saved: '已保存'
         },
-        usage: '使用情况与表现',
+        usage: '关联模块与数据集',
+        usageHelp:
+          '已启用的算法统一应用于所有模块：每个模块一张卡片，列出这个算法在该模块上运行的数据集（Metrics 数据集里的指标，悬停看 PromQL）、综合评分，以及在各指标上的回测与实测表现。',
+        dataset: '数据集',
+        noModules: '还没有启用的模块。',
         backtestWape: '回测 WAPE',
         measuredWape: '实测 WAPE',
         trace: '追溯',
@@ -878,7 +922,7 @@ const local = {
         newInstance: '创建实例',
         viewInstances: '算法实例',
         viewCatalog: '算法目录',
-        usageBySource: '各来源上的表现',
+        usageBySource: '各指标上的表现',
         traceSource: '来源',
         traceInstance: '算法实例',
         traceScore: '最近评分',
@@ -1085,7 +1129,7 @@ const local = {
       },
       executions: {
         decisionVersion: '推荐版本',
-        empty: '还没有执行记录：kubeforecast-operator 每次调和后上报。',
+        empty: '还没有执行记录：kube-resource-fcst-operator 每次调和后上报。',
         keywordPlaceholder: '目标、命名空间、原因',
         action_ScaleUp: '扩容',
         action_ScaleDown: '缩容',
@@ -1250,6 +1294,53 @@ const local = {
         historyHelp: '每次评分的结果都会保留，可以回看一个算法的分数怎样变化、什么时候被选中。',
         empty: '还没有评分记录。创建算法实例并采集数据后，点击「立即评分」，或等待评分任务运行。'
       },
+      evalMetric: {
+        choose: '选择要查看的指标',
+        unit: '单位',
+        accuracy: '精度',
+        wape: 'WAPE',
+        mae: 'MAE',
+        bias: '偏差',
+        peak_under: '峰值低估',
+        coverage: '覆盖率',
+        rmse: 'RMSE',
+        pinball: '分位损失',
+        rmse_how: 'RMSE = 平方误差平均值的平方根，对大偏差更敏感，单位与指标相同。',
+        pinball_how: '分位损失（pinball）：按预测分位数对高估和低估分别加权的误差，用于分位预测；越小越好。',
+        accuracy_how: '精度 = 1 − WAPE（最低为 0）：这次预测的 {points} 个点里，预测值平均贴近实际值的程度。',
+        wape_how: 'WAPE = Σ|实际 − 预测| ÷ Σ|实际|，对 {points} 个点加权，越小越好。',
+        mae_how: 'MAE = 平均 |实际 − 预测|，单位与指标相同，对 {points} 个点取平均。',
+        bias_how: '偏差 = 平均（预测 − 实际）：正数说明预测偏高，负数偏低；与 MAE 不同，正负会抵消。',
+        peak_under_how:
+          '峰值低估 = max(0, 实际峰值 − 预测峰值) ÷ 实际峰值：为 0 表示没有低估峰值。扩缩容最怕低估峰值。',
+        coverage_how: '覆盖率 = 有实际值可对比的预测点 ÷ 全部预测点；低于 100% 说明有的目标时间还没有实际样本。'
+      },
+      compare: {
+        actual: '实际值',
+        actualReplicas: '实际副本数',
+        predicted: '预测值',
+        predictedAt: '预测时间',
+        predictedReplicas: '预测副本数',
+        replicas: '副本数',
+        open: '开',
+        close: '收',
+        low: '低',
+        high: '高',
+        empty: '所选范围内没有数据：Prometheus 在这段时间没有该指标，且没有算法在这段时间做过预测。',
+        actualMissing: 'Prometheus 在所选区间没有这个指标的数据（历史数据缺失）',
+        actualError: '读取 Prometheus 失败：{error}',
+        candle: 'K 线',
+        line: '折线',
+        algorithms: '算法',
+        allAlgorithms: '全部有预测的算法',
+        replicaBasis: '预测副本数的算法',
+        sameObject: '实际值与副本数来自同一个模块、同一组 Pod',
+        points: '逐时间点',
+        time: '时间',
+        actualValue: '实际值',
+        replicasNow: '实际副本数',
+        bucket: '每根 K 线 = {seconds} 秒'
+      },
       ranking: {
         best: '最优',
         challenger: '挑战者',
@@ -1268,7 +1359,9 @@ const local = {
         notBeats: '未优于基线',
         metric: '指标',
         bias: '偏差',
-        metricsTitle: '各指标的误差、准确度与权重',
+        metricsTitle: '标准指标排名',
+        metricsHelp:
+          '对每个指标，所有有实测值的算法按同一标准（准确度 = 1 − 误差）排名，并给出误差、MAE、RMSE、偏差、峰值低估与权重。',
         noMeasured:
           '还没有实测评估：预测的时间范围走完后，评估任务会把预测与 Prometheus 的实际值对比，这里才会有结果。',
         order: '排名',
@@ -1283,7 +1376,14 @@ const local = {
         overview: '运行概览',
         overviewHelp: '按当前筛选条件统计：总运行数、成功率、各算法的成败，以及没有产出预测的最常见原因。',
         total: '运行次数',
-        successRate: '成功率',
+        hitRate: '命中率',
+        hitRateHelp:
+          '命中率 = 成功的运行 ÷ 全部运行：按当前筛选，真实训练任务里有多少次产出了可用的预测。统计来自训练记录本身，不含任何固定数据。',
+        meaning_ok: '算法在历史窗口上训练并产出了预测，已写入预测结果。',
+        meaning_skipped:
+          '没有运行：历史样本不足、缺少算法需要的协变量或数据集不满足要求；不会用补出来的数据硬算，原因见记录。',
+        meaning_failed: '运行出错或超时（超过训练预算），没有产出预测；该指标沿用上一次有效预测或兜底。',
+        dataset: '数据集',
         avgDuration: '平均耗时',
         lastRun: '最近一次',
         byAlgorithm: '各算法运行情况（成功/跳过/失败）',
@@ -1318,6 +1418,8 @@ const local = {
         version: '版本'
       },
       admissions: {
+        limits: 'Limits（CPU / 内存）',
+        limitMemory: '内存 limits',
         title: '准入决策记录',
         help: '每次 Kyverno 向平台询问新 Pod 的资源时，平台的回答都会记录在这里：是否采用、给出的 CPU/内存/GPU、原值与原因。GPU 只对新 Pod 生效。',
         empty: '还没有准入记录。',
@@ -1694,7 +1796,7 @@ const local = {
       bindWeChat: {
         title: '绑定微信'
       },
-      title: 'KubeForecast - Kubernetes 资源预测与 Pod 扩容'
+      title: 'kube-resource-fcst - Kubernetes 资源预测与 Pod 扩容'
     },
     system: {
       title: '系统参数管理',
