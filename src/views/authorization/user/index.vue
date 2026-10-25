@@ -27,6 +27,7 @@ import {
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
+import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchUserList,
@@ -166,7 +167,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
         {
           default: () =>
             row.roles?.map(r =>
-              h(NButton, { size: 'tiny', tertiary: true, type: 'primary', round: true }, { default: () => r.name })
+              h(NButton, { size: 'small', tertiary: true, type: 'primary', round: true }, { default: () => r.name })
             )
         }
       );
@@ -186,28 +187,10 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     render: row => {
       return h(
         NButton,
-        { size: 'tiny', tertiary: true, type: row.otpEnabled ? 'success' : 'default', round: true },
+        { size: 'small', tertiary: true, type: row.otpEnabled ? 'success' : 'default', round: true },
         {
           default: () => (row.otpEnabled ? t('page.manage.user.otpEnabled') : t('page.manage.user.otpDisabled'))
         }
-      );
-    }
-  },
-  telegramBinding: {
-    title: t('page.manage.user.telegramBinding', 'Telegram 绑定'),
-    resizable: true,
-    align: 'center',
-    width: 140,
-    render: row => {
-      const tb = (row as any).telegramBinding;
-      if (tb && tb.status) {
-        const label = tb.telegramUsername ? `@${tb.telegramUsername}` : `ID: ${tb.telegramUserId}`;
-        return h(NButton, { size: 'tiny', tertiary: true, type: 'info', round: true }, { default: () => label });
-      }
-      return h(
-        NButton,
-        { size: 'tiny', tertiary: true, type: 'default', round: true },
-        { default: () => t('page.manage.user.unbound', '未绑定') }
       );
     }
   },
@@ -305,7 +288,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
             h(
               NButton,
               {
-                size: 'tiny',
+                size: 'small',
                 type: (btn.btnType as any) || 'primary',
                 onClick: () => handleEdit(row)
               },
@@ -324,7 +307,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
                 trigger: () =>
                   h(
                     NButton,
-                    { size: 'tiny', type: 'warning', ghost: true },
+                    { size: 'small', type: 'warning', ghost: true },
                     { default: () => t('page.manage.user.resetOtp') }
                   )
               }
@@ -346,7 +329,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
               {
                 default: () => t('common.confirmDelete'),
                 trigger: () =>
-                  h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => t('common.delete') })
+                  h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('common.delete') })
               }
             )
           );
@@ -362,7 +345,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
             trigger: () =>
               h(
                 NButton,
-                { size: 'tiny', type: row.status ? 'warning' : 'success', ghost: true, disabled: isSelf },
+                { size: 'small', type: row.status ? 'warning' : 'success', ghost: true, disabled: isSelf },
                 { default: () => (row.status ? t('common.disable') : t('common.enable')) }
               ),
             default: () => (row.status ? t('common.confirmDisable') : t('common.confirmEnable'))
@@ -388,7 +371,6 @@ const defaultKeys = [
   'username',
   'nickName',
   'isOnline',
-  'telegramBinding',
   'lastLoginAt',
   'lastLoginIp',
   'roles',

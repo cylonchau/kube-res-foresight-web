@@ -23,6 +23,7 @@ import { fetchBatchResetJobs, fetchGetJobTypes, fetchGetJobs, fetchResetJob } fr
 import { useLoading } from '@sa/hooks';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
+import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
 
@@ -253,7 +254,7 @@ const columnMap: Record<string, any> = {
         },
         {
           trigger: () =>
-            h(NButton, { size: 'tiny', type: 'warning', ghost: true }, { default: () => t('page.job.reset') }),
+            h(NButton, { size: 'small', type: 'warning', ghost: true }, { default: () => t('page.job.reset') }),
           default: () => t('page.job.resetConfirm')
         }
       );

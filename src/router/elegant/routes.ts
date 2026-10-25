@@ -78,6 +78,232 @@ export const generatedRoutes: GeneratedRoute[] = [
     ]
   },
   {
+    name: 'datasource',
+    path: '/datasource',
+    component: 'layout.base',
+    meta: {
+      title: 'datasource',
+      i18nKey: 'route.datasource'
+    },
+    children: [
+      {
+        name: 'datasource_connections',
+        path: '/datasource/connections',
+        component: 'view.datasource_connections',
+        meta: {
+          title: 'datasource_connections',
+          i18nKey: 'route.datasource_connections'
+        }
+      },
+      {
+        name: 'datasource_metric-mappings',
+        path: '/datasource/metric-mappings',
+        component: 'view.datasource_metric-mappings',
+        meta: {
+          title: 'datasource_metric-mappings',
+          i18nKey: 'route.datasource_metric-mappings'
+        }
+      },
+      {
+        name: 'datasource_presets',
+        path: '/datasource/presets',
+        component: 'view.datasource_presets',
+        meta: {
+          title: 'datasource_presets',
+          i18nKey: 'route.datasource_presets'
+        }
+      }
+    ]
+  },
+  {
+    name: 'forecast',
+    path: '/forecast',
+    component: 'layout.base',
+    meta: {
+      title: 'forecast',
+      i18nKey: 'route.forecast'
+    },
+    children: [
+      {
+        name: 'forecast_algorithms',
+        path: '/forecast/algorithms',
+        component: 'view.forecast_algorithms',
+        meta: {
+          title: 'forecast_algorithms',
+          i18nKey: 'route.forecast_algorithms'
+        }
+      },
+      {
+        name: 'forecast_ranking',
+        path: '/forecast/ranking',
+        component: 'view.forecast_ranking',
+        meta: {
+          title: 'forecast_ranking',
+          i18nKey: 'route.forecast_ranking'
+        }
+      },
+      {
+        name: 'forecast_ranking-history',
+        path: '/forecast/ranking-history',
+        component: 'view.forecast_ranking-history',
+        meta: {
+          title: 'forecast_ranking-history',
+          i18nKey: 'route.forecast_ranking-history'
+        }
+      },
+      {
+        name: 'forecast_score-records',
+        path: '/forecast/score-records',
+        component: 'view.forecast_score-records',
+        meta: {
+          title: 'forecast_score-records',
+          i18nKey: 'route.forecast_score-records'
+        }
+      }
+    ]
+  },
+  {
+    name: 'forecast-actions',
+    path: '/forecast-actions',
+    component: 'layout.base',
+    meta: {
+      title: 'forecast-actions',
+      i18nKey: 'route.forecast-actions'
+    },
+    children: [
+      {
+        name: 'forecast-actions_admissions',
+        path: '/forecast-actions/admissions',
+        component: 'view.forecast-actions_admissions',
+        meta: {
+          title: 'forecast-actions_admissions',
+          i18nKey: 'route.forecast-actions_admissions'
+        }
+      },
+      {
+        name: 'forecast-actions_audit-exports',
+        path: '/forecast-actions/audit-exports',
+        component: 'view.forecast-actions_audit-exports',
+        meta: {
+          title: 'forecast-actions_audit-exports',
+          i18nKey: 'route.forecast-actions_audit-exports'
+        }
+      },
+      {
+        name: 'forecast-actions_executions',
+        path: '/forecast-actions/executions',
+        component: 'view.forecast-actions_executions',
+        meta: {
+          title: 'forecast-actions_executions',
+          i18nKey: 'route.forecast-actions_executions'
+        }
+      },
+      {
+        name: 'forecast-actions_fallbacks',
+        path: '/forecast-actions/fallbacks',
+        component: 'view.forecast-actions_fallbacks',
+        meta: {
+          title: 'forecast-actions_fallbacks',
+          i18nKey: 'route.forecast-actions_fallbacks'
+        }
+      },
+      {
+        name: 'forecast-actions_recommendations',
+        path: '/forecast-actions/recommendations',
+        component: 'view.forecast-actions_recommendations',
+        meta: {
+          title: 'forecast-actions_recommendations',
+          i18nKey: 'route.forecast-actions_recommendations'
+        }
+      }
+    ]
+  },
+  {
+    name: 'forecast-modules',
+    path: '/forecast-modules',
+    component: 'layout.base',
+    meta: {
+      title: 'forecast-modules',
+      i18nKey: 'route.forecast-modules'
+    },
+    children: [
+      {
+        name: 'forecast-modules_modules',
+        path: '/forecast-modules/modules',
+        component: 'view.forecast-modules_modules',
+        meta: {
+          title: 'forecast-modules_modules',
+          i18nKey: 'route.forecast-modules_modules'
+        }
+      }
+    ]
+  },
+  {
+    name: 'forecast-results',
+    path: '/forecast-results',
+    component: 'layout.base',
+    meta: {
+      title: 'forecast-results',
+      i18nKey: 'route.forecast-results'
+    },
+    children: [
+      {
+        name: 'forecast-results_backtests',
+        path: '/forecast-results/backtests',
+        component: 'view.forecast-results_backtests',
+        meta: {
+          title: 'forecast-results_backtests',
+          i18nKey: 'route.forecast-results_backtests'
+        }
+      },
+      {
+        name: 'forecast-results_evaluations',
+        path: '/forecast-results/evaluations',
+        component: 'view.forecast-results_evaluations',
+        meta: {
+          title: 'forecast-results_evaluations',
+          i18nKey: 'route.forecast-results_evaluations'
+        }
+      },
+      {
+        name: 'forecast-results_history',
+        path: '/forecast-results/history',
+        component: 'view.forecast-results_history',
+        meta: {
+          title: 'forecast-results_history',
+          i18nKey: 'route.forecast-results_history'
+        }
+      },
+      {
+        name: 'forecast-results_leaderboard',
+        path: '/forecast-results/leaderboard',
+        component: 'view.forecast-results_leaderboard',
+        meta: {
+          title: 'forecast-results_leaderboard',
+          i18nKey: 'route.forecast-results_leaderboard'
+        }
+      },
+      {
+        name: 'forecast-results_runs',
+        path: '/forecast-results/runs',
+        component: 'view.forecast-results_runs',
+        meta: {
+          title: 'forecast-results_runs',
+          i18nKey: 'route.forecast-results_runs'
+        }
+      },
+      {
+        name: 'forecast-results_trends',
+        path: '/forecast-results/trends',
+        component: 'view.forecast-results_trends',
+        meta: {
+          title: 'forecast-results_trends',
+          i18nKey: 'route.forecast-results_trends'
+        }
+      }
+    ]
+  },
+  {
     name: 'iframe-page',
     path: '/iframe-page/:url',
     component: 'layout.base$view.iframe-page',
@@ -103,6 +329,44 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'monitoring',
+    path: '/monitoring',
+    component: 'layout.base',
+    meta: {
+      title: 'monitoring',
+      i18nKey: 'route.monitoring'
+    },
+    children: [
+      {
+        name: 'monitoring_curves',
+        path: '/monitoring/curves',
+        component: 'view.monitoring_curves',
+        meta: {
+          title: 'monitoring_curves',
+          i18nKey: 'route.monitoring_curves'
+        }
+      },
+      {
+        name: 'monitoring_datasets',
+        path: '/monitoring/datasets',
+        component: 'view.monitoring_datasets',
+        meta: {
+          title: 'monitoring_datasets',
+          i18nKey: 'route.monitoring_datasets'
+        }
+      },
+      {
+        name: 'monitoring_metrics',
+        path: '/monitoring/metrics',
+        component: 'view.monitoring_metrics',
+        meta: {
+          title: 'monitoring_metrics',
+          i18nKey: 'route.monitoring_metrics'
+        }
+      }
+    ]
+  },
+  {
     name: 'system',
     path: '/system',
     component: 'layout.base',
@@ -118,6 +382,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'system_config',
           i18nKey: 'route.system_config'
+        }
+      },
+      {
+        name: 'system_login-log',
+        path: '/system/login-log',
+        component: 'view.system_login-log',
+        meta: {
+          title: 'system_login-log',
+          i18nKey: 'route.system_login-log'
         }
       },
       {
@@ -177,34 +450,5 @@ export const generatedRoutes: GeneratedRoute[] = [
       title: 'user-center',
       i18nKey: 'route.user-center'
     }
-  },
-  {
-    name: 'workflow',
-    path: '/workflow',
-    component: 'layout.base',
-    meta: {
-      title: 'workflow',
-      i18nKey: 'route.workflow'
-    },
-    children: [
-      {
-        name: 'workflow_instances',
-        path: '/workflow/instances',
-        component: 'view.workflow_instances',
-        meta: {
-          title: 'workflow_instances',
-          i18nKey: 'route.workflow_instances'
-        }
-      },
-      {
-        name: 'workflow_pipelines',
-        path: '/workflow/pipelines',
-        component: 'view.workflow_pipelines',
-        meta: {
-          title: 'workflow_pipelines',
-          i18nKey: 'route.workflow_pipelines'
-        }
-      }
-    ]
   }
 ];

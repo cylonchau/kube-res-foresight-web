@@ -205,15 +205,16 @@ const columnMap: Record<string, any> = {
     key: 'actions',
     width: 240,
     fixed: 'right',
+    align: 'center',
     render: (row: any) =>
-      h(NSpace, { wrap: false }, () => [
-        h(NButton, { size: 'small', onClick: () => open(row) }, () => t('common.edit')),
+      h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
+        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => open(row) }, () => t('common.edit')),
         h(NButton, { size: 'small', onClick: () => rotate(row) }, () => t('page.system.secretKeys.rotate')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error' }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         )

@@ -4,8 +4,8 @@ Management foundation for Kubernetes resource forecasting, Pod scaling orchestra
 and capacity planning.
 
 The admin preserves the Vue 3, Naive UI, Pinia and Elegant Router architecture.
-Supported modules: Workflow Engine, System Management, Authorization Management
-and Task Center. The profile is a hidden self-service route.
+Supported modules: Data Sources, Forecast, Task Center, System Management and
+Authorization Management. The profile is a hidden self-service route.
 
 Run pnpm install --frozen-lockfile, then pnpm dev for development.
 Validate with pnpm typecheck, pnpm test:unit and pnpm build.

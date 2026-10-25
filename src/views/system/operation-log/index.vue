@@ -47,7 +47,6 @@ const search = reactive({
 
 const sourceOptions = computed(() => [
   { label: t('page.operationLog.sourcePage'), value: 'page' },
-  { label: t('page.operationLog.sourceTma'), value: 'tma' },
   { label: t('page.operationLog.sourceApi'), value: 'api' },
   { label: t('page.operationLog.sourceCli'), value: 'cli' }
 ]);
@@ -122,7 +121,6 @@ async function clearLogs() {
 
 const sourceMeta: Record<string, { type: 'info' | 'success' | 'warning' | 'primary'; labelKey: string }> = {
   page: { type: 'info', labelKey: 'page.operationLog.sourcePage' },
-  tma: { type: 'success', labelKey: 'page.operationLog.sourceTma' },
   api: { type: 'warning', labelKey: 'page.operationLog.sourceApi' },
   cli: { type: 'primary', labelKey: 'page.operationLog.sourceCli' }
 };
@@ -211,7 +209,9 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.System.OperationLog) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', onClick: () => openDetail(row) }, () => t('page.operationLog.detail'))
+        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => openDetail(row) }, () =>
+          t('page.operationLog.detail')
+        )
       ])
   }
 };

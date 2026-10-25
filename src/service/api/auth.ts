@@ -171,32 +171,3 @@ export function fetchUpdateProfile(email: string, phone: string) {
     data: { email, phone }
   });
 }
-
-/**
- * Get Telegram binding status for the current user.
- *
- * The response shape is snake_case (is_bound/bound_at/...), matching the Go
- * backend's JSON tags exactly — do not read isBound/boundAt here.
- */
-export function fetchGetTelegramStatus() {
-  return request<Api.Telegram.BindingStatus>({
-    url: '/api/v1/telegram/status',
-    method: 'get'
-  });
-}
-
-/** Generate one-time Telegram bind token & link */
-export function fetchGenerateTelegramBindToken() {
-  return request<Api.Telegram.BindGenerateResp>({
-    url: '/api/v1/telegram/bind/generate',
-    method: 'post'
-  });
-}
-
-/** Unbind Telegram account */
-export function fetchUnbindTelegram() {
-  return request({
-    url: '/api/v1/telegram/unbind',
-    method: 'post'
-  });
-}

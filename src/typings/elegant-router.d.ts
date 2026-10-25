@@ -24,19 +24,45 @@ declare module "@elegant-router/types" {
     "authorization_menu": "/authorization/menu";
     "authorization_role": "/authorization/role";
     "authorization_user": "/authorization/user";
+    "datasource": "/datasource";
+    "datasource_connections": "/datasource/connections";
+    "datasource_metric-mappings": "/datasource/metric-mappings";
+    "datasource_presets": "/datasource/presets";
+    "forecast": "/forecast";
+    "forecast_algorithms": "/forecast/algorithms";
+    "forecast_ranking": "/forecast/ranking";
+    "forecast_ranking-history": "/forecast/ranking-history";
+    "forecast_score-records": "/forecast/score-records";
+    "forecast-actions": "/forecast-actions";
+    "forecast-actions_admissions": "/forecast-actions/admissions";
+    "forecast-actions_audit-exports": "/forecast-actions/audit-exports";
+    "forecast-actions_executions": "/forecast-actions/executions";
+    "forecast-actions_fallbacks": "/forecast-actions/fallbacks";
+    "forecast-actions_recommendations": "/forecast-actions/recommendations";
+    "forecast-modules": "/forecast-modules";
+    "forecast-modules_modules": "/forecast-modules/modules";
+    "forecast-results": "/forecast-results";
+    "forecast-results_backtests": "/forecast-results/backtests";
+    "forecast-results_evaluations": "/forecast-results/evaluations";
+    "forecast-results_history": "/forecast-results/history";
+    "forecast-results_leaderboard": "/forecast-results/leaderboard";
+    "forecast-results_runs": "/forecast-results/runs";
+    "forecast-results_trends": "/forecast-results/trends";
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat|otp-login)?";
+    "monitoring": "/monitoring";
+    "monitoring_curves": "/monitoring/curves";
+    "monitoring_datasets": "/monitoring/datasets";
+    "monitoring_metrics": "/monitoring/metrics";
     "system": "/system";
     "system_config": "/system/config";
+    "system_login-log": "/system/login-log";
     "system_operation-log": "/system/operation-log";
     "system_secret-keys": "/system/secret-keys";
     "task-center": "/task-center";
     "task-center_audit": "/task-center/audit";
     "task-center_definition": "/task-center/definition";
     "user-center": "/user-center";
-    "workflow": "/workflow";
-    "workflow_instances": "/workflow/instances";
-    "workflow_pipelines": "/workflow/pipelines";
   };
 
   /**
@@ -72,12 +98,17 @@ declare module "@elegant-router/types" {
     | "404"
     | "500"
     | "authorization"
+    | "datasource"
+    | "forecast"
+    | "forecast-actions"
+    | "forecast-modules"
+    | "forecast-results"
     | "iframe-page"
     | "login"
+    | "monitoring"
     | "system"
     | "task-center"
     | "user-center"
-    | "workflow"
   >;
 
   /**
@@ -102,14 +133,35 @@ declare module "@elegant-router/types" {
     | "authorization_menu"
     | "authorization_role"
     | "authorization_user"
+    | "datasource_connections"
+    | "datasource_metric-mappings"
+    | "datasource_presets"
+    | "forecast-actions_admissions"
+    | "forecast-actions_audit-exports"
+    | "forecast-actions_executions"
+    | "forecast-actions_fallbacks"
+    | "forecast-actions_recommendations"
+    | "forecast-modules_modules"
+    | "forecast-results_backtests"
+    | "forecast-results_evaluations"
+    | "forecast-results_history"
+    | "forecast-results_leaderboard"
+    | "forecast-results_runs"
+    | "forecast-results_trends"
+    | "forecast_algorithms"
+    | "forecast_ranking-history"
+    | "forecast_ranking"
+    | "forecast_score-records"
+    | "monitoring_curves"
+    | "monitoring_datasets"
+    | "monitoring_metrics"
     | "system_config"
+    | "system_login-log"
     | "system_operation-log"
     | "system_secret-keys"
     | "task-center_audit"
     | "task-center_definition"
     | "user-center"
-    | "workflow_instances"
-    | "workflow_pipelines"
   >;
 
   /**
@@ -181,7 +233,7 @@ declare module "@elegant-router/types" {
         component: `view.${K}`;
       }
     : never;
-
+  
   /**
    * the center level route
    */
@@ -204,7 +256,7 @@ declare module "@elegant-router/types" {
         children: (CenterLevelRoute<GetChildRouteKey<K>> | LastLevelRoute<GetChildRouteKey<K>>)[];
       }
     : never;
-
+  
   /**
    * the custom first level route
    */

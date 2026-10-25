@@ -149,6 +149,14 @@ export function fetchGetOperationLogs(params?: any) {
   });
 }
 
+/**
+ * Get login attempts ("系统管理/登录日志")
+ * @param params Filters (page, page_size, username, client_ip, result, reason, method, start_time, end_time, sort_by, sort_order)
+ */
+export function fetchGetLoginLogs(params?: any) {
+  return request<Api.System.LoginLogList>({ url: '/api/v1/login-logs', method: 'get', params });
+}
+
 /** Permanently deletes every operation log entry. */
 export function fetchClearOperationLogs() {
   return request({ url: '/api/v1/operation-logs', method: 'delete' });

@@ -19,11 +19,12 @@ import {
   NTag
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { CONFIG_CATEGORIES, categoryOf, noteOf } from './config-catalogue';
+import { CONFIG_CATEGORIES, LDAP_CATEGORY, categoryOf, noteOf } from './config-catalogue';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useLoading } from '@sa/hooks';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
+import LdapSettingsPanel from '@/components/business/ldap-settings-panel.vue';
 import { refreshDefaultVisibleColumnCount, useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 
 const message = useMessage();
@@ -47,8 +48,11 @@ const moduleOptions = computed(() => [
   ...CONFIG_CATEGORIES.filter(code => configs.value.some(item => categoryOf(item.config_key) === code)).map(code => ({
     label: categoryLabel(code),
     value: code
-  }))
+  })),
+  // the directory login settings are not rows of the parameter table: they have their own form
+  { label: categoryLabel(LDAP_CATEGORY), value: LDAP_CATEGORY }
 ]);
+const isLdap = computed(() => searchForm.module === LDAP_CATEGORY);
 
 /** The name and the purpose of a parameter in the language of the page (the database holds the English ones). */
 const isChinese = computed(() => locale.value.startsWith('zh'));
@@ -89,8 +93,7 @@ function getModuleTagType(key: string): 'default' | 'primary' | 'info' | 'succes
   const types: Record<string, 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'> = {
     auth: 'default',
     ui: 'primary',
-    notify: 'warning',
-    telegram: 'error',
+    notify: 'warning'
   };
   return types[categoryOf(key)] || 'default';
 }
@@ -384,7 +387,10 @@ onMounted(() => {
       </NCollapse>
     </NCard>
 
-    <NCard :bordered="false" size="small" class="flex-1 rounded-16px shadow-sm overflow-hidden">
+    <div v-if="isLdap" class="flex-1 overflow-auto">
+      <LdapSettingsPanel />
+    </div>
+    <NCard v-else :bordered="false" size="small" class="flex-1 rounded-16px shadow-sm overflow-hidden">
       <div class="h-full flex-col">
         <TableHeaderOperation
           v-model:columns="columnChecks"

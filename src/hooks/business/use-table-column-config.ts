@@ -154,7 +154,7 @@ export function useTableColumnConfig(
         return;
       }
 
-      const [{ data: meta }, { data: userConfig }, visibleColumnCount] = await Promise.all([
+      const [{ data: meta }, { data: userConfig }, columnBudget] = await Promise.all([
         fetchColumnsMeta(pageCode),
         fetchGetUserColumnConfig(pageCode),
         getDefaultVisibleColumnCount()
@@ -166,7 +166,7 @@ export function useTableColumnConfig(
         if (SYSTEM_COLUMN_KEYS.has(key.toLowerCase())) return false;
         return meta?.find((item: any) => item.key === key)?.configurable ?? true;
       }
-      const businessVisibleBudget = visibleColumnCount;
+      const businessVisibleBudget = columnBudget;
       const defaultVisibleKeys = new Set(
         (defaultKeys || []).filter(isConfigurableColumn).slice(0, businessVisibleBudget)
       );

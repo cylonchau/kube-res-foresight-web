@@ -43,6 +43,7 @@ export function useAuthStream(options: StreamOptions) {
   /** Close code / reason of the last connection that ended, for diagnosing reconnect loops. */
   const lastClose = ref('');
   let socket: WebSocket | null = null;
+  let detachClose: (() => void) | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryCount = 0;
   let active = false;
@@ -80,25 +81,27 @@ export function useAuthStream(options: StreamOptions) {
       return scheduleReconnect();
     }
     socket = ws;
-    ws.onopen = () => {
+    ws.addEventListener('open', () => {
       retryCount = 0;
       lastClose.value = '';
       status.value = 'live';
       options.onOpen?.();
-    };
-    ws.onmessage = event => {
+    });
+    ws.addEventListener('message', event => {
       try {
         options.onMessage(JSON.parse(String(event.data)));
       } catch {
         // Ignore malformed frames; the next push carries fresh state.
       }
-    };
-    ws.onclose = event => {
+    });
+    const onClose = (event: CloseEvent) => {
       if (socket === ws) socket = null;
       // 1006 with no reason usually means the handshake was refused (auth or route).
       lastClose.value = `code ${event.code}${event.reason ? `: ${event.reason}` : ''}`;
       scheduleReconnect();
     };
+    ws.addEventListener('close', onClose);
+    detachClose = () => ws.removeEventListener('close', onClose);
   }
 
   function start() {
@@ -114,7 +117,7 @@ export function useAuthStream(options: StreamOptions) {
     const ws = socket;
     socket = null;
     if (ws) {
-      ws.onclose = null;
+      detachClose?.();
       ws.close();
     }
     status.value = 'closed';

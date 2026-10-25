@@ -27,6 +27,7 @@ import {
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
+import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchRoleList, deleteRole, batchDeleteRole, updateRole, createRole, fetchAllPermissions } from '@/service/api';
 import { useBoolean, useLoading } from '@sa/hooks';
@@ -186,7 +187,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
             h(
               NButton,
               {
-                size: 'tiny',
+                size: 'small',
                 type: (btn.btnType as any) || 'primary',
                 onClick: () => handleEdit(row)
               },
@@ -197,7 +198,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
             h(
               NButton,
               {
-                size: 'tiny',
+                size: 'small',
                 type: 'primary',
                 ghost: true,
                 onClick: () => handleSetPermissions(row)
@@ -222,7 +223,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
                 trigger: () =>
                   h(
                     NButton,
-                    { size: 'tiny', type: row.status ? 'warning' : 'success', ghost: true },
+                    { size: 'small', type: row.status ? 'warning' : 'success', ghost: true },
                     { default: () => (row.status ? t('common.disable') : t('common.enable')) }
                   )
               }
@@ -244,7 +245,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
               {
                 default: () => t('common.confirmDelete'),
                 trigger: () =>
-                  h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => t('common.delete') })
+                  h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('common.delete') })
               }
             )
           );

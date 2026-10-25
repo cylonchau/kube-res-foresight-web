@@ -33,10 +33,8 @@ export const request = createFlatRequest(
     timeout: REQUEST_TIMEOUT_MS,
     headers: {
       apifoxToken: 'XL299LiMEDZ0H5h3A29PxwQXdMJqWyY2',
-      // Lets the backend tell this web console's requests apart from the
-      // Telegram Mini App's (both share the exact same JWT/refresh-token
-      // mechanism otherwise) — used for single-session-per-client-type
-      // enforcement and the "系统管理/操作日志" page's source filter.
+      // Lets the backend tell this web console's requests apart from access-key API calls — used for
+      // single-session-per-client-type enforcement and the operation-log source filter.
       'X-KubeForecast-Client': 'web'
     }
   },
