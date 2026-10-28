@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MetricLabel from '@/components/business/metric-label.vue';
 import { computed, ref, watch } from 'vue';
 import { NCheckbox, NCheckboxGroup, NDescriptions, NDescriptionsItem, NModal, NSpace } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
@@ -67,7 +68,7 @@ const results = computed(() => {
       </NCheckboxGroup>
       <div class="metrics">
         <div v-for="item in results" :key="item.key" class="metric">
-          <div class="metric__label">{{ item.label }}</div>
+          <div class="metric__label"><MetricLabel :label="item.label" :metric="item.key" /></div>
           <div class="metric__value">{{ item.value }}</div>
           <div class="metric__how">{{ item.how }}</div>
         </div>

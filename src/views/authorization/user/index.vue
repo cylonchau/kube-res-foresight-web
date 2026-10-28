@@ -9,6 +9,7 @@ import type { VNodeChild } from 'vue';
 import { useRoute } from 'vue-router';
 import type { DataTableColumns, PaginationProps } from 'naive-ui';
 import {
+  NAvatar,
   NButton,
   NPopconfirm,
   NPopover,
@@ -164,7 +165,50 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     title: t('page.manage.user.nickName'),
     resizable: true,
     align: 'center',
-    minWidth: 100
+    minWidth: 100,
+    // an account without a nickname shows its username, not an empty cell
+    render: row => row.nickName || row.username
+  },
+  avatar: {
+    title: t('common.fields.avatar'),
+    resizable: true,
+    align: 'center',
+    width: 80,
+    render: row =>
+      h(
+        NAvatar,
+        { size: 28, round: true, src: row.avatar || undefined },
+        { default: () => (row.nickName || row.username || '?').slice(0, 1).toUpperCase() }
+      )
+  },
+  email: {
+    title: t('common.fields.email'),
+    resizable: true,
+    align: 'center',
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+    render: row => row.email || '-'
+  },
+  phone: {
+    title: t('common.fields.phone'),
+    resizable: true,
+    align: 'center',
+    width: 130,
+    render: row => row.phone || '-'
+  },
+  language: {
+    title: t('common.fields.language'),
+    resizable: true,
+    align: 'center',
+    width: 110,
+    render: row => ({ 'zh-CN': '简体中文', 'en-US': 'English' })[row.language || ''] || row.language || '-'
+  },
+  updatedAt: {
+    title: t('common.updateTime'),
+    resizable: true,
+    align: 'center',
+    width: 180,
+    render: row => formatDateTime(row.updatedAt, '')
   },
   status: {
     title: t('page.manage.user.userStatus'),
@@ -211,7 +255,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     align: 'center',
     minWidth: 120,
     render: row => {
-      if (!row.roles || row.roles.length === 0) return '';
+      if (!row.roles || row.roles.length === 0) return '-';
       return h(
         NSpace,
         { size: 4, justify: 'center' },

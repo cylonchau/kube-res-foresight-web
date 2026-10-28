@@ -49,7 +49,8 @@ const search = reactive({
 const sourceOptions = computed(() => [
   { label: t('page.operationLog.sourcePage'), value: 'page' },
   { label: t('page.operationLog.sourceApi'), value: 'api' },
-  { label: t('page.operationLog.sourceCli'), value: 'cli' }
+  { label: t('page.operationLog.sourceCli'), value: 'cli' },
+  { label: t('page.operationLog.sourceOperator'), value: 'operator' }
 ]);
 
 const statusOptions = computed(() => [
@@ -124,11 +125,12 @@ async function clearLogs() {
 const sourceMeta: Record<string, { type: 'info' | 'success' | 'warning' | 'primary'; labelKey: string }> = {
   page: { type: 'info', labelKey: 'page.operationLog.sourcePage' },
   api: { type: 'warning', labelKey: 'page.operationLog.sourceApi' },
-  cli: { type: 'primary', labelKey: 'page.operationLog.sourceCli' }
+  cli: { type: 'primary', labelKey: 'page.operationLog.sourceCli' },
+  operator: { type: 'success', labelKey: 'page.operationLog.sourceOperator' }
 };
 
 const columnMap: Record<string, any> = {
-  createdAt: {
+  created_at: {
     title: t('page.operationLog.columns.createdAt'),
     key: 'created_at',
     width: 170,
@@ -146,6 +148,24 @@ const columnMap: Record<string, any> = {
       const meta = sourceMeta[row.client_type] || { type: 'info' as const, labelKey: '' };
       return h(NTag, { type: meta.type, size: 'small', bordered: false }, () => t(meta.labelKey) || row.client_type);
     }
+  },
+  request_id: {
+    title: t('page.operationLog.columns.requestId'),
+    key: 'request_id',
+    width: 230,
+    resizable: true,
+    align: 'left',
+    ellipsis: { tooltip: true },
+    render: (row: Api.System.OperationLog) => (row.request_id ? h('code', row.request_id) : '-')
+  },
+  client_name: {
+    title: t('page.operationLog.columns.clientName'),
+    key: 'client_name',
+    width: 200,
+    resizable: true,
+    align: 'center',
+    ellipsis: { tooltip: true },
+    render: (row: Api.System.OperationLog) => row.client_name || '-'
   },
   username: {
     title: t('page.operationLog.columns.username'),
@@ -219,8 +239,10 @@ const columnMap: Record<string, any> = {
 };
 
 const defaultKeys = [
-  'createdAt',
+  'created_at',
   'client_type',
+  'client_name',
+  'request_id',
   'username',
   'method',
   'path',
@@ -349,6 +371,16 @@ onMounted(() => {
     <NModal v-model:show="detailVisible" preset="card" :title="$t('page.operationLog.detailTitle')" class="w-640px">
       <template v-if="currentDetail">
         <NSpace vertical size="large">
+          <div class="flex flex-wrap gap-x-24px gap-y-4px text-13px">
+            <span>
+              <span class="text-gray-500">{{ $t('page.operationLog.columns.requestId') }}</span>
+              <code class="ml-6px">{{ currentDetail.request_id || '-' }}</code>
+            </span>
+            <span>
+              <span class="text-gray-500">{{ $t('page.operationLog.columns.clientName') }}</span>
+              <span class="ml-6px">{{ currentDetail.client_name || '-' }}</span>
+            </span>
+          </div>
           <div>
             <div class="text-12px text-gray-500 mb-4px">{{ $t('page.operationLog.params') }}</div>
             <NInput

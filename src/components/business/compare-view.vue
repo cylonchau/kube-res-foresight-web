@@ -319,7 +319,10 @@ const legendLabels = computed(() => {
       const wape = wapeOf.value.get(item.algorithm_id);
       const parts = [item.algorithm_id];
       if (latest) parts.push(formatMetric(latest.value, unit.value));
-      if (wape !== null && wape !== undefined) parts.push(`WAPE ${formatPercent(wape, 1)}`);
+      if (wape !== null && wape !== undefined)
+        parts.push(
+          `WAPE ${formatPercent(wape, 1)} (Σ|${t('page.forecast.compare.predicted')}-${t('page.forecast.compare.actualValue')}| ÷ Σ${t('page.forecast.compare.actualValue')})`
+        );
       out[item.algorithm_id] = { text: parts.join(' · ') };
     } else {
       out[item.algorithm_id] = {

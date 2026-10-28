@@ -3,146 +3,113 @@ import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NFormItemGi, NInput, NModal, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
-import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
-import TimeRangeField from '@/components/business/time-range-field.vue';
-import ScoreBreakdown from '@/components/business/score-breakdown.vue';
-import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
+import ScoreBasis from '@/components/business/score-basis.vue';
+import { useForecastModules } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
-import { useTableSort } from '@/hooks/business/use-table-sort';
-import { fetchGetAlgorithmScores, fetchBatchDeleteRecords } from '@/service/api';
+import { fetchGetLatestScores } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { copyCell } from '@/utils/copy-cell';
 import { helpTitle } from '@/utils/help-title';
 
 defineOptions({ name: 'ForecastScoreRecords' });
 
+/**
+ * The newest grade of every algorithm of every module, one row per module, algorithm and resource ("naive CPU", "naive memory"),
+ * never a row per evaluation. The detail of a row shows what the grade was computed from and the earlier grades of that algorithm.
+ */
 const { t } = useI18n();
-const { moduleOptions, moduleName, loadModules } = useForecastModules();
+const { moduleOptions, loadModules } = useForecastModules();
 const percent = (value: number | undefined) =>
   value === undefined || value < 0 ? '-' : `${(value * 100).toFixed(1)}%`;
 
 const search = reactive({
   moduleId: null as number | null,
   algorithm: '',
-  range: lastHours(24 * 7) as [number, number] | null
+  /** the resource graded: null = every resource, one row each */
+  metric: null as string | null
 });
-// the list below reads the sort parameters, and a change of the sort searches it again
-let searchList: () => void = () => {};
-const { handleSorterChange, sortParams } = useTableSort(() => searchList());
-const list = usePagedList<Api.Forecast.AlgorithmScore>(async (page, pageSize) => {
-  const { data } = await fetchGetAlgorithmScores({
+const metricOptions = computed(() =>
+  (['cpu', 'memory', 'gpu', 'overall'] as const).map(value => ({
+    label: t(`page.forecast.scores.metric_${value}`),
+    value
+  }))
+);
+const metricLabel = (metric: string) => t(`page.forecast.scores.metric_${metric}`);
+
+const list = usePagedList<Api.Forecast.ScoreRow>(async (page, pageSize) => {
+  const { data } = await fetchGetLatestScores({
     module_id: search.moduleId ?? undefined,
     algorithm: search.algorithm.trim() || undefined,
-    ...rangeParams(search.range),
+    metric: search.metric ?? undefined,
     page,
-    page_size: pageSize,
-    ...sortParams()
+    page_size: pageSize
   });
   return data;
 });
-searchList = () => {
-  list.search();
-};
 
-const checkedRowKeys = ref<number[]>([]);
-const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
-
-async function runBatch() {
-  const { data, error } = await fetchBatchDeleteRecords({ kind: 'scores', ids: checkedRowKeys.value });
-  if (error || !data) return;
-  window.$message?.success(t('common.batchDone', { done: data.done }));
-  checkedRowKeys.value = [];
-  await list.reload();
-}
-
-const detail = ref<Api.Forecast.AlgorithmScore | null>(null);
-
-const accuracyOf = (row: Api.Forecast.AlgorithmScore, metric: Api.Forecast.BreakdownRow['metric']) => {
-  const part = row.breakdown?.find(item => item.metric === metric);
-  return part ? percent(part.accuracy) : '-';
-};
+const detail = ref<Api.Forecast.ScoreRow | null>(null);
 
 const columnMap: Record<string, any> = {
-  __selection__: { type: 'selection', width: 42, minWidth: 42 },
-  created_at: {
-    title: t('page.forecast.scores.scoredAt'),
-    key: 'created_at',
-    width: 170,
-    sorter: true,
-    render: (row: Api.Forecast.AlgorithmScore) => formatDateTime(row.created_at)
-  },
   module: {
     title: t('page.forecast.modules.name'),
     key: 'module',
-    width: 150,
+    width: 130,
     resizable: true,
     ellipsis: { tooltip: true },
-    render: (row: Api.Forecast.AlgorithmScore) => row.module_name || moduleName(row.module_id)
+    render: (row: Api.Forecast.ScoreRow) => row.module_name
   },
   algorithm: {
     title: t('page.forecast.modules.algorithm'),
     key: 'algorithm',
     width: 170,
-    sorter: true,
     resizable: true,
-    render: (row: Api.Forecast.AlgorithmScore) => copyCell(row.algorithm)
+    // the algorithm and the resource it is graded on: "naive CPU", "naive memory"
+    render: (row: Api.Forecast.ScoreRow) =>
+      h('span', [
+        copyCell(row.algorithm),
+        ' ',
+        h(NTag, { size: 'small', bordered: false, type: 'info' }, () => metricLabel(row.metric))
+      ])
   },
   score: {
     title: () => helpTitle(t('page.forecast.scores.score'), t('page.forecast.metricHelp.score')),
     key: 'score',
-    width: 100,
+    width: 90,
     align: 'center',
-    sorter: true,
-    render: (row: Api.Forecast.AlgorithmScore) => row.score.toFixed(1)
+    render: (row: Api.Forecast.ScoreRow) => row.score.toFixed(1)
   },
-  rank: { title: t('page.forecast.scores.rank'), key: 'rank', width: 80, align: 'center', sorter: true },
-  windows: { title: t('page.forecast.scores.windows'), key: 'windows', width: 90, align: 'center' },
-  selected: {
-    title: t('page.forecast.scores.wasInUse'),
-    key: 'selected',
+  accuracy: {
+    title: () => helpTitle(t('page.forecast.scores.accuracy'), t('page.forecast.metricHelp.accuracy')),
+    key: 'accuracy',
     width: 100,
     align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) =>
+    render: (row: Api.Forecast.ScoreRow) => percent(row.accuracy)
+  },
+  rank: {
+    title: t('page.forecast.scores.rank'),
+    key: 'rank',
+    width: 80,
+    align: 'center',
+    render: (row: Api.Forecast.ScoreRow) => `${row.rank} / ${row.ranked}`
+  },
+  selected: {
+    title: t('page.forecast.scores.inUse'),
+    key: 'selected',
+    width: 90,
+    align: 'center',
+    render: (row: Api.Forecast.ScoreRow) =>
       row.selected
-        ? h(NTag, { size: 'small', bordered: false, type: 'info' }, () => t('page.forecast.scores.wasInUse'))
+        ? h(NTag, { size: 'small', bordered: false, type: 'success' }, () => t('page.forecast.scores.inUse'))
         : '-'
   },
-  cpu: {
-    title: () => helpTitle(t('page.forecast.scores.cpuAccuracy'), t('page.forecast.metricHelp.accuracy')),
-    key: 'cpu',
-    width: 110,
-    align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'cpu')
-  },
-  memory: {
-    title: () => helpTitle(t('page.forecast.scores.memoryAccuracy'), t('page.forecast.metricHelp.accuracy')),
-    key: 'memory',
-    width: 110,
-    align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'memory')
-  },
-  gpu: {
-    title: () => helpTitle(t('page.forecast.scores.gpuAccuracy'), t('page.forecast.metricHelp.accuracy')),
-    key: 'gpu',
-    width: 110,
-    align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'gpu')
-  },
-  oom: {
-    title: () => helpTitle(t('page.forecast.scores.oomPenalty'), t('page.forecast.metricHelp.oomPenalty')),
-    key: 'oom',
-    width: 110,
-    align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) => percent(row.result?.oom_penalty)
-  },
-  window: {
-    title: t('page.forecast.scores.window'),
-    key: 'window',
-    width: 340,
-    render: (row: Api.Forecast.AlgorithmScore) =>
-      `${formatDateTime(row.window_start)} ~ ${formatDateTime(row.window_end)}`
+  windows: { title: t('page.forecast.scores.windows'), key: 'windows', width: 80, align: 'center' },
+  created_at: {
+    title: t('page.forecast.scores.scoredAt'),
+    key: 'created_at',
+    width: 170,
+    render: (row: Api.Forecast.ScoreRow) => formatDateTime(row.at)
   },
   operate: {
     title: t('common.operate'),
@@ -150,7 +117,7 @@ const columnMap: Record<string, any> = {
     width: 100,
     fixed: 'right',
     align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) =>
+    render: (row: Api.Forecast.ScoreRow) =>
       h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
         t('common.detail')
       )
@@ -159,23 +126,11 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_score_records',
   columnMap,
-  defaultKeys: [
-    '__selection__',
-    'created_at',
-    'module',
-    'algorithm',
-    'score',
-    'rank',
-    'cpu',
-    'memory',
-    'oom',
-    'window',
-    'operate'
-  ]
+  defaultKeys: ['module', 'algorithm', 'score', 'accuracy', 'rank', 'selected', 'windows', 'created_at', 'operate']
 });
 
 function resetSearch() {
-  Object.assign(search, { moduleId: null, algorithm: '', range: lastHours(24 * 7) });
+  Object.assign(search, { moduleId: null, algorithm: '', metric: null });
   list.search();
 }
 
@@ -198,6 +153,18 @@ onMounted(async () => {
           :placeholder="t('common.selectField', { field: t('page.forecast.modules.name') })"
         />
       </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="4"
+        :label="t('page.datasource.mappings.metric')"
+      >
+        <NSelect
+          v-model:value="search.metric"
+          clearable
+          :options="metricOptions"
+          :placeholder="t('page.forecast.ranking.allResources')"
+        />
+      </NFormItemGi>
       <NFormItemGi :span="6" :label="t('page.forecast.modules.algorithm')">
         <NInput
           v-model:value="search.algorithm"
@@ -206,12 +173,8 @@ onMounted(async () => {
           @keyup.enter="list.search"
         />
       </NFormItemGi>
-      <NFormItemGi :span="9" :label="t('common.timeRange')">
-        <TimeRangeField v-model="search.range" />
-      </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
-      v-model:checked-row-keys="checkedRowKeys"
       :title="t('page.forecast.scores.recordsTitle')"
       :help="t('page.forecast.scores.recordsHelp')"
       :cfg="cfg"
@@ -220,21 +183,16 @@ onMounted(async () => {
       :pagination="list.pagination"
       :empty-hint="t('page.forecast.scores.empty')"
       @refresh="list.reload"
-      @sorter="handleSorterChange"
-    >
-      <template #suffix>
-        <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
-      </template>
-    </ListTablePanel>
+    ></ListTablePanel>
 
     <NModal
       :show="Boolean(detail)"
       preset="card"
-      :title="`${detail?.algorithm || ''} · ${detail?.module_name || ''}`"
-      class="w-720px max-w-95vw"
+      :title="detail ? `${detail.algorithm} ${metricLabel(detail.metric)} · ${detail.module_name}` : ''"
+      class="w-900px max-w-95vw"
       @update:show="value => !value && (detail = null)"
     >
-      <ScoreBreakdown v-if="detail" :rows="detail.breakdown || []" :result="detail.result" :score="detail.score" />
+      <ScoreBasis v-if="detail" :row="detail" />
     </NModal>
   </div>
 </template>

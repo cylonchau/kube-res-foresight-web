@@ -1,5 +1,7 @@
 import { readonly, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
+import { fieldTitle, isTimeField } from '@/utils/field-title';
+import { formatDateTime } from '@/utils/date';
 import { fetchColumnsMeta, fetchGetConfig, fetchGetUserColumnConfig, fetchUpdateUserColumnConfig } from '@/service/api';
 
 export interface TableColumnConfigOptions {
@@ -104,10 +106,14 @@ export function useTableColumnConfig(
     const keyStr = String(check.key);
     const baseCol = columnMap[keyStr] || {
       key: check.key,
-      title: check.title || keyStr,
-      width: 150,
+      title: check.title && check.title !== keyStr ? check.title : fieldTitle(keyStr),
+      width: isTimeField(keyStr) ? 170 : 150,
       resizable: true,
-      align: 'center'
+      align: 'center',
+      // a time field of a column no page defined is shown as a date, not as the raw value
+      ...(isTimeField(keyStr)
+        ? { render: (row: Record<string, unknown>) => formatDateTime(row[keyStr] as string) }
+        : {})
     };
 
     return {
@@ -211,7 +217,7 @@ export function useTableColumnConfig(
 
         return {
           key,
-          title: baseCol?.title || key,
+          title: baseCol?.title || fieldTitle(key),
           checked,
           width,
           visible,

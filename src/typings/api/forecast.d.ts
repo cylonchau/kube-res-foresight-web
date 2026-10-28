@@ -320,6 +320,8 @@ declare namespace Api {
       impl_version: string;
       baseline: boolean;
       description: string;
+      /** the calculation in words and as a formula: what is done with the history to get a forecast */
+      method?: string;
       complexity: string;
       min_history: string;
       /** whether the algorithm reads the other sources it takes part in as covariates */
@@ -939,7 +941,50 @@ declare namespace Api {
     }
 
     /** the figures behind a score, see scoring.Result; accuracies are 0..1 and negative when there was no data */
+    /** a value per resource: cores, bytes, cards; a resource with no data in the window is absent */
+    interface ScoreFigures {
+      replicas: number;
+      cpu?: number | null;
+      memory?: number | null;
+      gpu?: number | null;
+    }
+
+    /** one evaluated window as it entered the grade: the forecast, the actual need and the error of each resource */
+    interface ScoreWindowDetail {
+      start: string;
+      end: string;
+      predicted: ScoreFigures;
+      actual: ScoreFigures;
+      error: ScoreFigures;
+      under_provisioned: boolean;
+      oom: number;
+      complete: boolean;
+    }
+
+    /** the newest grade of one algorithm of one module on one resource (or the combination) */
+    interface ScoreRow {
+      key: string;
+      score_id: number;
+      module_id: number;
+      module_name: string;
+      algorithm: string;
+      algorithm_id: string;
+      metric: 'cpu' | 'memory' | 'gpu' | 'overall';
+      score: number;
+      accuracy: number;
+      rank: number;
+      ranked: number;
+      windows: number;
+      at: string;
+      selected: boolean;
+      result?: ScoreDetail;
+      breakdown?: BreakdownRow[];
+    }
+
     interface ScoreDetail {
+      details?: ScoreWindowDetail[];
+      sources?: Record<string, string[]>;
+      under_weight?: number;
       score: number;
       windows: number;
       replica_accuracy: number;

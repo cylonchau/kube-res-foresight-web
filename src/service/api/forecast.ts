@@ -344,6 +344,21 @@ export function fetchGetAlgorithmScores(
   });
 }
 
+/** the newest score of every algorithm of every module (or one), one row per resource */
+export function fetchGetLatestScores(params: {
+  page: number;
+  page_size: number;
+  module_id?: number;
+  algorithm?: string;
+  metric?: string;
+}) {
+  return request<Api.Forecast.Paged<Api.Forecast.ScoreRow>>({
+    url: `${base}/algorithm-scores/latest`,
+    method: 'get',
+    params
+  });
+}
+
 export function fetchGetAdmissions(params: ListWindow & { module_id?: number; applied?: boolean; keyword?: string }) {
   return request<Api.Forecast.Paged<Api.Forecast.Admission>>({ url: `${base}/admissions`, method: 'get', params });
 }

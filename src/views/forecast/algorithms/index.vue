@@ -40,6 +40,7 @@ import {
 } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { helpTitle } from '@/utils/help-title';
+import MetricLabel from '@/components/business/metric-label.vue';
 import { formatDecimal, formatPercent } from '@/utils/format';
 import { copyCell } from '@/utils/copy-cell';
 
@@ -620,6 +621,9 @@ onMounted(() => {
           <NDescriptionsItem v-if="detail.base" :label="t('page.forecast.algorithms.impl.base')">
             {{ detail.base }}
           </NDescriptionsItem>
+          <NDescriptionsItem v-if="detail.method" :label="t('page.forecast.algorithms.method')">
+            <div class="whitespace-pre-line leading-22px">{{ detail.method }}</div>
+          </NDescriptionsItem>
           <NDescriptionsItem v-if="detail.custom" :label="t('page.forecast.algorithms.formula.sectionFormula')">
             <code class="whitespace-pre-wrap break-all">{{ detail.formula }}</code>
             <div class="mt-4px opacity-70">
@@ -697,8 +701,10 @@ onMounted(() => {
                 {{ t('page.forecast.algorithms.usageBySource') }}
               </div>
               <div v-for="s in item.source_usage || []" :key="s.source" class="text-12px leading-22px">
-                {{ s.source }}: {{ t('page.forecast.algorithms.backtestWape') }}
-                {{ s.backtest ? percent(s.backtest.wape) : '-' }} · {{ t('page.forecast.algorithms.measuredWape') }}
+                {{ s.source }}:
+                <MetricLabel :label="t('page.forecast.algorithms.backtestWape')" metric="wape" />
+                {{ s.backtest ? percent(s.backtest.wape) : '-' }} ·
+                <MetricLabel :label="t('page.forecast.algorithms.measuredWape')" metric="wape" />
                 {{ s.measured ? percent(s.measured.wape) : '-' }} · {{ t('page.forecast.evaluation.peakUnder') }}
                 {{ s.measured ? percent(s.measured.peak_under) : s.backtest ? percent(s.backtest.peak_under) : '-' }}
                 <span v-if="s.backtest?.promoted">· {{ t('page.forecast.evaluation.promoted') }}</span>

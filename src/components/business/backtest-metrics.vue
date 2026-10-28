@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MetricLabel from '@/components/business/metric-label.vue';
 import { computed, ref } from 'vue';
 import { NCheckbox, NCheckboxGroup, NSpace } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
@@ -77,7 +78,7 @@ const cards = computed(() =>
     </NCheckboxGroup>
     <div class="metrics">
       <div v-for="item in cards" :key="item.key" class="metric">
-        <div class="metric__label">{{ item.label }}</div>
+        <div class="metric__label"><MetricLabel :label="item.label" :metric="item.key" /></div>
         <div class="metric__value">{{ item.value }}</div>
         <div v-if="baselineId" class="metric__base">{{ baselineId }}: {{ item.baseline }}</div>
         <div class="metric__how">{{ item.how }}</div>

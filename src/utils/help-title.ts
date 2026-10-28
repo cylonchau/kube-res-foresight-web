@@ -6,7 +6,7 @@ export function helpTitle(label: string, help: string) {
   return h('span', { class: 'inline-flex items-center gap-4px' }, [
     label,
     h(IconTooltip, { icon: 'mdi-help-circle', placement: 'top' }, () =>
-      h('div', { class: 'max-w-320px leading-22px' }, help)
+      h('div', { class: 'max-w-360px leading-22px whitespace-pre-line' }, help)
     )
   ]);
 }

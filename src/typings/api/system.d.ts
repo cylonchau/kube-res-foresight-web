@@ -41,6 +41,10 @@ declare namespace Api {
       updatedAt: string;
       /** avatar URL */
       avatar?: string;
+      email?: string;
+      phone?: string;
+      /** interface language: zh-CN or en-US */
+      language?: string;
       /** whether OTP/2FA is enabled */
       otpEnabled?: boolean;
       /** most recent successful login time */
@@ -218,8 +222,12 @@ declare namespace Api {
     interface OperationLog {
       id: number;
       created_at: string;
-      /** source: "page" (web console) | "api" (access-key/secret) */
-      client_type: 'page' | 'api';
+      /** the operation identifier: the caller's X-Request-Id, or one generated; also in the X-Request-Id response header */
+      request_id: string;
+      /** source: "page" (web console) | "api" (access-key/secret) | "cli" | "operator" */
+      client_type: 'page' | 'api' | 'cli' | 'operator';
+      /** who the caller says it is (the operator's Pod name); empty for the web console */
+      client_name: string;
       user_id: number;
       username: string;
       method: string;
