@@ -558,8 +558,6 @@ const local = {
         category_baseline: 'baseline',
         category_statistical: 'statistical',
         category_machine_learning: 'machine learning',
-        category_technical: 'Technical indicator',
-        category_deep_learning: 'Deep learning',
         category_custom: 'Custom formula',
         stepSeconds: 'Sampling granularity',
         stepSecondsHint:

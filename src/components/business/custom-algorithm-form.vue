@@ -44,7 +44,7 @@ const show = defineModel<boolean>('show', { required: true });
 const { t } = useI18n();
 const message = useMessage();
 
-const categories = ['technical', 'statistical', 'machine_learning', 'deep_learning', 'custom'];
+const categories = ['statistical', 'machine_learning', 'custom'];
 const categoryOptions = computed(() =>
   categories.map(value => ({ label: t(`page.forecast.modules.category_${value}`), value }))
 );
@@ -52,7 +52,7 @@ const categoryOptions = computed(() =>
 function emptyForm() {
   return {
     id: '',
-    category: 'technical',
+    category: 'statistical',
     description: '',
     formula: '',
     min_samples: 12,
@@ -69,7 +69,7 @@ const kind = ref<'builtin' | 'formula'>('builtin');
 const baseCategory = ref('statistical');
 const baseId = ref<string | null>(null);
 const builtins = ref<Api.Forecast.Algorithm[]>([]);
-const baseCategories = ['baseline', 'technical', 'statistical', 'machine_learning', 'deep_learning'];
+const baseCategories = ['baseline', 'statistical', 'machine_learning'];
 const baseCategoryOptions = computed(() =>
   baseCategories.map(value => ({ label: t(`page.forecast.modules.category_${value}`), value }))
 );

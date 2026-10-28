@@ -545,8 +545,6 @@ const local = {
         category_baseline: '基线',
         category_statistical: '统计',
         category_machine_learning: '机器学习',
-        category_technical: '技术指标',
-        category_deep_learning: '深度学习',
         category_custom: '自定义公式',
         stepSeconds: '采样粒度',
         stepSecondsHint:
