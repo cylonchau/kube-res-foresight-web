@@ -92,6 +92,19 @@ echarts.use([
   CanvasRenderer
 ]);
 
+/**
+ * What makes a chart feel like Grafana's, set under the options of every chart: the tooltip follows the pointer at once (the
+ * default eases it over 0.4 s, which reads as lag), a dashed vertical line snaps to the nearest point, and an update moves the lines over 0.2 s instead of redrawing them.
+ */
+const SMOOTH_DEFAULTS: ECOption = {
+  animationDurationUpdate: 200,
+  tooltip: {
+    transitionDuration: 0,
+    hideDelay: 50,
+    axisPointer: { type: 'line', snap: true, lineStyle: { type: 'dashed', width: 1 } }
+  }
+};
+
 interface ChartHooks {
   onRender?: (chart: echarts.ECharts) => void | Promise<void>;
   onUpdated?: (chart: echarts.ECharts) => void | Promise<void>;
@@ -158,11 +171,10 @@ export function useEcharts<T extends ECOption>(optionsFactory: () => T, hooks: C
 
     if (!isRendered()) return;
 
-    if (isRendered()) {
-      chart.value?.clear();
-    }
-
-    chart.value?.setOption({ ...updatedOpts, backgroundColor: 'transparent' });
+    // The chart is updated in place, never cleared: a clear blanks the plot for a frame (a flicker on every refresh) and drops the
+    // zoom the user chose. Only the series are replaced, so a series that is gone from the data goes from the plot too; the
+    // zoom, the legend choice and the axes are merged and keep their state.
+    chart.value?.setOption({ ...updatedOpts, backgroundColor: 'transparent' }, { replaceMerge: ['series'] });
 
     await onUpdated?.(chart.value!);
   }
@@ -187,7 +199,12 @@ export function useEcharts<T extends ECOption>(optionsFactory: () => T, hooks: C
 
     chart.value = echarts.init(element, chartTheme);
 
+    chart.value.setOption(SMOOTH_DEFAULTS);
     chart.value?.setOption({ ...chartOptions, backgroundColor: 'transparent' });
+    // as in Grafana: a double click puts the zoom back to the whole range
+    chart.value.getZr().on('dblclick', () => {
+      chart.value?.dispatchAction({ type: 'dataZoom', start: 0, end: 100 });
+    });
 
     await onRender?.(chart.value!);
   }
