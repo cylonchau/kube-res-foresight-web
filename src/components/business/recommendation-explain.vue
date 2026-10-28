@@ -3,7 +3,7 @@ import { computed, h } from 'vue';
 import { NDataTable, NEmpty, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ReplicaExplain from '@/components/business/replica-explain.vue';
-import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
+import { formatCpuMilli, formatMemoryBytes, formatPercent } from '@/utils/format';
 
 defineOptions({ name: 'RecommendationExplain' });
 
@@ -180,6 +180,16 @@ const selectionColumns = computed(() => [
     width: 80,
     render: (row: Api.Forecast.SelectionRow) =>
       row.chosen ? t('page.forecast.scores.inUse') : t(row.eligible ? 'common.yesOrNo.yes' : 'common.yesOrNo.no')
+  },
+  {
+    title: t('page.forecast.explain.tracking'),
+    key: 'tracking',
+    width: 150,
+    render: (row: Api.Forecast.SelectionRow) => {
+      if (!row.tracked) return '-';
+      const text = `${formatPercent(row.tracking_wape ?? 0)} · ${row.tracking_points}${t('page.forecast.explain.trackingSteps')}`;
+      return row.lagging ? h(NTag, { size: 'small', bordered: false, type: 'error' }, () => text) : text;
+    }
   },
   { title: t('page.forecast.evaluation.reason'), key: 'reason', minWidth: 220, ellipsis: { tooltip: true } }
 ]);

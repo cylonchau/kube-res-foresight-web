@@ -1375,6 +1375,8 @@ const local = {
         heapOk: '正常或未启用',
         considered: '参与判断的算法',
         eligible: '可用',
+        tracking: '最近跟踪误差',
+        trackingSteps: ' 步',
         noConsidered: '没有绑定算法',
         field_gpu: 'GPU',
         decidedBy: '决策算法',

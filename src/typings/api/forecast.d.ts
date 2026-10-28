@@ -1212,6 +1212,13 @@ declare namespace Api {
       eligible: boolean;
       reason: string;
       chosen: boolean;
+      /** the newest forecasts of the algorithm compared with the load that came: steps compared, how far off (WAPE), direction (bias, positive = above) */
+      tracked?: boolean;
+      tracking_points?: number;
+      tracking_wape?: number;
+      tracking_bias?: number;
+      /** its forecasts of the last steps missed by far, so it was taken out of the running */
+      lagging?: boolean;
     }
 
     interface Expansion {

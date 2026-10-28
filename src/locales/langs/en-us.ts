@@ -1423,6 +1423,8 @@ const local = {
         heapOk: 'Normal or off',
         considered: 'Algorithms considered',
         eligible: 'Eligible',
+        tracking: 'Recent tracking error',
+        trackingSteps: ' steps',
         noConsidered: 'No algorithm bound',
         field_gpu: 'GPU',
         decidedBy: 'Decided by',

@@ -24,6 +24,11 @@ const RULES: Rule[] = [
     /^(?:\S+: )?(?:not eligible: )?candidate skipped: insufficient history: need (\d+) training and (\d+) test steps, have (\d+)$/,
     m => `历史不足：回放评分需要 ${m[1]} 个训练步和 ${m[2]} 个测试步，只有 ${m[3]} 步`
   ],
+  [
+    /^lagging: its forecasts of the last (\d+) steps missed the actual values by (\d+)% \(limit (\d+)%\), (above|below) them$/,
+    m =>
+      `落后：最近 ${m[1]} 步的预测与实际值相差 ${m[2]}%（上限 ${m[3]}%），预测${m[4] === 'above' ? '高于' : '低于'}实际值，本轮不参与选择`
+  ],
   [/^parameter "(\w+)" is required$/, m => `必填参数 "${m[1]}" 没有设置`],
   [/^cannot enable (\S+): parameter "(\w+)" is required$/, m => `不能启用 ${m[1]}：必填参数 "${m[2]}" 没有设置`],
   [/^(?:\S+: )?no prediction yet$/, () => '还没有预测'],
