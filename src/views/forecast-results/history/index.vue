@@ -5,5 +5,5 @@ defineOptions({ name: 'ForecastResultsHistory' });
 </script>
 
 <template>
-  <CompareView mode="history" />
+  <CompareView />
 </template>

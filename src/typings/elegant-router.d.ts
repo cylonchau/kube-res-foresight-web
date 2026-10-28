@@ -31,29 +31,24 @@ declare module "@elegant-router/types" {
     "forecast": "/forecast";
     "forecast_algorithms": "/forecast/algorithms";
     "forecast_ranking": "/forecast/ranking";
-    "forecast_ranking-history": "/forecast/ranking-history";
     "forecast_score-records": "/forecast/score-records";
     "forecast-actions": "/forecast-actions";
     "forecast-actions_admissions": "/forecast-actions/admissions";
-    "forecast-actions_audit-exports": "/forecast-actions/audit-exports";
     "forecast-actions_executions": "/forecast-actions/executions";
     "forecast-actions_fallbacks": "/forecast-actions/fallbacks";
     "forecast-actions_recommendations": "/forecast-actions/recommendations";
     "forecast-modules": "/forecast-modules";
     "forecast-modules_modules": "/forecast-modules/modules";
     "forecast-results": "/forecast-results";
-    "forecast-results_backtests": "/forecast-results/backtests";
+    "forecast-results_algorithm-runs": "/forecast-results/algorithm-runs";
     "forecast-results_evaluations": "/forecast-results/evaluations";
     "forecast-results_history": "/forecast-results/history";
     "forecast-results_leaderboard": "/forecast-results/leaderboard";
-    "forecast-results_runs": "/forecast-results/runs";
-    "forecast-results_trends": "/forecast-results/trends";
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat|otp-login)?";
     "monitoring": "/monitoring";
     "monitoring_curves": "/monitoring/curves";
     "monitoring_datasets": "/monitoring/datasets";
-    "monitoring_metrics": "/monitoring/metrics";
     "system": "/system";
     "system_config": "/system/config";
     "system_login-log": "/system/login-log";
@@ -137,24 +132,19 @@ declare module "@elegant-router/types" {
     | "datasource_metric-mappings"
     | "datasource_presets"
     | "forecast-actions_admissions"
-    | "forecast-actions_audit-exports"
     | "forecast-actions_executions"
     | "forecast-actions_fallbacks"
     | "forecast-actions_recommendations"
     | "forecast-modules_modules"
-    | "forecast-results_backtests"
+    | "forecast-results_algorithm-runs"
     | "forecast-results_evaluations"
     | "forecast-results_history"
     | "forecast-results_leaderboard"
-    | "forecast-results_runs"
-    | "forecast-results_trends"
     | "forecast_algorithms"
-    | "forecast_ranking-history"
     | "forecast_ranking"
     | "forecast_score-records"
     | "monitoring_curves"
     | "monitoring_datasets"
-    | "monitoring_metrics"
     | "system_config"
     | "system_login-log"
     | "system_operation-log"

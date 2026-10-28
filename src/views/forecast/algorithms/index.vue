@@ -15,13 +15,13 @@ import {
   NPopconfirm,
   NSelect,
   NSpace,
-  NSwitch,
   NTag,
   NTimeline,
   NTimelineItem,
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import StatusSelect from '@/components/business/status-select.vue';
 import AlgorithmParamsEditor from '@/components/advanced/algorithm-params-editor.vue';
 import CustomAlgorithmForm from '@/components/business/custom-algorithm-form.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
@@ -39,7 +39,9 @@ import {
   fetchUpdateAlgorithm
 } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { helpTitle } from '@/utils/help-title';
 import { formatDecimal, formatPercent } from '@/utils/format';
+import { copyCell } from '@/utils/copy-cell';
 
 defineOptions({ name: 'ForecastAlgorithms' });
 
@@ -102,20 +104,6 @@ function resetSearch() {
   runSearch();
 }
 
-const toggling = ref<string>();
-async function toggle(row: Api.Forecast.Algorithm, enabled: boolean) {
-  toggling.value = row.id;
-  try {
-    const { error } = await fetchUpdateAlgorithm(row.id, { enabled });
-    if (!error) {
-      message.success(enabled ? t('page.forecast.algorithms.enabledOk') : t('page.forecast.algorithms.disabledOk'));
-      await reload();
-    }
-  } finally {
-    toggling.value = undefined;
-  }
-}
-
 const valuesText = (row: Api.Forecast.Algorithm) =>
   row.params.length
     ? row.params.map(spec => `${spec.name}=${String(row.values?.[spec.name] ?? spec.default ?? '-')}`).join(', ')
@@ -128,7 +116,7 @@ const columnMap: Record<string, any> = {
     key: 'algorithm',
     width: 170,
     resizable: true,
-    render: (row: Api.Forecast.Algorithm) => row.id
+    render: (row: Api.Forecast.Algorithm) => copyCell(row.id)
   },
   origin: {
     title: t('page.forecast.algorithms.columns.origin'),
@@ -168,13 +156,43 @@ const columnMap: Record<string, any> = {
     key: 'enabled',
     width: 90,
     align: 'center',
+    // a state is shown as a tag (the same one on every list); it is changed in the edit form or the batch menu
     render: (row: Api.Forecast.Algorithm) =>
-      h(NSwitch, {
-        size: 'small',
-        value: row.enabled,
-        loading: toggling.value === row.id,
-        'onUpdate:value': (value: boolean) => toggle(row, value)
-      })
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: row.enabled ? 'success' : 'default' },
+        { default: () => (row.enabled ? t('common.enable') : t('common.disable')) }
+      )
+  },
+  runtime: {
+    title: () => helpTitle(t('page.forecast.algorithms.columns.runtime'), t('page.forecast.algorithms.runtime.help')),
+    key: 'runtime',
+    width: 150,
+    align: 'center',
+    render: (row: Api.Forecast.Algorithm) => {
+      const rt = row.runtime;
+      const kind = {
+        running: 'success',
+        waiting: 'info',
+        skipped: 'warning',
+        failed: 'error',
+        invalid: 'error',
+        disabled: 'default'
+      } as const;
+      const lines = [
+        rt.reason,
+        rt.last_run_at
+          ? t('page.forecast.algorithms.runtime.lastRun', { time: formatDateTime(rt.last_run_at), runs: rt.runs })
+          : ''
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return h(
+        NTag,
+        { size: 'small', bordered: false, type: kind[rt.state] ?? 'default', title: lines },
+        { default: () => t(`page.forecast.algorithms.runtime.${rt.state}`) }
+      );
+    }
   },
   values: {
     title: t('page.forecast.algorithms.columns.values'),
@@ -239,15 +257,13 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 260,
+    width: 148,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Algorithm) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => openEdit(row) }, () =>
-          t('common.edit')
-        ),
-        h(NButton, { size: 'small', onClick: () => openDetail(row) }, () => t('page.forecast.algorithms.detail')),
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => openEdit(row) }, () => t('common.edit')),
+        h(NButton, { size: 'tiny', onClick: () => openDetail(row) }, () => t('page.forecast.algorithms.detail')),
         // a built-in algorithm is disabled, never deleted; an enabled one has to be disabled first
         h(
           NPopconfirm,
@@ -256,7 +272,7 @@ const columnMap: Record<string, any> = {
             trigger: () =>
               h(
                 NButton,
-                { size: 'small', type: 'error', ghost: true, disabled: row.origin === 'builtin' || row.enabled },
+                { size: 'tiny', type: 'error', ghost: true, disabled: row.origin === 'builtin' || row.enabled },
                 () => t('common.delete')
               ),
             default: () => t('page.forecast.algorithms.deleteConfirm')
@@ -272,8 +288,9 @@ const cfg = useTableColumnConfig({
     '__selection__',
     'algorithm',
     'origin',
-    'category',
     'enabled',
+    'runtime',
+    'category',
     'values',
     'weight',
     'description',
@@ -403,7 +420,7 @@ onMounted(() => {
 <template>
   <div class="h-full flex-col overflow-hidden gap-12px">
     <ListSearchCard :model="search" :action-span="6" @search="runSearch" @reset="resetSearch">
-      <NFormItemGi :span="8" :label="t('common.keyword')">
+      <NFormItemGi :span="7" :label="t('common.keyword')">
         <NInput
           v-model:value="search.keyword"
           clearable
@@ -411,7 +428,11 @@ onMounted(() => {
           @keyup.enter="runSearch"
         />
       </NFormItemGi>
-      <NFormItemGi class="list-search-select-field" :span="5" :label="t('page.forecast.algorithms.columns.category')">
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="3"
+        :label="t('page.forecast.algorithms.columns.category')"
+      >
         <NSelect
           v-model:value="search.category"
           clearable
@@ -419,7 +440,11 @@ onMounted(() => {
           :placeholder="t('common.selectField', { field: t('page.forecast.algorithms.columns.category') })"
         />
       </NFormItemGi>
-      <NFormItemGi class="list-search-select-field" :span="5" :label="t('page.forecast.algorithms.columns.enabled')">
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="3"
+        :label="t('page.forecast.algorithms.columns.enabled')"
+      >
         <NSelect
           v-model:value="search.enabled"
           clearable
@@ -469,7 +494,7 @@ onMounted(() => {
                 </IconTooltip>
               </span>
             </template>
-            <NSwitch v-model:value="form.enabled" />
+            <StatusSelect v-model:value="form.enabled" />
           </NFormItem>
           <NFormItem>
             <template #label>

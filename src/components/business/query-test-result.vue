@@ -1,0 +1,168 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+import { NAlert, NButton, NEmpty, NSpace, NTag } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { type ECOption, useEcharts } from '@/hooks/common/echarts';
+import { lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
+import { fetchTestMetricQuery } from '@/service/api';
+import { formatDecimal, formatMetric } from '@/utils/format';
+
+defineOptions({ name: 'QueryTestResult' });
+
+/** The query as it stands in the form beside this block: the test runs exactly this, nothing is asked again. */
+export interface QueryConfig {
+  datasource_id: number | null;
+  query: string;
+  level: string;
+  metric: string;
+  unit: string;
+  step_seconds: number;
+  scale: number;
+  precision: number;
+}
+
+interface Props {
+  config: QueryConfig;
+  /** the module whose workload fills the variables of the template ({{namespace}}, {{workload}}, ...) */
+  moduleId?: number | null;
+  height?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), { moduleId: null, height: 240 });
+const emit = defineEmits<{ tested: [ok: boolean] }>();
+const { t } = useI18n();
+
+const range = ref(lastHours(1));
+const running = ref(false);
+const result = ref<Api.Forecast.QueryTestResult | null>(null);
+
+const unit = computed(() => props.config.unit || (props.config.metric === 'custom' ? 'value' : ''));
+const stageType = computed(() =>
+  result.value?.stage === 'ok' ? 'success' : result.value?.stage === 'empty' ? 'warning' : 'error'
+);
+
+const { domRef, updateOptions } = useEcharts(
+  () =>
+    ({
+      animation: false,
+      tooltip: { trigger: 'axis' },
+      grid: { left: 64, right: 24, top: 24, bottom: 36 },
+      xAxis: { type: 'time' },
+      yAxis: { type: 'value', scale: true },
+      dataZoom: [{ type: 'inside' }],
+      series: [{ type: 'line', showSymbol: false, data: [] as Array<[number, number]> }]
+    }) as ECOption,
+  { onRender: () => {}, onUpdated: () => {} }
+);
+
+async function draw() {
+  const points = result.value?.points || [];
+  await updateOptions(opts => ({
+    ...opts,
+    tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => formatMetric(Number(value), unit.value) },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      name: unit.value,
+      axisLabel: { formatter: (value: number) => formatDecimal(value, 3) }
+    },
+    series: [
+      { type: 'line', showSymbol: points.length < 60, data: points.map(p => [new Date(p.time).getTime(), p.value]) }
+    ] as never
+  }));
+}
+
+/** Runs the query of the form against its datasource and shows what came back. */
+async function run() {
+  const c = props.config;
+  if (!c.datasource_id || !c.query.trim()) {
+    result.value = {
+      ok: false,
+      stage: 'template',
+      error: t('page.monitoring.queryTest.required'),
+      samples: 0,
+      min: 0,
+      max: 0,
+      mean: 0,
+      last: 0,
+      points: [],
+      from: '',
+      to: ''
+    };
+    emit('tested', false);
+    return;
+  }
+  running.value = true;
+  try {
+    const { data, error } = await fetchTestMetricQuery({
+      datasource_id: c.datasource_id,
+      query: c.query,
+      level: c.level,
+      metric: c.metric,
+      unit: c.metric === 'custom' ? c.unit : undefined,
+      step_seconds: c.step_seconds,
+      module_id: props.moduleId ?? undefined,
+      scale: c.scale,
+      precision: c.precision,
+      ...rangeParams(range.value)
+    });
+    if (error || !data) return;
+    result.value = data;
+    emit('tested', data.ok);
+    await draw();
+  } finally {
+    running.value = false;
+  }
+}
+
+/** A changed query is no longer what was tested: the old result is dropped. */
+watch(
+  () => [props.config.datasource_id, props.config.query, props.config.level, props.config.step_seconds],
+  () => {
+    result.value = null;
+  }
+);
+
+defineExpose({ run });
+</script>
+
+<template>
+  <div class="query-test">
+    <NSpace align="center" class="mb-8px">
+      <NButton type="primary" size="small" :loading="running" @click="run">
+        {{ t('page.monitoring.queryTest.run') }}
+      </NButton>
+      <TimeRangeField v-model="range" :clearable="false" />
+      <NTag v-if="result" size="small" :bordered="false" :type="stageType">
+        {{ t(`page.monitoring.queryTest.stage_${result.stage}`) }}
+      </NTag>
+      <template v-if="result?.ok">
+        <NTag size="small" :bordered="false">{{ t('page.monitoring.queryTest.samples') }} {{ result.samples }}</NTag>
+        <NTag size="small" :bordered="false">
+          {{ t('page.forecast.metrics.min') }} {{ formatMetric(result.min, unit) }}
+        </NTag>
+        <NTag size="small" :bordered="false">
+          {{ t('page.forecast.metrics.max') }} {{ formatMetric(result.max, unit) }}
+        </NTag>
+        <NTag size="small" :bordered="false">
+          {{ t('page.forecast.metrics.mean') }} {{ formatMetric(result.mean, unit) }}
+        </NTag>
+        <NTag size="small" :bordered="false">
+          {{ t('page.forecast.metrics.last') }} {{ formatMetric(result.last, unit) }}
+        </NTag>
+      </template>
+    </NSpace>
+    <NAlert
+      v-if="result && !result.ok"
+      :type="result.stage === 'empty' ? 'warning' : 'error'"
+      :show-icon="false"
+      class="mb-8px"
+    >
+      <div class="whitespace-pre-wrap break-all">{{ result.error }}</div>
+    </NAlert>
+    <div v-if="result?.rendered" class="mb-8px break-all font-mono text-12px opacity-70">{{ result.rendered }}</div>
+    <div v-show="result?.ok" ref="domRef" :style="{ height: `${height}px` }" class="w-full"></div>
+    <NEmpty v-if="!result" size="small" :description="t('page.monitoring.queryTest.hint')" />
+  </div>
+</template>

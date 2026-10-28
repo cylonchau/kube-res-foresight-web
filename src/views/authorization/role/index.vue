@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { h, reactive, ref, computed } from 'vue';
+import StatusSelect from '@/components/business/status-select.vue';
+import HelpLabel from '@/components/common/help-label.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import { formatDateTime } from '@/utils/date';
 import type { VNodeChild } from 'vue';
 import { useRoute } from 'vue-router';
@@ -174,7 +177,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
     key: 'operate',
     title: t('common.operate'),
     align: 'center',
-    width: 320,
+    width: 200,
     fixed: 'right',
     resizable: true,
     render: row => {
@@ -187,7 +190,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
             h(
               NButton,
               {
-                size: 'small',
+                size: 'tiny',
                 type: (btn.btnType as any) || 'primary',
                 onClick: () => handleEdit(row)
               },
@@ -198,7 +201,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
             h(
               NButton,
               {
-                size: 'small',
+                size: 'tiny',
                 type: 'primary',
                 ghost: true,
                 onClick: () => handleSetPermissions(row)
@@ -223,7 +226,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
                 trigger: () =>
                   h(
                     NButton,
-                    { size: 'small', type: row.status ? 'warning' : 'success', ghost: true },
+                    { size: 'tiny', type: row.status ? 'warning' : 'success', ghost: true },
                     { default: () => (row.status ? t('common.disable') : t('common.enable')) }
                   )
               }
@@ -245,7 +248,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
               {
                 default: () => t('common.confirmDelete'),
                 trigger: () =>
-                  h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('common.delete') })
+                  h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => t('common.delete') })
               }
             )
           );
@@ -443,6 +446,27 @@ async function handlePermissionSubmit() {
   }
 }
 
+/** The batch menu of every list: enable, disable and delete the checked rows. */
+const batchActions = computed(() => [
+  { key: 'enable', label: t('common.enable') },
+  { key: 'disable', label: t('common.disable') },
+  { key: 'delete', label: t('common.delete'), danger: true }
+]);
+
+async function runBatch(key: string) {
+  if (key === 'delete') return handleBatchDelete();
+  if (checkedRowKeys.value.length === 0) return;
+  const status = key === 'enable';
+  let done = 0;
+  for (const id of checkedRowKeys.value) {
+    const { error } = await updateRole(id, { status });
+    if (!error) done += 1;
+  }
+  window.$message?.success(t('common.batchDone', { done }));
+  checkedRowKeys.value = [];
+  getTableData();
+}
+
 async function handleBatchDelete() {
   if (checkedRowKeys.value.length === 0) return;
   const { error } = await batchDeleteRole(checkedRowKeys.value);
@@ -528,12 +552,15 @@ onMounted(() => {
         v-model:columns="columnChecks"
         v-model:density="density"
         class="pb-12px"
-        :disabled-delete="checkedRowKeys.length === 0"
+        :show-delete="false"
         :loading="loading"
         @add="handleAdd"
         @delete="handleBatchDelete"
         @refresh="getTableData"
       >
+        <template #suffix>
+          <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+        </template>
         <template #prefix>
           <template v-for="btn in getButtonsByPosition('header')" :key="btn.code">
             <NButton
@@ -566,16 +593,28 @@ onMounted(() => {
     <NDrawer v-model:show="visible" :width="500">
       <NDrawerContent :title="isEdit ? t('common.edit') : t('common.add')" closable>
         <NForm :model="roleForm" label-placement="top">
-          <NFormItem :label="t('page.manage.role.roleName')" path="name">
+          <NFormItem path="name">
+            <template #label>
+              <HelpLabel :label="t('page.manage.role.roleName')" :help="t('page.formHelp.roleName')" />
+            </template>
             <NInput v-model:value="roleForm.name" :placeholder="t('page.manage.role.form.roleName')" />
           </NFormItem>
-          <NFormItem :label="t('page.manage.role.roleCode')" path="code">
+          <NFormItem path="code">
+            <template #label>
+              <HelpLabel :label="t('page.manage.role.roleCode')" :help="t('page.formHelp.roleCode')" />
+            </template>
             <NInput v-model:value="roleForm.code" :placeholder="t('page.manage.role.form.roleCode')" />
           </NFormItem>
-          <NFormItem :label="t('page.manage.role.roleStatus')" path="status">
-            <NSwitch v-model:value="roleForm.status" />
+          <NFormItem path="status">
+            <template #label>
+              <HelpLabel :label="t('page.manage.role.roleStatus')" :help="t('page.formHelp.roleStatus')" />
+            </template>
+            <StatusSelect v-model:value="roleForm.status" />
           </NFormItem>
-          <NFormItem :label="t('common.remark')" path="remark">
+          <NFormItem path="remark">
+            <template #label>
+              <HelpLabel :label="t('common.remark')" :help="t('page.formHelp.roleRemark')" />
+            </template>
             <NInput v-model:value="roleForm.remark" type="textarea" :placeholder="t('common.remark')" />
           </NFormItem>
         </NForm>

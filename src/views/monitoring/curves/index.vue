@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { NButton, NCard, NFormItemGi, NSelect, NSwitch, NTag } from 'naive-ui';
+import { NButton, NCard, NFormItemGi, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import BatchActions from '@/components/business/batch-actions.vue';
-import CompareChart from '@/components/business/compare-chart.vue';
+import CompareChart, { type LineType } from '@/components/business/compare-chart.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
@@ -30,8 +30,11 @@ const search = reactive({
   moduleId: null as number | null,
   metric: null as string | null,
   range: lastHours(24) as [number, number] | null,
-  candle: true
+  lineType: 'line' as LineType
 });
+const lineTypeOptions = computed(() =>
+  (['line', 'step', 'candle'] as const).map(value => ({ label: t(`page.forecast.compare.lineType_${value}`), value }))
+);
 const loading = ref(false);
 const compare = ref<Api.Forecast.Compare | null>(null);
 const checkedRowKeys = ref<string[]>([]);
@@ -90,7 +93,7 @@ function resetSearch() {
   search.moduleId = modules.value[0]?.id ?? null;
   search.metric = metricOptions.value[0]?.value ?? null;
   search.range = lastHours(24);
-  search.candle = true;
+  search.lineType = 'line';
   load();
 }
 
@@ -198,7 +201,7 @@ onMounted(async () => {
   const fromRoute = Number(route.query.module_id);
   search.moduleId = modules.value.find(item => item.id === fromRoute)?.id ?? modules.value[0]?.id ?? null;
   search.metric = metricOptions.value[0]?.value ?? null;
-  await load();
+  // the search is submitted by the list-search plugin when the filters above change
 });
 </script>
 
@@ -211,15 +214,19 @@ onMounted(async () => {
       <NFormItemGi class="list-search-select-field" :span="5" :label="t('page.datasource.mappings.metric')">
         <NSelect v-model:value="search.metric" filterable :options="metricOptions" />
       </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="3"
+        :label="t('page.forecast.compare.lineType')"
+      >
+        <NSelect v-model:value="search.lineType" :options="lineTypeOptions" />
+      </NFormItemGi>
       <NFormItemGi :span="7" :label="t('common.timeRange')">
         <TimeRangeField v-model="search.range" />
       </NFormItemGi>
-      <NFormItemGi :span="2" :label="t('page.forecast.compare.candle')">
-        <NSwitch v-model:value="search.candle" />
-      </NFormItemGi>
     </ListSearchCard>
 
-    <NCard :bordered="false" size="small" class="rounded-16px shadow-sm">
+    <NCard :bordered="false" size="small" class="flex-shrink-0 rounded-16px shadow-sm">
       <div class="mb-8px flex flex-wrap items-center gap-8px">
         <span class="text-14px font-medium">{{ t('page.forecast.metrics.chart') }}</span>
         <IconTooltip icon="mdi-help-circle" placement="top">
@@ -240,10 +247,19 @@ onMounted(async () => {
           {{ t('page.forecast.compare.actualError', { error: compare.actual_error }) }}
         </NTag>
       </div>
-      <CompareChart :actual="actual" :algorithms="[]" :unit="unit" :candle="search.candle" :height="380" />
+      <CompareChart
+        :actual="actual"
+        :algorithms="[]"
+        :unit="unit"
+        :line-type="search.lineType"
+        :bucket-seconds="compare?.bucket_seconds || 60"
+        :loading="loading"
+        :height="380"
+        @refresh="load"
+      />
     </NCard>
 
-    <div class="h-460px flex flex-col">
+    <div class="h-460px flex-shrink-0 flex flex-col">
       <ListTablePanel
         v-model:checked-row-keys="checkedRowKeys"
         :title="t('page.forecast.metrics.pointsTitle')"

@@ -6,9 +6,7 @@ import { fetchGetForecastModules } from '@/service/api';
 export function useForecastModules() {
   const modules = ref<Api.Forecast.Module[]>([]);
 
-  const moduleOptions = computed(() =>
-    modules.value.map(item => ({ label: `${item.name} (${item.namespace}/${item.workload})`, value: item.id }))
-  );
+  const moduleOptions = computed(() => modules.value.map(item => ({ label: item.name, value: item.id })));
 
   const moduleName = (id: number) => modules.value.find(item => item.id === id)?.name || String(id);
 
@@ -143,14 +141,34 @@ export function sourceMetricOptions(modules: Api.Forecast.Module[], moduleId: nu
   return [...seen].map(([value, label]) => ({ label, value }));
 }
 
-/** The `from` and `to` parameters (RFC3339) of a [start, end] range picked with the time range field; empty when not set. */
-export function rangeParams(range: [number, number] | null | undefined): { from?: string; to?: string } {
-  if (!range) return {};
-  return { from: new Date(range[0]).toISOString(), to: new Date(range[1]).toISOString() };
+/** A time range as the time field holds it: [start, end] in milliseconds; a relative window also remembers its length. */
+export type RangeValue = [number, number] & { relativeMs?: number };
+
+/** A window of the last `ms` milliseconds that moves with the clock: `resolveRange` recomputes it from the current time. */
+export function relativeRange(ms: number): RangeValue {
+  const end = Date.now();
+  return Object.assign([end - ms, end] as [number, number], { relativeMs: ms });
 }
 
 /** A range of the last N hours as the picker holds it, for the default of a page. */
-export function lastHours(hours: number): [number, number] {
-  const end = Date.now();
-  return [end - hours * 3600 * 1000, end];
+export function lastHours(hours: number): RangeValue {
+  return relativeRange(hours * 3600 * 1000);
+}
+
+/** The [start, end] to search with now: a relative window is measured from the current time, a fixed range is as picked. */
+export function resolveRange(range: RangeValue | [number, number] | null | undefined): [number, number] | null {
+  if (!range) return null;
+  const relative = (range as RangeValue).relativeMs;
+  if (relative) {
+    const end = Date.now();
+    return [end - relative, end];
+  }
+  return [range[0], range[1]];
+}
+
+/** The `from` and `to` parameters (RFC3339) of a time range; empty when not set. */
+export function rangeParams(range: RangeValue | [number, number] | null | undefined): { from?: string; to?: string } {
+  const resolved = resolveRange(range);
+  if (!resolved) return {};
+  return { from: new Date(resolved[0]).toISOString(), to: new Date(resolved[1]).toISOString() };
 }

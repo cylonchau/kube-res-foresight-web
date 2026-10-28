@@ -27,10 +27,10 @@ declare namespace Api {
       username: string;
       /** nickname */
       nickName: string;
-      /** email */
-      email: string;
-      /** phone number */
-      phone: string;
+      /** where the account is authenticated: local or ldap */
+      source: 'local' | 'ldap';
+      /** the ways to reach the user: any type name and its value */
+      contacts: Array<{ type: string; value: string }>;
       /** user status */
       status: boolean;
       /** user roles */
@@ -62,6 +62,7 @@ declare namespace Api {
       nick_name?: string;
       nickName?: string;
       status?: boolean;
+      source?: string;
     }
 
     /** user list */

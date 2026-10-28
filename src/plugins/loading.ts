@@ -37,7 +37,7 @@ export function setupLoading() {
     })
     .join('\n');
 
-  const logoSrc = '/kube-resource-fcst-logo.svg';
+  const logoSrc = darkMode ? '/kube-resource-fcst-logo-dark.svg' : '/kube-resource-fcst-logo-light.svg';
 
   const loading = `
 <div class="fixed-center flex-col bg-layout" style="${cssVars}">

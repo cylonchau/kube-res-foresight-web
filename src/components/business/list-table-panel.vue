@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { NCard } from 'naive-ui';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
@@ -39,6 +40,18 @@ const props = withDefaults(defineProps<Props>(), {
   disabledDelete: false,
   checkedRowKeys: undefined,
   emptyHint: ''
+});
+
+const isRemote = computed(() => props.remote ?? Boolean(props.pagination));
+/**
+ * An empty list has no pages: the pager is dropped when there is nothing to page (no rows of a local list, or a total of
+ * zero for a list the server pages), instead of showing a stale or meaningless page count.
+ */
+const effectivePagination = computed(() => {
+  const pagination = props.pagination;
+  if (!pagination) return false;
+  if (isRemote.value) return Number(pagination.itemCount ?? 0) > 0 ? pagination : false;
+  return props.data.length > 0 ? pagination : false;
 });
 
 // the column settings live in the composable the page created; the template binds to its refs
@@ -85,10 +98,10 @@ const emit = defineEmits<{
       <div class="flex-1 overflow-hidden">
         <ExpandableDataTable
           v-model:columns="tableColumns"
-          :remote="remote ?? Boolean(pagination)"
+          :remote="isRemote"
           :loading="loading"
           :data="data"
-          :pagination="pagination || false"
+          :pagination="effectivePagination"
           :row-key="rowKey"
           :size="density"
           :checked-row-keys="checkedRowKeys"

@@ -143,15 +143,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
-        name: 'forecast_ranking-history',
-        path: '/forecast/ranking-history',
-        component: 'view.forecast_ranking-history',
-        meta: {
-          title: 'forecast_ranking-history',
-          i18nKey: 'route.forecast_ranking-history'
-        }
-      },
-      {
         name: 'forecast_score-records',
         path: '/forecast/score-records',
         component: 'view.forecast_score-records',
@@ -178,15 +169,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'forecast-actions_admissions',
           i18nKey: 'route.forecast-actions_admissions'
-        }
-      },
-      {
-        name: 'forecast-actions_audit-exports',
-        path: '/forecast-actions/audit-exports',
-        component: 'view.forecast-actions_audit-exports',
-        meta: {
-          title: 'forecast-actions_audit-exports',
-          i18nKey: 'route.forecast-actions_audit-exports'
         }
       },
       {
@@ -248,12 +230,12 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
-        name: 'forecast-results_backtests',
-        path: '/forecast-results/backtests',
-        component: 'view.forecast-results_backtests',
+        name: 'forecast-results_algorithm-runs',
+        path: '/forecast-results/algorithm-runs',
+        component: 'view.forecast-results_algorithm-runs',
         meta: {
-          title: 'forecast-results_backtests',
-          i18nKey: 'route.forecast-results_backtests'
+          title: 'forecast-results_algorithm-runs',
+          i18nKey: 'route.forecast-results_algorithm-runs'
         }
       },
       {
@@ -281,24 +263,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'forecast-results_leaderboard',
           i18nKey: 'route.forecast-results_leaderboard'
-        }
-      },
-      {
-        name: 'forecast-results_runs',
-        path: '/forecast-results/runs',
-        component: 'view.forecast-results_runs',
-        meta: {
-          title: 'forecast-results_runs',
-          i18nKey: 'route.forecast-results_runs'
-        }
-      },
-      {
-        name: 'forecast-results_trends',
-        path: '/forecast-results/trends',
-        component: 'view.forecast-results_trends',
-        meta: {
-          title: 'forecast-results_trends',
-          i18nKey: 'route.forecast-results_trends'
         }
       }
     ]
@@ -353,15 +317,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'monitoring_datasets',
           i18nKey: 'route.monitoring_datasets'
-        }
-      },
-      {
-        name: 'monitoring_metrics',
-        path: '/monitoring/metrics',
-        component: 'view.monitoring_metrics',
-        meta: {
-          title: 'monitoring_metrics',
-          i18nKey: 'route.monitoring_metrics'
         }
       }
     ]

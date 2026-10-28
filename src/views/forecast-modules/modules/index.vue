@@ -1,29 +1,28 @@
 <script setup lang="tsx">
-import { computed, h, onMounted, reactive, ref } from 'vue';
+import { computed, h, nextTick, onMounted, reactive, ref } from 'vue';
 import {
   NButton,
-  NCheckbox,
-  NCheckboxGroup,
-  NDataTable,
-  NDatePicker,
-  NDropdown,
   NForm,
   NFormItem,
   NFormItemGi,
   NInput,
   NInputNumber,
+  NDivider,
   NModal,
   NPopconfirm,
   NSelect,
   NSpace,
-  NSwitch,
   NTag,
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import StatusSelect from '@/components/business/status-select.vue';
+import PeriodEditor from '@/components/business/period-editor.vue';
 import BatchActions from '@/components/business/batch-actions.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
+import PromqlTester from '@/components/business/promql-tester.vue';
+import ModuleMetrics from '@/components/business/module-metrics.vue';
+import type { QueryConfig } from '@/components/business/query-test-result.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import DurationInput from '@/components/advanced/duration-input.vue';
@@ -35,20 +34,18 @@ import {
   fetchCreateModuleSource,
   fetchCreatePeriod,
   fetchDeleteForecastModule,
-  fetchDeletePeriod,
   fetchGetForecastModules,
   fetchGetModuleSources,
   fetchGetPeriods,
   fetchResumeModule,
-  fetchUpdateForecastModule,
-  fetchUpdatePeriod
+  fetchUpdateForecastModule
 } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { copyCell } from '@/utils/copy-cell';
 
 const PAGE_CODE = 'forecast_module_manage';
 const { t } = useI18n();
-const router = useRouter();
 const message = useMessage();
 const MIB = 1024 * 1024;
 const WORKLOAD_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'] as const;
@@ -194,6 +191,8 @@ function emptyForm() {
 const form = reactive(emptyForm());
 /** The module a clone is taken from; its metric sources and fixed periods are copied once the clone exists. Algorithms are platform-wide and apply to the clone by themselves. */
 const cloneSource = ref<Api.Forecast.Module>();
+const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
+const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const bypassTarget = ref<Api.Forecast.Module>();
 const paceFields = ['scaleUpMaxStep', 'scaleDownMaxStep', 'scaleUpCooldown', 'scaleDownCooldown'] as const;
 const paceModel = {
@@ -202,6 +201,65 @@ const paceModel = {
   scaleUpCooldown: 'scale_up_cooldown_seconds',
   scaleDownCooldown: 'scale_down_cooldown_seconds'
 } as const;
+
+// ---- the preview of a metric, asked for on demand: choose the module and its metric, then the same query test dialog as the
+// Metrics dataset page runs the PromQL against Prometheus (the dialog also takes a PromQL typed by hand, e.g. a log metric)
+const testerVisible = ref(false);
+const testerInitial = ref<Partial<QueryConfig>>({});
+const pickVisible = ref(false);
+const pick = reactive({ moduleId: null as number | null, key: null as string | null });
+const pickSources = ref<Api.Forecast.DatasetSource[]>([]);
+const moduleChoices = computed(() => rows.value.map(item => ({ label: item.name, value: item.id })));
+const metricChoices = computed(() => pickSources.value.map(item => ({ label: item.name, value: item.key })));
+
+async function loadPickSources() {
+  pick.key = null;
+  pickSources.value = [];
+  if (!pick.moduleId) return;
+  const { data } = await fetchGetModuleSources(pick.moduleId);
+  pickSources.value = data || [];
+  pick.key = pickSources.value[0]?.key ?? null;
+}
+
+function openPreview() {
+  pick.moduleId = rows.value[0]?.id ?? null;
+  pickVisible.value = true;
+  loadPickSources();
+}
+
+/** The module whose workload fills the variables of the query being previewed. */
+const testerModuleId = ref<number | null>(null);
+
+/** Shows what a metric of a module returns now: its query is run at once against Prometheus, in the preview dialog. */
+function showPreview(
+  moduleId: number | null,
+  source?: Pick<Api.Forecast.DatasetSource, 'datasource_id' | 'query' | 'level' | 'unit' | 'step_seconds'> & {
+    kind: string;
+  } & Partial<Pick<Api.Forecast.DatasetSource, 'query_step_seconds' | 'scale' | 'precision'>>
+) {
+  testerModuleId.value = moduleId;
+  testerInitial.value = source
+    ? {
+        datasource_id: source.datasource_id,
+        query: source.query,
+        level: source.level,
+        metric: source.kind,
+        unit: source.unit,
+        step_seconds: source.query_step_seconds || source.step_seconds,
+        scale: source.scale,
+        precision: source.precision
+      }
+    : {};
+  pickVisible.value = false;
+  testerVisible.value = true;
+}
+
+function runPreview() {
+  showPreview(
+    pick.moduleId,
+    pickSources.value.find(item => item.key === pick.key)
+  );
+}
 
 function open(row?: Api.Forecast.Module) {
   editing.value = row;
@@ -219,6 +277,10 @@ function open(row?: Api.Forecast.Module) {
     });
   }
   visible.value = true;
+  nextTick(() => {
+    periodEditor.value?.load(row?.id);
+    metricsEditor.value?.load(row?.id);
+  });
 }
 
 function payloadFromForm(): Api.Forecast.ModulePayload {
@@ -284,6 +346,11 @@ function clone(row: Api.Forecast.Module) {
   editing.value = undefined;
   cloneSource.value = row;
   Object.assign(form, { name: `${row.name}-copy`, enabled: false });
+  // the periods and metrics are copied from the source once the clone exists, so the editors start empty
+  nextTick(() => {
+    periodEditor.value?.load();
+    metricsEditor.value?.load();
+  });
 }
 
 async function copyConfiguration(sourceId: number, targetId: number) {
@@ -316,6 +383,11 @@ async function save() {
     message.warning(t('page.forecast.modules.required'));
     return;
   }
+  const editorProblem = metricsEditor.value?.problem() || periodEditor.value?.problem();
+  if (editorProblem) {
+    message.warning(editorProblem);
+    return;
+  }
   saving.value = true;
   try {
     const id = editing.value?.id;
@@ -326,6 +398,10 @@ async function save() {
     if (!error) {
       if (!id && cloneSource.value && data) await copyConfiguration(cloneSource.value.id, data.id);
       cloneSource.value = undefined;
+      const savedId = id ?? data?.id;
+      if (savedId && !(await periodEditor.value?.save(savedId))) message.warning(t('page.forecast.periods.saveFailed'));
+      if (savedId && !(await metricsEditor.value?.save(savedId)))
+        message.warning(t('page.forecast.periods.saveFailed'));
       visible.value = false;
       message.success(id ? t('common.modifySuccess') : t('common.addSuccess'));
       await load();
@@ -366,35 +442,6 @@ async function remove(id: number) {
   }
 }
 
-/** Everything that is not used every day sits in one menu, so the operate column stays one row wide. */
-function moreOptions(row: Api.Forecast.Module) {
-  return [
-    { label: t('page.forecast.modules.clone'), key: 'clone' },
-    { label: t('page.forecast.modules.periods'), key: 'periods' },
-    row.bypass
-      ? { label: t('page.forecast.modules.resume'), key: 'resume' }
-      : { label: t('page.forecast.modules.bypass'), key: 'bypass' }
-  ];
-}
-
-function moreAction(row: Api.Forecast.Module, key: string) {
-  switch (key) {
-    case 'clone':
-      clone(row);
-      break;
-    case 'periods':
-      openPeriods(row);
-      break;
-    case 'resume':
-      resume(row);
-      break;
-    case 'bypass':
-      bypassTarget.value = row;
-      break;
-    default:
-  }
-}
-
 // ---- bypass
 const bypassReason = ref('');
 
@@ -422,172 +469,25 @@ async function resume(row: Api.Forecast.Module) {
   }
 }
 
-// ---- fixed periods
-const periodModule = ref<Api.Forecast.Module>();
-const periods = ref<Api.Forecast.Period[]>([]);
-const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
-
-function emptyPeriod() {
-  return {
-    id: undefined as number | undefined,
-    name: '',
-    enabled: true,
-    priority: 0,
-    kind: 'weekly' as 'weekly' | 'absolute',
-    weekdays: [1, 2, 3, 4, 5] as number[],
-    start: '09:00',
-    end: '18:00',
-    abs_start: null as number | null,
-    abs_end: null as number | null,
-    cpu_milli: 0,
-    memory_mib: 0,
-    replicas: 0
-  };
-}
-const periodForm = reactive(emptyPeriod());
-
-function toMinute(value: string) {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
-  if (!match) return null;
-  const minutes = Number(match[1]) * 60 + Number(match[2]);
-  return Number(match[1]) < 24 && Number(match[2]) < 60 ? minutes : null;
-}
-
-function fromMinute(minute: number) {
-  return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-}
-
-async function loadPeriods() {
-  if (!periodModule.value) return;
-  const { data } = await fetchGetPeriods(periodModule.value.id);
-  periods.value = data || [];
-}
-
-async function openPeriods(row: Api.Forecast.Module) {
-  periodModule.value = row;
-  Object.assign(periodForm, emptyPeriod());
-  await loadPeriods();
-}
-
-function editPeriod(row: Api.Forecast.Period) {
-  const absolute = Boolean(row.abs_start);
-  Object.assign(periodForm, {
-    id: row.id,
-    name: row.name,
-    enabled: row.enabled,
-    priority: row.priority,
-    kind: absolute ? 'absolute' : 'weekly',
-    weekdays: WEEKDAYS.filter(day => row.weekdays & (1 << day)),
-    start: fromMinute(row.start_minute),
-    end: fromMinute(row.end_minute),
-    abs_start: row.abs_start ? Date.parse(row.abs_start) : null,
-    abs_end: row.abs_end ? Date.parse(row.abs_end) : null,
-    cpu_milli: row.cpu_milli,
-    memory_mib: row.memory_bytes / MIB,
-    replicas: row.replicas
-  });
-}
-
-async function savePeriod() {
-  const module = periodModule.value;
-  if (!module) return;
-  const payload: Api.Forecast.PeriodPayload = {
-    name: periodForm.name.trim(),
-    enabled: periodForm.enabled,
-    priority: periodForm.priority,
-    cpu_milli: periodForm.cpu_milli,
-    memory_bytes: Math.round(periodForm.memory_mib * MIB),
-    replicas: periodForm.replicas
-  };
-  if (periodForm.kind === 'weekly') {
-    const start = toMinute(periodForm.start);
-    const end = toMinute(periodForm.end);
-    if (start === null || end === null) {
-      message.warning(t('page.forecast.modules.timeInvalid'));
-      return;
-    }
-    payload.weekdays = periodForm.weekdays.reduce((mask, day) => mask | (1 << day), 0);
-    payload.start_minute = start;
-    payload.end_minute = end;
-  } else {
-    if (!periodForm.abs_start || !periodForm.abs_end) {
-      message.warning(t('page.forecast.modules.timeInvalid'));
-      return;
-    }
-    payload.abs_start = new Date(periodForm.abs_start).toISOString();
-    payload.abs_end = new Date(periodForm.abs_end).toISOString();
-  }
-  const { error } = periodForm.id
-    ? await fetchUpdatePeriod(module.id, periodForm.id, payload)
-    : await fetchCreatePeriod(module.id, payload);
-  if (!error) {
-    message.success(periodForm.id ? t('common.modifySuccess') : t('common.addSuccess'));
-    Object.assign(periodForm, emptyPeriod());
-    await loadPeriods();
-  }
-}
-
-async function removePeriod(id: number) {
-  if (!periodModule.value) return;
-  const { error } = await fetchDeletePeriod(periodModule.value.id, id);
-  if (!error) {
-    message.success(t('common.deleteSuccess'));
-    await loadPeriods();
-  }
-}
-
-const periodColumns = computed(() => [
-  { title: t('page.forecast.modules.name'), key: 'name', width: 140 },
-  { title: t('page.forecast.modules.priority'), key: 'priority', width: 80 },
-  {
-    title: t('page.forecast.modules.window'),
-    key: 'window',
-    render: (row: Api.Forecast.Period) =>
-      row.abs_start
-        ? `${formatDateTime(row.abs_start)} ~ ${formatDateTime(row.abs_end || '')}`
-        : `${WEEKDAYS.filter(day => row.weekdays & (1 << day))
-            .map(day => t(`page.forecast.modules.weekday_${day}`))
-            .join(' ')} ${fromMinute(row.start_minute)}-${fromMinute(row.end_minute)}`
-  },
-  { title: 'CPU (m)', key: 'cpu_milli', width: 90, render: (row: Api.Forecast.Period) => row.cpu_milli || '-' },
-  {
-    title: 'MiB',
-    key: 'memory_bytes',
-    width: 90,
-    render: (row: Api.Forecast.Period) => (row.memory_bytes ? row.memory_bytes / MIB : '-')
-  },
-  {
-    title: t('page.forecast.modules.replicas'),
-    key: 'replicas',
-    width: 90,
-    render: (row: Api.Forecast.Period) => row.replicas || '-'
-  },
-  {
-    title: t('common.operate'),
-    key: 'actions',
-    width: 150,
-    render: (row: Api.Forecast.Period) =>
-      h(NSpace, { wrap: false }, () => [
-        h(NButton, { size: 'small', onClick: () => editPeriod(row) }, () => t('common.edit')),
-        h(
-          NPopconfirm,
-          { onPositiveClick: () => removePeriod(row.id) },
-          {
-            trigger: () => h(NButton, { size: 'small', type: 'error' }, () => t('common.delete')),
-            default: () => t('common.confirmDelete')
-          }
-        )
-      ])
-  }
-]);
-
 // ---- table
 const columnMap: Record<string, any> = {
   __selection__: { type: 'selection', width: 42, minWidth: 42 },
   id: { title: t('common.id'), key: 'id', width: 70, align: 'center' },
-  name: { title: t('page.forecast.modules.name'), key: 'name', width: 170, resizable: true },
+  name: {
+    title: t('page.forecast.modules.name'),
+    key: 'name',
+    width: 170,
+    resizable: true,
+    render: (row: Api.Forecast.Module) => copyCell(row.name)
+  },
   namespace: { title: t('page.forecast.modules.namespace'), key: 'namespace', width: 140, resizable: true },
-  workload: { title: t('page.forecast.modules.workload'), key: 'workload', width: 160, resizable: true },
+  workload: {
+    title: t('page.forecast.modules.workload'),
+    key: 'workload',
+    width: 160,
+    resizable: true,
+    render: (row: Api.Forecast.Module) => copyCell(row.workload)
+  },
   workload_kind: { title: t('page.forecast.modules.workloadKind'), key: 'workload_kind', width: 130, resizable: true },
   mode: {
     title: t('page.forecast.modules.mode'),
@@ -682,33 +582,28 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 250,
+    width: 180,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Module) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => open(row) }, () => t('common.edit')),
-        h(
-          NButton,
-          {
-            size: 'small',
-            onClick: () => router.push({ path: '/monitoring/datasets', query: { module_id: row.id } })
-          },
-          () => t('page.forecast.modules.sources')
-        ),
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         ),
-        h(
-          NDropdown,
-          { options: moreOptions(row), onSelect: (key: string) => moreAction(row, key) },
-          { default: () => h(NButton, { size: 'small' }, () => t('page.forecast.modules.more')) }
-        )
+        h(NButton, { size: 'tiny', onClick: () => clone(row) }, () => t('page.forecast.modules.clone')),
+        row.bypass
+          ? h(NButton, { size: 'tiny', type: 'warning', ghost: true, onClick: () => resume(row) }, () =>
+              t('page.forecast.modules.resume')
+            )
+          : h(NButton, { size: 'tiny', onClick: () => (bypassTarget.value = row) }, () =>
+              t('page.forecast.modules.bypass')
+            )
       ])
   }
 };
@@ -786,6 +681,7 @@ onMounted(() => {
       @refresh="load"
     >
       <template #suffix>
+        <NButton size="small" @click="openPreview">{{ t('page.forecast.modules.previewMetric') }}</NButton>
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>
@@ -850,7 +746,7 @@ onMounted(() => {
             <NInput v-model:value="form.container" :placeholder="t('page.forecast.modules.optional')" />
           </NFormItem>
           <NFormItem :label="t('page.datasource.connections.enabled')">
-            <NSwitch v-model:value="form.enabled" />
+            <StatusSelect v-model:value="form.enabled" />
           </NFormItem>
           <NFormItem :label="t('common.remark')">
             <NInput
@@ -1152,6 +1048,24 @@ onMounted(() => {
           </NFormItem>
         </NForm>
 
+        <NDivider class="!my-18px" />
+        <div class="mb-8px flex items-center gap-6px font-medium">
+          {{ t('page.forecast.moduleMetrics.title') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-420px leading-22px">{{ t('page.forecast.moduleMetrics.rules') }}</div>
+          </IconTooltip>
+        </div>
+        <ModuleMetrics ref="metricsEditor" @preview="source => showPreview(editing?.id ?? null, source)" />
+
+        <NDivider class="!my-18px" />
+        <div class="mb-8px flex items-center gap-6px font-medium">
+          {{ t('page.forecast.periods.title') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-420px leading-22px">{{ t('page.forecast.periods.rules') }}</div>
+          </IconTooltip>
+        </div>
+        <PeriodEditor ref="periodEditor" />
+
         <div class="mb-8px mt-12px flex items-center gap-6px font-medium">
           {{ t('page.forecast.modules.sectionPace') }}
           <IconTooltip icon="mdi-help-circle" placement="top">
@@ -1290,94 +1204,33 @@ onMounted(() => {
         </NSpace>
       </template>
     </NModal>
-
-    <!-- fixed periods -->
+    <PromqlTester v-model:show="testerVisible" :initial="testerInitial" :module-id="testerModuleId" auto-run />
     <NModal
-      :show="Boolean(periodModule)"
+      v-model:show="pickVisible"
       preset="card"
-      :title="`${periodModule?.name || ''} - ${t('page.forecast.modules.periods')}`"
-      class="edit-modal-wide"
-      @update:show="value => !value && (periodModule = undefined)"
+      :title="t('page.forecast.modules.previewMetric')"
+      class="w-480px max-w-95vw"
     >
-      <NDataTable
-        :columns="periodColumns"
-        :data="periods"
-        :row-key="(row: Api.Forecast.Period) => row.id"
-        size="small"
-        :max-height="240"
-      />
-      <div class="mb-8px mt-16px font-medium">{{ periodForm.id ? t('common.edit') : t('common.add') }}</div>
-      <NForm :model="periodForm" label-placement="top">
-        <NFormItem :label="t('page.forecast.modules.name')"><NInput v-model:value="periodForm.name" /></NFormItem>
-        <NFormItem :label="t('page.forecast.modules.priority')">
-          <NInputNumber v-model:value="periodForm.priority" class="w-full" />
+      <NForm label-placement="top">
+        <NFormItem>
+          <template #label>
+            <span class="inline-flex items-center gap-4px">
+              {{ t('page.forecast.modules.name') }}
+              <IconTooltip icon="mdi-help-circle" placement="top">
+                <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.metricsPreviewHelp') }}</div>
+              </IconTooltip>
+            </span>
+          </template>
+          <NSelect v-model:value="pick.moduleId" filterable :options="moduleChoices" @update:value="loadPickSources" />
         </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.periodKind')">
-          <NSelect
-            v-model:value="periodForm.kind"
-            :options="[
-              { label: t('page.forecast.modules.kindWeekly'), value: 'weekly' },
-              { label: t('page.forecast.modules.kindAbsolute'), value: 'absolute' }
-            ]"
-          />
-        </NFormItem>
-        <NFormItem :label="t('page.datasource.connections.enabled')">
-          <NSwitch v-model:value="periodForm.enabled" />
-        </NFormItem>
-        <template v-if="periodForm.kind === 'weekly'">
-          <NFormItem :label="t('page.forecast.modules.weekdays')">
-            <NCheckboxGroup v-model:value="periodForm.weekdays">
-              <NSpace>
-                <NCheckbox
-                  v-for="day in WEEKDAYS"
-                  :key="day"
-                  :value="day"
-                  :label="t(`page.forecast.modules.weekday_${day}`)"
-                />
-              </NSpace>
-            </NCheckboxGroup>
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.timeRange') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-320px leading-22px">
-                    {{ t('page.forecast.modules.timeRangeHint', { zone: periodModule?.timezone || 'UTC' }) }}
-                  </div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NSpace align="center">
-              <NInput v-model:value="periodForm.start" placeholder="09:00" class="w-100px" />
-              <span>~</span>
-              <NInput v-model:value="periodForm.end" placeholder="18:00" class="w-100px" />
-            </NSpace>
-          </NFormItem>
-        </template>
-        <template v-else>
-          <NFormItem :label="t('page.forecast.modules.absStart')">
-            <NDatePicker v-model:value="periodForm.abs_start" type="datetime" clearable class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.absEnd')">
-            <NDatePicker v-model:value="periodForm.abs_end" type="datetime" clearable class="w-full" />
-          </NFormItem>
-        </template>
-        <NFormItem :label="t('page.forecast.modules.periodCpu')">
-          <NInputNumber v-model:value="periodForm.cpu_milli" :min="0" class="w-full" />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.periodMemory')">
-          <NInputNumber v-model:value="periodForm.memory_mib" :min="0" class="w-full" />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.replicas')">
-          <NInputNumber v-model:value="periodForm.replicas" :min="0" class="w-full" />
+        <NFormItem :label="t('page.forecast.modules.metricOf')">
+          <NSelect v-model:value="pick.key" clearable filterable :options="metricChoices" />
         </NFormItem>
       </NForm>
-      <div class="text-13px opacity-70">{{ t('page.forecast.modules.periodHint') }}</div>
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="Object.assign(periodForm, emptyPeriod())">{{ t('common.reset') }}</NButton>
-          <NButton type="primary" @click="savePeriod">{{ t('common.save') }}</NButton>
+          <NButton @click="pickVisible = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" @click="runPreview">{{ t('page.forecast.modules.previewMetric') }}</NButton>
         </NSpace>
       </template>
     </NModal>

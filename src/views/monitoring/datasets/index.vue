@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import {
-  NAlert,
   NButton,
-  NCard,
-  NDataTable,
   NForm,
   NFormItem,
   NFormItemGi,
@@ -12,18 +9,16 @@ import {
   NInputNumber,
   NModal,
   NPopconfirm,
-  NRadioButton,
-  NRadioGroup,
   NSelect,
   NSpace,
-  NSwitch,
   NTag,
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
-import DurationInput from '@/components/advanced/duration-input.vue';
-import PromqlTester, { type QueryConfig } from '@/components/business/promql-tester.vue';
+import StatusSelect from '@/components/business/status-select.vue';
+import QueryTestResult, { type QueryConfig } from '@/components/business/query-test-result.vue';
+import HelpLabel from '@/components/common/help-label.vue';
 import BatchActions from '@/components/business/batch-actions.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
@@ -38,15 +33,11 @@ import {
 } from '@/hooks/business/use-forecast-modules';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
-  fetchCollectModule,
   fetchCreateModuleSource,
   fetchDeleteModuleSource,
   fetchGetDatasetCatalog,
-  fetchGetDatasourceOptions,
   fetchGetMetricMappings,
-  fetchGetModuleRequirements,
   fetchGetModuleSources,
-  fetchUpdateForecastModule,
   fetchUpdateModuleSource
 } from '@/service/api';
 
@@ -70,9 +61,6 @@ const selected = computed(() => modules.value.find(item => item.id === search.mo
 
 const kindLabel = (kind: string) => t(`page.datasource.mappings.metric_${kind}`);
 const categoryLabel = (category: string) => t(`page.monitoring.datasets.category_${category}`);
-// the PromQL placeholders are written in the code: the locale files cannot hold a double brace
-const queryExample =
-  'sum(rate(container_cpu_usage_seconds_total{namespace="{{namespace}}",pod=~"{{workload}}-.*"}[{{range}}]))';
 const stepLabel = (seconds: number) => {
   if (!seconds) return '-';
   if (seconds % 86400 === 0) return `${seconds / 86400}d`;
@@ -80,29 +68,6 @@ const stepLabel = (seconds: number) => {
   if (seconds % 60 === 0) return `${seconds / 60}m`;
   return `${seconds}s`;
 };
-const hoursLabel = (hours: number) => (hours % 24 === 0 ? `${hours / 24}d` : `${hours}h`);
-const minutesLabel = (minutes: number) => (minutes ? stepLabel(minutes * 60) : '-');
-const periodItems = computed(() => {
-  const m = selected.value;
-  if (!m) return [];
-  return [
-    {
-      label: t('page.monitoring.datasets.periodStep'),
-      value: m.step_seconds ? stepLabel(m.step_seconds) : t('page.forecast.modules.stepFollowSource')
-    },
-    { label: t('page.monitoring.datasets.periodLookback'), value: hoursLabel(m.lookback_hours) },
-    { label: t('page.monitoring.datasets.periodHorizon'), value: minutesLabel(m.horizon_minutes) },
-    {
-      label: t('page.monitoring.datasets.periodWindow'),
-      value: m.window_steps || t('page.forecast.modules.windowAll')
-    },
-    { label: t('page.monitoring.datasets.periodMin'), value: m.min_points || '-' },
-    {
-      label: t('page.monitoring.datasets.periodRun'),
-      value: m.run_interval_minutes ? minutesLabel(m.run_interval_minutes) : t('page.forecast.modules.runEveryCycle')
-    }
-  ];
-});
 
 const categoryOptions = computed(() =>
   (catalog.value?.categories || []).map(item => ({ label: categoryLabel(item.id), value: item.id }))
@@ -150,13 +115,9 @@ function resetSearch() {
   Object.assign(search, { moduleId: modules.value[0]?.id ?? null, category: null, keyword: '' });
 }
 
-// ---- source form: a metric of the catalog, or a PromQL of one's own
+// ---- source form: a metric of the catalog bound to a metric template (the query lives on the Metric templates page)
 const visible = ref(false);
 const editing = ref<Api.Forecast.DatasetSource>();
-const origin = ref<'mapping' | 'custom'>('mapping');
-const mappingChoices = ref<Array<{ label: string; value: number }>>([]);
-const mappingList = ref<Api.Datasource.MetricMapping[]>([]);
-const datasourceOptions = ref<Array<{ label: string; value: number }>>([]);
 
 function emptyForm() {
   return {
@@ -176,8 +137,7 @@ function emptyForm() {
     scale: 1,
     precision: 6,
     aggregation: 'avg' as Api.Forecast.SourceAggregation,
-    missing: 'interpolate' as Api.Forecast.SourceMissing,
-    custom: { datasource_id: null as number | null, query: '', level: 'workload', unit: '', step_seconds: 60 }
+    missing: 'interpolate' as Api.Forecast.SourceMissing
   };
 }
 const form = reactive(emptyForm());
@@ -187,71 +147,36 @@ const kindOptions = computed(() =>
   kindsOfCategory.value.map(item => ({ label: kindLabel(item.kind), value: item.kind }))
 );
 const selectedKind = computed(() => kindsOfCategory.value.find(item => item.kind === form.kind));
-const levelOptions = ['workload', 'namespace', 'service', 'pod', 'container', 'cluster'].map(value => ({
-  label: value,
-  value
-}));
+/** The templates of the chosen kind of metric: a dataset is one of them, with the role it plays in the module. */
+const templates = ref<Api.Datasource.MetricMapping[]>([]);
+const templateOptions = computed(() =>
+  templates.value
+    .filter(item => item.enabled || item.id === form.mapping_id)
+    .map(item => ({ label: `${item.name} · ${item.datasource_name}`, value: item.id }))
+);
+const pickedTemplate = computed(() => templates.value.find(item => item.id === form.mapping_id));
 
-async function loadMappings(kind: string | null) {
-  mappingChoices.value = [];
-  mappingList.value = [];
+async function loadTemplates(kind: string | null) {
+  templates.value = [];
   if (!kind) return;
   const { data } = await fetchGetMetricMappings({ page: 1, page_size: 200, metric: kind });
-  mappingList.value = data?.list || [];
-  mappingChoices.value = (data?.list || []).map(item => ({
-    label: `${item.name} (${item.datasource_name}, ${stepLabel(item.step_seconds)})`,
-    value: item.id
-  }));
+  templates.value = data?.list || [];
 }
 
-// ---- the query test: a PromQL is run against its datasource before it is saved
-const testerVisible = ref(false);
-const testerInitial = ref<Partial<QueryConfig>>({});
-const testerOnly = ref(false);
-/** a PromQL of one's own has to pass the test, and a changed one has to pass it again */
-const customTested = ref(false);
-watch(
-  () => [form.custom.query, form.custom.datasource_id, form.custom.level, form.custom.step_seconds, form.custom.unit],
-  () => (customTested.value = false)
-);
-
-function openTester() {
-  const mapping =
-    origin.value === 'mapping' || editing.value
-      ? mappingList.value.find(item => item.id === form.mapping_id)
-      : undefined;
-  testerOnly.value = Boolean(mapping);
-  testerInitial.value = mapping
-    ? {
-        datasource_id: mapping.datasource_id,
-        query: mapping.query,
-        level: mapping.level,
-        metric: mapping.metric,
-        unit: mapping.unit,
-        step_seconds: mapping.step_seconds,
-        scale: form.scale,
-        precision: form.precision
-      }
-    : { ...form.custom, metric: form.kind || 'custom', scale: form.scale, precision: form.precision };
-  testerVisible.value = true;
-}
-
-function applyTested(config: QueryConfig) {
-  Object.assign(form.custom, {
-    datasource_id: config.datasource_id,
-    query: config.query,
-    level: config.level,
-    unit: config.unit,
-    step_seconds: config.step_seconds
-  });
-  form.scale = config.scale;
-  form.precision = config.precision;
-  customTested.value = true;
-}
+/** The query of the template as the module renders it: the test beside it runs exactly this. */
+const testConfig = computed<QueryConfig>(() => ({
+  datasource_id: pickedTemplate.value?.datasource_id ?? null,
+  query: pickedTemplate.value?.query ?? '',
+  level: pickedTemplate.value?.level ?? 'workload',
+  metric: form.kind || 'custom',
+  unit: pickedTemplate.value?.unit ?? '',
+  step_seconds: pickedTemplate.value?.step_seconds ?? 60,
+  scale: form.scale,
+  precision: form.precision
+}));
 
 function open(row?: Api.Forecast.DatasetSource) {
   editing.value = row;
-  origin.value = 'mapping';
   Object.assign(form, emptyForm());
   if (row) {
     Object.assign(form, {
@@ -260,12 +185,12 @@ function open(row?: Api.Forecast.DatasetSource) {
       mapping_id: row.mapping_id || null,
       window_hours: row.window_hours || 24
     });
+    loadTemplates(row.kind);
   } else {
     form.priority = rows.value.length;
     form.kind = kindsOfCategory.value[0]?.kind ?? null;
     if (form.kind) onKindChange(form.kind);
   }
-  loadMappings(form.kind);
   visible.value = true;
 }
 
@@ -280,24 +205,18 @@ function onKindChange(kind: Api.Forecast.MetricKind) {
   form.basis = info?.basis ?? defaultBasis(kind);
   form.missing = info?.missing ?? 'interpolate';
   form.mapping_id = null;
-  loadMappings(kind);
+  loadTemplates(kind);
 }
 
 async function save() {
   const module = selected.value;
   if (!module) return;
-  const custom = origin.value === 'custom' && !editing.value;
   if (!form.name.trim() || !form.kind) {
     message.warning(t('page.forecast.sources.required'));
     return;
   }
-  if (custom && form.custom.datasource_id && form.custom.query.trim() && !customTested.value) {
-    message.warning(t('page.monitoring.queryTest.mustTest'));
-    openTester();
-    return;
-  }
-  if (custom ? !form.custom.datasource_id || !form.custom.query.trim() : !form.mapping_id) {
-    message.warning(t(custom ? 'page.monitoring.datasets.customRequired' : 'page.forecast.sources.required'));
+  if (!form.mapping_id) {
+    message.warning(t('page.forecast.sources.required'));
     return;
   }
   saving.value = true;
@@ -318,17 +237,7 @@ async function save() {
       aggregation: form.aggregation,
       missing: form.missing
     };
-    if (custom) {
-      payload.custom = {
-        datasource_id: form.custom.datasource_id!,
-        query: form.custom.query.trim(),
-        level: form.custom.level,
-        unit: selectedKind.value?.unit_is_not_fixed ? form.custom.unit.trim() || undefined : undefined,
-        step_seconds: form.custom.step_seconds
-      };
-    } else {
-      payload.mapping_id = form.mapping_id!;
-    }
+    payload.mapping_id = form.mapping_id;
     const { error } = editing.value
       ? await fetchUpdateModuleSource(module.id, editing.value.id, payload)
       : await fetchCreateModuleSource(module.id, { ...payload, kind: form.kind });
@@ -350,127 +259,6 @@ async function remove(row: Api.Forecast.DatasetSource) {
     await Promise.all([load(), loadModules()]);
   }
 }
-
-// ---- the period of the dataset: granularity, history range, horizon, minimum data, how often it runs
-const periodVisible = ref(false);
-const periodForm = reactive({
-  step_seconds: 0,
-  lookback_hours: 720,
-  horizon_minutes: 15,
-  window_steps: 0,
-  min_points: 0,
-  run_interval_minutes: 0
-});
-
-function openPeriod() {
-  if (!selected.value) return;
-  const m = selected.value;
-  Object.assign(periodForm, {
-    step_seconds: m.step_seconds || 0,
-    lookback_hours: m.lookback_hours,
-    horizon_minutes: m.horizon_minutes,
-    window_steps: m.window_steps || 0,
-    min_points: m.min_points || 0,
-    run_interval_minutes: m.run_interval_minutes || 0
-  });
-  periodVisible.value = true;
-}
-
-async function savePeriod() {
-  if (!selected.value) return;
-  saving.value = true;
-  try {
-    const { error } = await fetchUpdateForecastModule(selected.value.id, { ...periodForm });
-    if (!error) {
-      periodVisible.value = false;
-      message.success(t('common.modifySuccess'));
-      await Promise.all([loadModules(), load()]);
-    }
-  } finally {
-    saving.value = false;
-  }
-}
-
-// ---- what the enabled algorithms need of this dataset
-const requirementsVisible = ref(false);
-const requirements = ref<Api.Forecast.Requirement[]>([]);
-const requirementsLoading = ref(false);
-
-async function openRequirements() {
-  if (!search.moduleId) return;
-  requirementsVisible.value = true;
-  requirementsLoading.value = true;
-  const { data } = await fetchGetModuleRequirements(search.moduleId);
-  requirementsLoading.value = false;
-  requirements.value = data || [];
-}
-
-const requirementColumns = computed<any[]>(() => [
-  { title: t('page.forecast.algorithms.columns.id'), key: 'algorithm_id', width: 150 },
-  { title: t('page.forecast.sources.key'), key: 'metric', width: 110 },
-  {
-    title: t('page.monitoring.datasets.step'),
-    key: 'step_seconds',
-    width: 80,
-    render: (row: Api.Forecast.Requirement) => stepLabel(row.step_seconds)
-  },
-  {
-    title: t('page.monitoring.datasets.requiredSteps'),
-    key: 'min_samples',
-    width: 130,
-    render: (row: Api.Forecast.Requirement) => `${row.min_samples} (${stepLabel(row.required_seconds)})`
-  },
-  { title: t('page.monitoring.datasets.availableSteps'), key: 'available_steps', width: 110 },
-  { title: t('page.monitoring.datasets.horizonSteps'), key: 'horizon_steps', width: 100 },
-  {
-    title: t('common.status'),
-    key: 'ok',
-    width: 90,
-    render: (row: Api.Forecast.Requirement) =>
-      h(NTag, { size: 'small', bordered: false, type: row.ok ? 'success' : 'warning' }, () =>
-        t(row.ok ? 'page.monitoring.datasets.enough' : 'page.monitoring.datasets.notEnough')
-      )
-  },
-  { title: t('page.forecast.algorithms.param.description'), key: 'reason', minWidth: 280, ellipsis: { tooltip: true } }
-]);
-
-// ---- collect the dataset now
-const collecting = ref(false);
-const collected = ref<Api.Forecast.CollectResult[] | null>(null);
-
-async function collect() {
-  if (!search.moduleId) return;
-  collecting.value = true;
-  try {
-    const { data } = await fetchCollectModule(search.moduleId);
-    collected.value = data || [];
-    await load();
-  } finally {
-    collecting.value = false;
-  }
-}
-
-const collectColumns = computed<any[]>(() => [
-  { title: t('page.forecast.sources.key'), key: 'metric', width: 120 },
-  { title: t('page.monitoring.datasets.fetched'), key: 'fetched', width: 90 },
-  { title: t('page.monitoring.datasets.stored'), key: 'stored', width: 90 },
-  {
-    title: t('page.monitoring.datasets.missingRatio'),
-    key: 'missing',
-    width: 110,
-    render: (row: Api.Forecast.CollectResult) =>
-      row.error ? '-' : `${((row.quality?.missing_ratio ?? 0) * 100).toFixed(1)}%`
-  },
-  {
-    title: t('common.status'),
-    key: 'error',
-    minWidth: 240,
-    render: (row: Api.Forecast.CollectResult) =>
-      row.error
-        ? h(NTag, { size: 'small', bordered: false, type: 'error' }, () => row.error)
-        : h(NTag, { size: 'small', bordered: false, type: 'success' }, () => t('common.success'))
-  }
-]);
 
 const checkedRowKeys = ref<number[]>([]);
 const batchActions = computed(() => [{ key: 'delete', label: t('common.delete'), danger: true }]);
@@ -612,16 +400,16 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 150,
+    width: 104,
     fixed: 'right',
     render: (row: Api.Forecast.DatasetSource) =>
       h(NSpace, { wrap: false }, () => [
-        h(NButton, { size: 'small', onClick: () => open(row) }, () => t('common.edit')),
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row) },
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error' }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
             default: () => t('page.forecast.sources.deleteConfirm')
           }
         )
@@ -650,12 +438,7 @@ const cfg = useTableColumnConfig({
 
 onMounted(async () => {
   cfg.initColumnConfig();
-  const [, , options] = await Promise.all([
-    loadModules(),
-    fetchGetDatasetCatalog().then(({ data }) => (catalog.value = data)),
-    fetchGetDatasourceOptions()
-  ]);
-  datasourceOptions.value = (options.data || []).map(item => ({ label: item.name, value: item.id }));
+  await Promise.all([loadModules(), fetchGetDatasetCatalog().then(({ data }) => (catalog.value = data))]);
   const fromRoute = Number(route.query.module_id);
   search.moduleId = modules.value.find(item => item.id === fromRoute)?.id ?? modules.value[0]?.id ?? null;
 });
@@ -688,24 +471,6 @@ onMounted(async () => {
       </NFormItemGi>
     </ListSearchCard>
 
-    <NCard v-if="selected" :bordered="false" size="small" class="card-wrapper rounded-16px shadow-sm">
-      <div class="flex flex-wrap items-center justify-between gap-8px">
-        <div class="flex flex-wrap gap-x-32px gap-y-8px">
-          <div v-for="item in periodItems" :key="item.label" class="flex-col gap-2px">
-            <span class="text-12px opacity-60">{{ item.label }}</span>
-            <span class="font-medium">{{ item.value }}</span>
-          </div>
-        </div>
-        <NSpace>
-          <NButton size="small" @click="openPeriod">{{ t('page.monitoring.datasets.editPeriod') }}</NButton>
-          <NButton size="small" @click="openRequirements">{{ t('page.monitoring.datasets.requirements') }}</NButton>
-          <NButton size="small" type="primary" ghost :loading="collecting" @click="collect">
-            {{ t('page.monitoring.datasets.collect') }}
-          </NButton>
-        </NSpace>
-      </div>
-    </NCard>
-
     <ListTablePanel
       v-model:checked-row-keys="checkedRowKeys"
       :row-key="(row: any) => row.id"
@@ -723,14 +488,6 @@ onMounted(async () => {
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>
-
-    <PromqlTester
-      v-model:show="testerVisible"
-      :initial="testerInitial"
-      :module-id="search.moduleId"
-      :test-only="testerOnly"
-      @apply="applyTested"
-    />
 
     <!-- source -->
     <NModal
@@ -778,65 +535,21 @@ onMounted(async () => {
             </NTag>
           </NFormItem>
 
-          <NFormItem v-if="!editing" :label="t('page.monitoring.datasets.queryOrigin')">
-            <NRadioGroup v-model:value="origin">
-              <NRadioButton value="mapping">{{ t('page.monitoring.datasets.originMapping') }}</NRadioButton>
-              <NRadioButton value="custom">{{ t('page.monitoring.datasets.originCustom') }}</NRadioButton>
-            </NRadioGroup>
-          </NFormItem>
-          <NFormItem v-if="origin === 'mapping' || editing" :label="t('page.forecast.sources.mapping')">
+          <!-- a dataset is a metric template bound to the module; the query is written on the Metric templates page -->
+          <NFormItem class="template-field">
+            <template #label>
+              <HelpLabel :label="t('page.monitoring.datasets.template')" :help="t('page.formHelp.datasetTemplate')" />
+            </template>
             <NSelect
               v-model:value="form.mapping_id"
               filterable
-              :options="mappingChoices"
-              :placeholder="t('page.forecast.sources.mappingPlaceholder')"
+              :options="templateOptions"
+              :placeholder="t('page.monitoring.datasets.templatePlaceholder')"
             />
-            <NButton class="ml-8px" :disabled="!form.mapping_id" @click="openTester">
-              {{ t('page.monitoring.queryTest.test') }}
-            </NButton>
           </NFormItem>
-          <template v-else>
-            <NFormItem :label="t('page.datasource.connections.name')">
-              <NSelect v-model:value="form.custom.datasource_id" filterable :options="datasourceOptions" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  PromQL
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-420px leading-22px">{{ t('page.monitoring.datasets.queryHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInput
-                v-model:value="form.custom.query"
-                type="textarea"
-                :autosize="{ minRows: 3, maxRows: 8 }"
-                :placeholder="queryExample"
-              />
-              <NButton class="mt-6px" type="primary" ghost @click="openTester">
-                {{ t('page.monitoring.queryTest.test') }}
-              </NButton>
-              <NTag v-if="customTested" class="ml-8px mt-6px" size="small" type="success" :bordered="false">
-                {{ t('page.monitoring.queryTest.stage_ok') }}
-              </NTag>
-            </NFormItem>
-            <NFormItem :label="t('page.monitoring.datasets.level')">
-              <NSelect v-model:value="form.custom.level" :options="levelOptions" />
-            </NFormItem>
-            <NFormItem v-if="selectedKind?.unit_is_not_fixed" :label="t('page.monitoring.datasets.unit')">
-              <NInput v-model:value="form.custom.unit" :placeholder="t('page.monitoring.datasets.unitPlaceholder')" />
-            </NFormItem>
-            <NFormItem :label="t('page.monitoring.datasets.queryStep')">
-              <DurationInput
-                v-model="form.custom.step_seconds"
-                unit="seconds"
-                :min="15"
-                :max="3600"
-                :presets="[60, 300, 900, 3600]"
-              />
-            </NFormItem>
-          </template>
+          <div class="query-test-wrap">
+            <QueryTestResult :config="testConfig" :module-id="search.moduleId" />
+          </div>
 
           <div class="mb-6px mt-8px flex items-center gap-6px font-medium">
             {{ t('page.monitoring.datasets.sectionShape') }}
@@ -950,7 +663,7 @@ onMounted(async () => {
             <NInputNumber v-model:value="form.threshold" :min="0" class="w-full" />
           </NFormItem>
           <NFormItem :label="t('page.datasource.connections.enabled')">
-            <NSwitch v-model:value="form.enabled" />
+            <StatusSelect v-model:value="form.enabled" />
           </NFormItem>
           <NFormItem :label="t('common.remark')">
             <NInput v-model:value="form.remark" />
@@ -963,105 +676,6 @@ onMounted(async () => {
           <NButton type="primary" :loading="saving" @click="save">{{ t('common.save') }}</NButton>
         </NSpace>
       </template>
-    </NModal>
-
-    <!-- period -->
-    <NModal
-      v-model:show="periodVisible"
-      preset="card"
-      :title="t('page.monitoring.datasets.editPeriod')"
-      class="w-640px max-w-90vw"
-    >
-      <NAlert type="info" :show-icon="false" class="mb-12px">{{ t('page.monitoring.datasets.periodHint') }}</NAlert>
-      <NForm :model="periodForm" label-placement="top">
-        <NFormItem :label="t('page.monitoring.datasets.step')">
-          <DurationInput
-            v-model="periodForm.step_seconds"
-            unit="seconds"
-            :min="15"
-            :max="86400"
-            :presets="[300, 900, 3600, 86400]"
-            :zero-label="t('page.forecast.modules.stepFollowSource')"
-          />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.lookbackHours')">
-          <DurationInput
-            v-model="periodForm.lookback_hours"
-            unit="hours"
-            :min="1"
-            :max="4320"
-            :presets="[86400, 604800, 2592000]"
-          />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.horizonMinutes')">
-          <DurationInput
-            v-model="periodForm.horizon_minutes"
-            unit="minutes"
-            :min="1"
-            :max="1440"
-            :presets="[300, 900, 3600, 86400]"
-          />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.windowSteps')">
-          <NInputNumber v-model:value="periodForm.window_steps" :min="0" :max="1000000" :precision="0" class="w-full" />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.minPoints')">
-          <NInputNumber v-model:value="periodForm.min_points" :min="0" :max="100000" :precision="0" class="w-full" />
-        </NFormItem>
-        <NFormItem :label="t('page.forecast.modules.runInterval')">
-          <DurationInput
-            v-model="periodForm.run_interval_minutes"
-            unit="minutes"
-            :min="1"
-            :max="43200"
-            :presets="[300, 900, 3600, 86400]"
-            :zero-label="t('page.forecast.modules.runEveryCycle')"
-          />
-        </NFormItem>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="periodVisible = false">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" :loading="saving" @click="savePeriod">{{ t('common.save') }}</NButton>
-        </NSpace>
-      </template>
-    </NModal>
-
-    <!-- requirements -->
-    <NModal
-      v-model:show="requirementsVisible"
-      preset="card"
-      :title="t('page.monitoring.datasets.requirements')"
-      class="w-1000px max-w-95vw"
-    >
-      <NAlert type="info" :show-icon="false" class="mb-12px">
-        {{ t('page.monitoring.datasets.requirementsHint') }}
-      </NAlert>
-      <NDataTable
-        size="small"
-        :loading="requirementsLoading"
-        :columns="requirementColumns"
-        :data="requirements"
-        :scroll-x="980"
-        :row-key="(row: Api.Forecast.Requirement) => `${row.algorithm_id}/${row.metric}`"
-        max-height="50vh"
-      />
-    </NModal>
-
-    <!-- collect result -->
-    <NModal
-      :show="Boolean(collected)"
-      preset="card"
-      :title="t('page.monitoring.datasets.collectResult')"
-      class="w-760px max-w-95vw"
-      @update:show="value => !value && (collected = null)"
-    >
-      <NDataTable
-        size="small"
-        :columns="collectColumns"
-        :data="collected || []"
-        :row-key="(row: Api.Forecast.CollectResult) => row.metric"
-      />
     </NModal>
   </div>
 </template>

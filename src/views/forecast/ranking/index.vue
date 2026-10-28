@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { NButton, NFormItemGi, NModal, NSelect, NTabPane, NTabs, NTag, useMessage } from 'naive-ui';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { NButton, NFormItemGi, NModal, NSelect, NTag, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import BatchActions from '@/components/business/batch-actions.vue';
@@ -9,45 +9,65 @@ import RankList from '@/components/business/rank-list.vue';
 import ScoreBreakdown from '@/components/business/score-breakdown.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
-import { fetchGetMetricScores, fetchGetRanking, fetchScoreModule } from '@/service/api';
+import { fetchGetHistoryRankings, fetchGetMetricScores, fetchGetRanking, fetchScoreModule } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatDecimal, formatPercent } from '@/utils/format';
+import { reasonText } from '@/utils/reason';
 
 defineOptions({ name: 'ForecastRanking' });
 
+/**
+ * The ranking of the algorithms of a module: one list, the newest evaluation. Every enabled algorithm is listed: one without
+ * a result says why instead of disappearing. The detail of an algorithm has its ranking per metric and how its rank and score
+ * moved over the evaluations of the time range, next to the other algorithms.
+ */
 const { t } = useI18n();
 const message = useMessage();
 const route = useRoute();
 const { moduleOptions, modules, loadModules } = useForecastModules();
 
 const percent = (value: number) => (value < 0 ? '-' : formatPercent(value, 1));
-const tab = ref<'composite' | 'metrics'>('composite');
-const search = reactive({ moduleId: null as number | null, range: lastHours(24 * 7) as [number, number] | null });
+const search = reactive({
+  moduleId: null as number | null,
+  range: lastHours(24 * 7) as [number, number] | null,
+  /** what the algorithms are ranked on: all resources together (null) or one resource by itself */
+  metric: null as 'cpu' | 'memory' | 'gpu' | null
+});
+const metricOptions = computed(() =>
+  (['cpu', 'memory', 'gpu'] as const).map(value => ({ label: t(`page.forecast.scores.part_${value}`), value }))
+);
 
-// ================= the score of the replay (replicas, CPU, memory, GPU): every enabled algorithm that was scored =================
 const ranking = ref<Api.Forecast.Ranking | null>(null);
+const metricScores = ref<Api.Forecast.MetricScores | null>(null);
+/** the evaluations of the range, newest 30: the history an algorithm is compared with in its detail */
+const history = ref<Api.Forecast.HistoryRanking[]>([]);
 const loading = ref(false);
 const scoring = ref(false);
-const detail = ref<Api.Forecast.RankingRow | null>(null);
-const checkedComposite = ref<string[]>([]);
+const detailKey = ref<string | null>(null);
+const checkedMain = ref<string[]>([]);
 
-async function loadRanking() {
+async function load() {
   if (!search.moduleId) {
     ranking.value = null;
+    metricScores.value = null;
+    history.value = [];
     return;
   }
   loading.value = true;
-  const { data } = await fetchGetRanking(search.moduleId);
-  loading.value = false;
-  ranking.value = data || null;
-  checkedComposite.value = [];
+  try {
+    const [current, measured, past] = await Promise.all([
+      fetchGetRanking(search.moduleId),
+      fetchGetMetricScores(search.moduleId, rangeParams(search.range)),
+      fetchGetHistoryRankings({ module_id: search.moduleId, ...rangeParams(search.range), page: 1, page_size: 30 })
+    ]);
+    ranking.value = current.data || null;
+    metricScores.value = measured.data || null;
+    history.value = past.data?.list || [];
+    checkedMain.value = [];
+  } finally {
+    loading.value = false;
+  }
 }
-
-const rows = computed(() => ranking.value?.list || []);
-const best = computed(() => rows.value.find(row => row.score !== null && row.rank === 1));
-const inUse = computed(() => rows.value.find(row => row.selected));
-const scoredAt = computed(() => rows.value.find(row => row.at)?.at || null);
-const scoredCount = computed(() => rows.value.filter(row => row.score !== null).length);
 
 async function scoreNow() {
   if (!search.moduleId) return;
@@ -63,12 +83,44 @@ async function scoreNow() {
   }
 }
 
-const partOf = (row: Api.Forecast.RankingRow, metric: Api.Forecast.BreakdownRow['metric']) =>
-  row.breakdown?.find(item => item.metric === metric);
+const rows = computed(() => ranking.value?.list || []);
+const best = computed(() => rows.value.find(row => row.score !== null && row.rank === 1));
+const inUse = computed(() => rows.value.find(row => row.selected));
+/** the algorithm in use with its accuracy on each resource, as one line */
+const inUseAccuracy = computed(() =>
+  (inUse.value?.breakdown || [])
+    .filter(part => part.metric !== 'replicas')
+    .map(part => `${t(`page.forecast.scores.part_${part.metric}`)} ${percent(part.accuracy)}`)
+    .join(' · ')
+);
+const scoredAt = computed(() => rows.value.find(row => row.at)?.at || null);
+const scoredCount = computed(() => rows.value.filter(row => row.score !== null).length);
+const measuredBy = computed(() => new Map((metricScores.value?.algorithms || []).map(row => [row.algorithm_id, row])));
 
-const compositeItems = computed(() =>
-  rows.value.map(row => {
-    const tags: Array<{ label: string; type?: 'success' | 'warning' | 'info' }> = [];
+const partOf = (breakdown: Api.Forecast.BreakdownRow[] | undefined, metric: Api.Forecast.BreakdownRow['metric']) =>
+  breakdown?.find(item => item.metric === metric);
+
+function replayParts(breakdown: Api.Forecast.BreakdownRow[] | undefined) {
+  // the accuracy is that of the resources: the replica count follows from them and is no figure of its own
+  const only = search.metric ? [search.metric] : (['cpu', 'memory', 'gpu', 'replicas'] as const);
+  return only
+    .map(metric => ({ metric, found: partOf(breakdown, metric) }))
+    .filter(item => item.found)
+    .map(item => ({
+      label: t(`page.forecast.scores.part_${item.metric}`),
+      value: item.found!.accuracy,
+      text: percent(item.found!.accuracy),
+      hint: `${t('page.forecast.scores.accuracy')} ${percent(item.found!.accuracy)} · ${t('page.forecast.scores.error')} ${percent(item.found!.error)}`
+    }));
+}
+
+const stateType = (state: Api.Forecast.AlgorithmState): 'error' | 'success' | 'warning' =>
+  state === 'failed' ? 'error' : state === 'ready' ? 'success' : 'warning';
+
+/** one entry per algorithm: the replay score, the measured accuracy next to it, and the reason when there is no score */
+const mainItems = computed(() => {
+  const items = rows.value.map(row => {
+    const tags: Array<{ label: string; type?: 'success' | 'warning' | 'info' | 'error' }> = [];
     if (row.name === best.value?.name) tags.push({ label: t('page.forecast.ranking.best'), type: 'success' });
     if (row.selected) tags.push({ label: t('page.forecast.scores.inUse'), type: 'info' });
     else if (ranking.value?.challenger === row.name) {
@@ -77,15 +129,31 @@ const compositeItems = computed(() =>
         type: 'warning'
       });
     }
-    const parts = (['replicas', 'cpu', 'memory', 'gpu'] as const)
-      .map(metric => ({ metric, found: partOf(row, metric) }))
-      .filter(item => item.found)
-      .map(item => ({
-        label: t(`page.forecast.scores.part_${item.metric}`),
-        value: item.found!.accuracy,
-        text: percent(item.found!.accuracy),
-        hint: `${t('page.forecast.scores.accuracy')} ${percent(item.found!.accuracy)} · ${t('page.forecast.scores.error')} ${percent(item.found!.error)}`
-      }));
+    const measured = measuredBy.value.get(row.name);
+    // without a replay score, a recorded run that was skipped or failed explains it; one that has measured values says the replay is what is missing
+    const state = row.score === null && measured ? 'no_result' : row.status;
+    if (row.score === null) tags.push({ label: t(`page.forecast.ranking.state_${state}`), type: stateType(state) });
+    const parts = replayParts(row.breakdown);
+    if (measured) {
+      parts.push({
+        label: t('page.forecast.ranking.measured'),
+        value: measured.accuracy,
+        text: percent(measured.accuracy),
+        hint: `${t('page.forecast.scores.accuracy')} ${percent(measured.accuracy)} · ${measured.runs} ${t('page.forecast.ranking.runs')} · ${measured.points} ${t('page.forecast.ranking.points')}`
+      });
+    }
+    const caption = [
+      row.score === null ? (measured ? t('page.forecast.ranking.noReplayWindow') : reasonText(row.reason)) : '',
+      row.windows ? `${row.windows} ${t('page.forecast.scores.windows')}` : '',
+      row.weight && row.weight !== 1
+        ? `${t('page.forecast.algorithms.columns.weight')} ${formatDecimal(row.weight)}`
+        : '',
+      row.detail && row.detail.oom_penalty > 0
+        ? `${t('page.forecast.scores.oomPenalty')} ${percent(row.detail.oom_penalty)}`
+        : ''
+    ]
+      .filter(Boolean)
+      .join(' · ');
     return {
       key: row.name,
       rank: row.rank || null,
@@ -96,105 +164,46 @@ const compositeItems = computed(() =>
       tags,
       parts,
       movement: row.previous_rank != null && row.rank ? row.previous_rank - row.rank : null,
-      caption: [
-        row.windows ? `${row.windows} ${t('page.forecast.scores.windows')}` : '',
-        row.weight && row.weight !== 1
-          ? `${t('page.forecast.algorithms.columns.weight')} ${formatDecimal(row.weight)}`
-          : '',
-        row.detail && row.detail.oom_penalty > 0
-          ? `${t('page.forecast.scores.oomPenalty')} ${percent(row.detail.oom_penalty)}`
-          : ''
-      ]
-        .filter(Boolean)
-        .join(' · ')
+      caption
     };
-  })
-);
-const detailOf = (key: string) => rows.value.find(row => row.name === key) || null;
-
-// ================= the forecast against what Prometheus reported, per source =================
-const metricScores = ref<Api.Forecast.MetricScores | null>(null);
-const metricLoading = ref(false);
-const checkedAlgorithms = ref<string[]>([]);
-const checkedMetrics = ref<string[]>([]);
-
-async function loadMetrics() {
-  if (!search.moduleId) {
-    metricScores.value = null;
-    return;
-  }
-  metricLoading.value = true;
-  const { data } = await fetchGetMetricScores(search.moduleId, rangeParams(search.range));
-  metricLoading.value = false;
-  metricScores.value = data || null;
-  checkedAlgorithms.value = [];
-  checkedMetrics.value = [];
-}
-
-/** every algorithm that has measured values, ranked on the same standard */
-const algorithmItems = computed(() =>
-  (metricScores.value?.algorithms || []).map(row => {
-    const tags: Array<{ label: string; type?: 'success' | 'warning' | 'default' }> = [];
-    if (row.best) tags.push({ label: t('page.forecast.ranking.best'), type: 'success' });
-    if (row.custom) tags.push({ label: t('page.forecast.algorithms.originCustom'), type: 'warning' });
-    if (row.baseline) tags.push({ label: t('page.forecast.evaluation.baseline') });
-    else if (row.beats_baseline !== undefined) {
-      tags.push({
-        label: t(row.beats_baseline ? 'page.forecast.ranking.beats' : 'page.forecast.ranking.notBeats'),
-        type: row.beats_baseline ? 'success' : 'warning'
-      });
-    }
-    return {
-      key: row.algorithm_id,
-      rank: row.rank,
-      name: row.algorithm_id,
-      score: row.score,
-      scoreText: formatDecimal(row.score, 1),
-      tags,
-      parts: [
-        { label: t('page.forecast.scores.accuracy'), value: row.accuracy, text: percent(row.accuracy) },
-        { label: t('page.forecast.scores.error'), value: 1 - row.error, text: percent(row.error) }
-      ],
-      caption: `${row.sources} ${t('page.forecast.ranking.sources')} · ${row.runs} ${t('page.forecast.ranking.runs')} · ${row.points} ${t('page.forecast.ranking.points')}`
-    };
-  })
-);
-
-/** the standard metric ranking: for every metric, the algorithms ranked by accuracy on it */
-const metricItems = computed(() => {
-  const groups = new Map<string, Api.Forecast.MetricScore[]>();
-  for (const score of metricScores.value?.metrics || []) {
-    const key = `${score.source_name}/${score.metric}`;
-    groups.set(key, [...(groups.get(key) || []), score]);
-  }
-  return [...groups.entries()].flatMap(([group, scores]) =>
-    [...scores]
-      .sort((a, b) => b.accuracy - a.accuracy)
-      .map((score, index) => ({
-        key: `${group}/${score.algorithm_id}`,
-        rank: index + 1,
-        name: score.algorithm_id,
-        score: score.accuracy * 100,
-        scoreText: percent(score.accuracy),
-        tags: [
-          { label: score.source_name, type: 'info' as const },
-          ...(score.in_composite
-            ? [{ label: `${t('page.forecast.scores.weightShare')} ${percent(score.weight)}` }]
-            : [])
-        ],
-        parts: [
-          { label: t('page.forecast.scores.error'), value: 1 - score.error, text: percent(score.error) },
-          {
-            label: t('page.forecast.evaluation.peakUnder'),
-            value: 1 - score.peak_under,
-            text: percent(score.peak_under)
-          }
-        ],
-        caption: `${t(`page.monitoring.datasets.category_${score.category}`)} · MAE ${formatDecimal(score.mae)} · RMSE ${formatDecimal(score.rmse)} · ${t('page.forecast.ranking.bias')} ${formatDecimal(score.bias)} · ${score.runs} ${t('page.forecast.ranking.runs')} · ${score.points} ${t('page.forecast.ranking.points')}`
-      }))
-  );
+  });
+  const metric = search.metric;
+  if (!metric) return items;
+  // one resource by itself: each algorithm is scored and ranked on that resource ("naive CPU", "naive memory")
+  const label = t(`page.forecast.scores.part_${metric}`);
+  const scoreOf = (key: string) => partOf(rows.value.find(row => row.name === key)?.breakdown, metric)?.score;
+  return items
+    .filter(item => scoreOf(item.key) !== undefined)
+    .sort((a, b) => (scoreOf(b.key) as number) - (scoreOf(a.key) as number))
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+      name: `${item.name} ${label}`,
+      score: scoreOf(item.key) as number,
+      scoreText: formatDecimal(scoreOf(item.key) as number, 1),
+      movement: null,
+      tags: item.tags
+        .filter(tag => tag.label !== t('page.forecast.ranking.best'))
+        .concat(index === 0 ? [{ label: t('page.forecast.ranking.best'), type: 'success' as const }] : [])
+    }));
 });
 
+const detail = computed(() => rows.value.find(row => row.name === detailKey.value) || null);
+/** how the algorithm stood in each past evaluation of the range: its rank among the algorithms and its score, newest first */
+const detailHistory = computed(() =>
+  history.value
+    .map(item => ({
+      at: item.at,
+      row: item.rows.find(row => row.algorithm === detailKey.value),
+      total: item.rows.length
+    }))
+    .filter(item => item.row)
+);
+const detailMetrics = computed(() =>
+  (metricScores.value?.metrics || []).filter(item => item.algorithm_id === detailKey.value)
+);
+
+// ---- exports of the checked rows
 const batchActions = computed(() => [{ key: 'export', label: t('page.forecast.metrics.exportCsv') }]);
 
 function download(name: string, lines: string[]) {
@@ -205,65 +214,27 @@ function download(name: string, lines: string[]) {
   URL.revokeObjectURL(link.href);
 }
 
-function exportComposite() {
-  const keys = new Set(checkedComposite.value);
-  const lines = ['rank,algorithm,score,windows,in_use'];
+function exportMain() {
+  const keys = new Set(checkedMain.value);
+  const lines = ['rank,algorithm,score,windows,in_use,status,reason'];
   for (const r of rows.value.filter(item => keys.has(item.name))) {
-    lines.push([r.rank, r.name, r.score === null ? '' : formatDecimal(r.score), r.windows, r.selected].join(','));
-  }
-  download('kubeforecast-ranking.csv', lines);
-}
-function exportAlgorithms() {
-  const keys = new Set(checkedAlgorithms.value);
-  const lines = ['rank,algorithm,score,accuracy,error,sources,runs,points'];
-  for (const r of (metricScores.value?.algorithms || []).filter(item => keys.has(item.algorithm_id))) {
     lines.push(
       [
         r.rank,
-        r.algorithm_id,
-        formatDecimal(r.score),
-        formatDecimal(r.accuracy),
-        formatDecimal(r.error),
-        r.sources,
-        r.runs,
-        r.points
+        r.name,
+        r.score === null ? '' : formatDecimal(r.score),
+        r.windows,
+        r.selected,
+        r.status,
+        JSON.stringify(r.reason || '')
       ].join(',')
     );
   }
-  download('kubeforecast-algorithm-scores.csv', lines);
+  download('kube-resource-fcst-ranking.csv', lines);
 }
-function exportMetrics() {
-  const keys = new Set(checkedMetrics.value);
-  const lines = ['source,algorithm,accuracy,error,mae,rmse,bias,peak_under,runs,points'];
-  for (const r of (metricScores.value?.metrics || []).filter(item =>
-    keys.has(`${item.source_name}/${item.metric}/${item.algorithm_id}`)
-  )) {
-    lines.push(
-      [
-        r.source_name,
-        r.algorithm_id,
-        formatDecimal(r.accuracy),
-        formatDecimal(r.error),
-        formatDecimal(r.mae),
-        formatDecimal(r.rmse),
-        formatDecimal(r.bias),
-        formatDecimal(r.peak_under),
-        r.runs,
-        r.points
-      ].join(',')
-    );
-  }
-  download('kubeforecast-metric-scores.csv', lines);
-}
-
-async function load() {
-  await Promise.all([loadRanking(), loadMetrics()]);
-}
-
-watch(() => search.moduleId, load);
 
 function resetSearch() {
-  Object.assign(search, { moduleId: modules.value[0]?.id ?? null, range: lastHours(24 * 7) });
+  Object.assign(search, { moduleId: modules.value[0]?.id ?? null, range: lastHours(24 * 7), metric: null });
   load();
 }
 
@@ -277,7 +248,7 @@ onMounted(async () => {
 <template>
   <div class="h-full flex-col overflow-hidden gap-12px">
     <ListSearchCard :model="search" :action-span="4" @search="load" @reset="resetSearch">
-      <NFormItemGi class="list-search-select-field" :span="9" :label="t('page.forecast.modules.name')">
+      <NFormItemGi class="list-search-select-field" :span="7" :label="t('page.forecast.modules.name')">
         <NSelect
           v-model:value="search.moduleId"
           filterable
@@ -285,116 +256,129 @@ onMounted(async () => {
           :placeholder="t('common.selectField', { field: t('page.forecast.modules.name') })"
         />
       </NFormItemGi>
-      <NFormItemGi :span="11" :label="t('common.timeRange')">
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="4"
+        :label="t('page.datasource.mappings.metric')"
+      >
+        <NSelect
+          v-model:value="search.metric"
+          clearable
+          :options="metricOptions"
+          :placeholder="t('page.forecast.ranking.allMetrics')"
+        />
+      </NFormItemGi>
+      <NFormItemGi :span="9" :label="t('common.timeRange')">
         <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
 
-    <NTabs v-model:value="tab" type="segment" size="small" class="flex-shrink-0 w-420px max-w-full">
-      <NTabPane name="composite" :tab="t('page.forecast.ranking.tabComposite')" />
-      <NTabPane name="metrics" :tab="t('page.forecast.ranking.tabMetrics')" />
-    </NTabs>
-
-    <!-- the ranking of the replay score -->
     <RankList
-      v-if="tab === 'composite'"
-      v-model:checked="checkedComposite"
+      v-model:checked="checkedMain"
       selectable
       :title="t('page.forecast.scores.rankingTitle')"
-      :help="t('page.forecast.scores.rankingHelp')"
-      :items="compositeItems"
+      :help="t('page.forecast.ranking.mergedHelp')"
+      :items="mainItems"
       :loading="loading"
       :empty-text="t('page.forecast.scores.empty')"
     >
       <template #tools>
-        <BatchActions :count="checkedComposite.length" :actions="batchActions" @run="exportComposite" />
-        <NButton size="small" :loading="loading" @click="loadRanking">{{ t('common.refresh') }}</NButton>
+        <NTag
+          v-if="metricScores && !metricScores.comparable && metricScores.algorithms.length > 1"
+          size="small"
+          type="warning"
+          :bordered="false"
+        >
+          {{ t('page.forecast.ranking.notComparable') }}
+        </NTag>
+        <BatchActions :count="checkedMain.length" :actions="batchActions" @run="exportMain" />
+        <NButton size="small" :loading="loading" @click="load">{{ t('common.refresh') }}</NButton>
         <NButton size="small" type="primary" :loading="scoring" :disabled="!search.moduleId" @click="scoreNow">
           {{ t('page.forecast.scores.scoreNow') }}
         </NButton>
       </template>
       <template #summary>
-        <div class="summary">
-          <div class="summary__item">
-            <div class="summary__label">{{ t('page.forecast.ranking.best') }}</div>
-            <div class="summary__value">{{ best?.name || '-' }}</div>
-            <div class="summary__sub">{{ best?.score != null ? formatDecimal(best.score, 1) : '' }}</div>
-          </div>
-          <div class="summary__item">
-            <div class="summary__label">{{ t('page.forecast.scores.inUse') }}</div>
-            <div class="summary__value">{{ inUse?.name || '-' }}</div>
-            <div class="summary__sub">{{ inUse?.score != null ? formatDecimal(inUse.score, 1) : '' }}</div>
-          </div>
-          <div class="summary__item">
-            <div class="summary__label">{{ t('page.forecast.ranking.challenger') }}</div>
-            <div class="summary__value">{{ ranking?.challenger || '-' }}</div>
-            <div class="summary__sub">
-              {{
-                ranking?.challenger ? t('page.forecast.scores.challenger', { cycles: ranking.challenger_cycles }) : ''
-              }}
-            </div>
-          </div>
-          <div class="summary__item">
-            <div class="summary__label">{{ t('page.forecast.ranking.scoredAlgorithms') }}</div>
-            <div class="summary__value">{{ scoredCount }} / {{ rows.length }}</div>
-            <div class="summary__sub">{{ scoredAt ? formatDateTime(scoredAt) : '' }}</div>
-          </div>
+        <div class="flex flex-wrap items-center gap-x-16px gap-y-4px text-13px">
+          <span>
+            <span class="opacity-65">{{ t('page.forecast.ranking.best') }}</span>
+            <b class="ml-4px">{{ best?.name || '-' }}</b>
+            <span v-if="best?.score != null" class="ml-4px opacity-65">{{ formatDecimal(best.score, 1) }}</span>
+          </span>
+          <span>
+            <span class="opacity-65">{{ t('page.forecast.scores.inUse') }}</span>
+            <b class="ml-4px">{{ inUse?.name || '-' }}</b>
+            <span v-if="inUseAccuracy" class="ml-4px opacity-65">{{ inUseAccuracy }}</span>
+          </span>
+          <span v-if="ranking?.challenger">
+            <span class="opacity-65">{{ t('page.forecast.ranking.challenger') }}</span>
+            <b class="ml-4px">{{ ranking.challenger }}</b>
+          </span>
+          <span>
+            <span class="opacity-65">{{ t('page.forecast.ranking.scoredAlgorithms') }}</span>
+            <b class="ml-4px">{{ scoredCount }} / {{ rows.length }}</b>
+            <span v-if="scoredAt" class="ml-4px opacity-65">{{ formatDateTime(scoredAt) }}</span>
+          </span>
         </div>
       </template>
       <template #actions="{ item }">
-        <NButton size="small" type="primary" ghost :disabled="item.score === null" @click="detail = detailOf(item.key)">
+        <NButton
+          size="small"
+          type="primary"
+          ghost
+          :disabled="!rows.find(row => row.name === item.key)"
+          @click="detailKey = item.key"
+        >
           {{ t('common.detail') }}
         </NButton>
       </template>
     </RankList>
 
-    <!-- the forecast against the actuals: the composite result and the standard ranking of each metric, as two lists -->
-    <template v-else>
-      <RankList
-        v-model:checked="checkedAlgorithms"
-        selectable
-        :title="t('page.forecast.ranking.compositeTitle')"
-        :help="t('page.forecast.ranking.compositeHelp')"
-        :items="algorithmItems"
-        :loading="metricLoading"
-        :empty-text="t('page.forecast.ranking.noMeasured')"
-      >
-        <template #tools>
-          <NTag
-            v-if="metricScores && !metricScores.comparable && metricScores.algorithms.length > 1"
-            size="small"
-            type="warning"
-            :bordered="false"
-          >
-            {{ t('page.forecast.ranking.notComparable') }}
-          </NTag>
-          <BatchActions :count="checkedAlgorithms.length" :actions="batchActions" @run="exportAlgorithms" />
-          <NButton size="small" :loading="metricLoading" @click="loadMetrics">{{ t('common.refresh') }}</NButton>
-        </template>
-      </RankList>
-      <RankList
-        v-model:checked="checkedMetrics"
-        selectable
-        :title="t('page.forecast.ranking.metricsTitle')"
-        :help="t('page.forecast.ranking.metricsHelp')"
-        :items="metricItems"
-        :loading="metricLoading"
-        :empty-text="t('page.forecast.ranking.noMeasured')"
-      >
-        <template #tools>
-          <BatchActions :count="checkedMetrics.length" :actions="batchActions" @run="exportMetrics" />
-        </template>
-      </RankList>
-    </template>
-
     <NModal
       :show="Boolean(detail)"
       preset="card"
       :title="detail?.name"
-      class="w-720px max-w-95vw"
-      @update:show="value => !value && (detail = null)"
+      class="w-760px max-w-95vw"
+      @update:show="value => !value && (detailKey = null)"
     >
-      <ScoreBreakdown v-if="detail" :rows="detail.breakdown || []" :result="detail.detail" :score="detail.score" />
+      <template v-if="detail">
+        <ScoreBreakdown
+          v-if="detail.score !== null"
+          :rows="detail.breakdown || []"
+          :result="detail.detail"
+          :score="detail.score"
+        />
+        <div v-else class="leading-22px">{{ reasonText(detail.reason) }}</div>
+        <div v-if="detailHistory.length" class="mt-12px">
+          <div class="mb-6px font-medium">{{ t('page.forecast.ranking.historyCompare') }}</div>
+          <div class="grid grid-cols-[170px_90px_80px_1fr] gap-x-8px gap-y-2px text-13px">
+            <span class="opacity-65">{{ t('page.forecast.scores.scoredAt') }}</span>
+            <span class="opacity-65">{{ t('page.forecast.scores.rank') }}</span>
+            <span class="opacity-65">{{ t('page.forecast.scores.score') }}</span>
+            <span class="opacity-65">{{ t('page.forecast.scores.wasInUse') }}</span>
+            <template v-for="item in detailHistory" :key="item.at">
+              <span>{{ formatDateTime(item.at) }}</span>
+              <span>{{ item.row!.rank }} / {{ item.total }}</span>
+              <span>{{ formatDecimal(item.row!.score, 1) }}</span>
+              <span>
+                <NTag v-if="item.row!.selected" size="small" :bordered="false" type="info">
+                  {{ t('page.forecast.scores.wasInUse') }}
+                </NTag>
+              </span>
+            </template>
+          </div>
+        </div>
+        <div v-if="detailMetrics.length" class="mt-12px">
+          <div class="mb-6px font-medium">{{ t('page.forecast.ranking.metricsTitle') }}</div>
+          <div v-for="item in detailMetrics" :key="item.metric" class="flex flex-wrap items-center gap-8px py-2px">
+            <NTag size="small" :bordered="false" type="info">{{ item.source_name }}</NTag>
+            <span>
+              {{ t('page.forecast.scores.accuracy') }} {{ percent(item.accuracy) }} · MAE
+              {{ formatDecimal(item.mae) }} · RMSE {{ formatDecimal(item.rmse) }} · {{ item.runs }}
+              {{ t('page.forecast.ranking.runs') }}
+            </span>
+          </div>
+        </div>
+      </template>
     </NModal>
   </div>
 </template>

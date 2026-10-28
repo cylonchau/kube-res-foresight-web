@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import logoSrc from '@/assets/svg-icon/kube-resource-fcst-logo.svg';
+import { computed } from 'vue';
+import darkLogo from '@/assets/svg-icon/kube-resource-fcst-logo-dark.svg';
+import lightLogo from '@/assets/svg-icon/kube-resource-fcst-logo-light.svg';
+import { useThemeStore } from '@/store/modules/theme';
 
 interface Props {
   small?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), { small: false });
+/** the logo made for the theme: light on the light theme, dark on the dark one */
+const themeStore = useThemeStore();
+const logoSrc = computed(() => (themeStore.darkMode ? darkLogo : lightLogo));
 </script>
 
 <template>

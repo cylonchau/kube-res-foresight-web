@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, h } from 'vue';
 import { NDataTable, NEmpty, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ReplicaExplain from '@/components/business/replica-explain.vue';
+import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
 
 defineOptions({ name: 'RecommendationExplain' });
 
@@ -32,6 +33,33 @@ interface Detail {
   expansion?: Api.Forecast.Expansion;
   considered?: Array<{ metric: string; algorithm_id: string; eligible: boolean; reason: string; peak?: number }>;
   active_periods?: string[];
+  periods?: Array<{
+    name: string;
+    enabled: boolean;
+    active: boolean;
+    priority: number;
+    weekly: boolean;
+    start?: string;
+    end?: string;
+    replicas: number;
+    cpu_milli: number;
+    memory_bytes: number;
+  }>;
+  sources?: Array<{
+    key: string;
+    name: string;
+    kind: string;
+    resource: string;
+    enabled: boolean;
+    datasource?: string;
+    query?: string;
+    level?: string;
+    unit?: string;
+    step_seconds?: number;
+    stat: string;
+    basis: string;
+    scale: number;
+  }>;
   degraded?: Record<string, string>;
   degrade_notes?: Record<string, string>;
   oom?: {
@@ -45,6 +73,17 @@ interface Detail {
     reason: string;
   };
   heap?: { ratio?: number; threshold: number; over: boolean; reason: string };
+  /** how the Pod CPU and memory of the snapshot were decided apart from the replicas */
+  resource_spec?: {
+    version: number;
+    changed_at?: string;
+    held: boolean;
+    changed: boolean;
+    computed: { cpu_milli: number; memory_bytes: number };
+    pinned: { cpu_milli: number; memory_bytes: number };
+    change_percent: number;
+    hold_hours: number;
+  };
 }
 
 interface Props {
@@ -54,7 +93,6 @@ interface Props {
 
 const props = defineProps<Props>();
 const { t } = useI18n();
-const MIB = 1024 * 1024;
 
 const parsed = computed<Detail | null>(() => {
   try {
@@ -66,8 +104,8 @@ const parsed = computed<Detail | null>(() => {
 
 function valueText(name: string, field: Field) {
   if (!field.set) return t('page.forecast.recommendations.keepOriginal');
-  if (name === 'cpu') return `${field.value} m`;
-  if (name === 'memory') return `${Math.round(field.value / MIB)} MiB`;
+  if (name === 'cpu') return formatCpuMilli(field.value);
+  if (name === 'memory') return formatMemoryBytes(field.value);
   if (name === 'gpu') return `${field.value} GPU`;
   return String(field.value);
 }
@@ -196,7 +234,116 @@ const calcColumns = computed(() => [
   { title: t('page.forecast.explain.note'), key: 'note', minWidth: 200, ellipsis: { tooltip: true } }
 ]);
 
-const bytes = (value?: number) => (value ? `${Math.round(value / MIB)} MiB` : '-');
+const bytes = (value?: number) => (value ? formatMemoryBytes(value) : '-');
+
+/** the rows of the spec table: what the forecast computed and what the snapshot carries, for CPU and memory */
+const specRows = computed(() => {
+  const spec = parsed.value?.resource_spec;
+  if (!spec) return [];
+  return [
+    {
+      name: 'cpu',
+      computed: spec.computed.cpu_milli ? formatCpuMilli(spec.computed.cpu_milli) : '-',
+      pinned: spec.pinned.cpu_milli ? formatCpuMilli(spec.pinned.cpu_milli) : '-',
+      kept: spec.computed.cpu_milli !== spec.pinned.cpu_milli
+    },
+    {
+      name: 'memory',
+      computed: spec.computed.memory_bytes ? formatMemoryBytes(spec.computed.memory_bytes) : '-',
+      pinned: spec.pinned.memory_bytes ? formatMemoryBytes(spec.pinned.memory_bytes) : '-',
+      kept: spec.computed.memory_bytes !== spec.pinned.memory_bytes
+    }
+  ];
+});
+const specColumns = computed(() => [
+  {
+    title: t('page.forecast.explain.field'),
+    key: 'name',
+    width: 90,
+    render: (row: { name: string }) => t(`page.forecast.explain.field_${row.name}`)
+  },
+  { title: t('page.forecast.explain.specComputed'), key: 'computed', width: 130 },
+  { title: t('page.forecast.explain.specPinned'), key: 'pinned', width: 130 },
+  {
+    title: t('page.forecast.explain.state'),
+    key: 'kept',
+    width: 130,
+    render: (row: { kept: boolean }) =>
+      h(NTag, { size: 'small', bordered: false, type: row.kept ? 'info' : 'success' }, () =>
+        t(row.kept ? 'page.forecast.recommendations.specHeld' : 'page.forecast.recommendations.specChanged')
+      )
+  }
+]);
+
+// ---- the fixed periods of the module and whether they decided, and the metrics the figures are calculated from
+const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '-');
+const periodColumns = computed(() => [
+  { title: t('page.forecast.periods.col_name'), key: 'name', width: 140, ellipsis: { tooltip: true } },
+  {
+    title: t('page.forecast.periods.col_enabled'),
+    key: 'state',
+    width: 100,
+    render: (row: NonNullable<Detail['periods']>[number]) =>
+      h(NTag, { size: 'small', bordered: false, type: row.active ? 'success' : 'default' }, () =>
+        t(`page.forecast.explain.period_${!row.enabled ? 'disabled' : row.active ? 'active' : 'idle'}`)
+      )
+  },
+  {
+    title: t('page.forecast.periods.col_range'),
+    key: 'range',
+    minWidth: 260,
+    render: (row: NonNullable<Detail['periods']>[number]) =>
+      row.weekly ? t('page.forecast.explain.period_weekly') : `${when(row.start)} → ${when(row.end)}`
+  },
+  {
+    title: t('page.forecast.explain.period_values'),
+    key: 'values',
+    minWidth: 220,
+    render: (row: NonNullable<Detail['periods']>[number]) =>
+      [
+        row.replicas ? `${t('page.forecast.periods.col_replicas')} ${row.replicas}` : '',
+        row.cpu_milli ? `CPU ${formatCpuMilli(row.cpu_milli)}` : '',
+        row.memory_bytes ? `${t('page.forecast.explain.memory')} ${formatMemoryBytes(row.memory_bytes)}` : ''
+      ]
+        .filter(Boolean)
+        .join(' · ') || '-'
+  },
+  { title: t('page.forecast.periods.col_priority'), key: 'priority', width: 80 }
+]);
+
+const sourceColumns = computed(() => [
+  { title: t('page.forecast.sources.name'), key: 'name', width: 130, ellipsis: { tooltip: true } },
+  {
+    title: t('page.forecast.explain.sourceFeeds'),
+    key: 'resource',
+    width: 90,
+    render: (row: NonNullable<Detail['sources']>[number]) =>
+      t(`page.forecast.modules.resource_${row.resource}`, row.resource)
+  },
+  { title: t('page.datasource.connections.name'), key: 'datasource', width: 120, ellipsis: { tooltip: true } },
+  {
+    title: 'PromQL',
+    key: 'query',
+    minWidth: 320,
+    ellipsis: { tooltip: true },
+    render: (row: NonNullable<Detail['sources']>[number]) => row.query || '-'
+  },
+  {
+    title: t('page.forecast.explain.sourceShape'),
+    key: 'shape',
+    minWidth: 200,
+    render: (row: NonNullable<Detail['sources']>[number]) =>
+      [
+        row.level,
+        row.unit,
+        row.step_seconds ? `${row.step_seconds}s` : '',
+        `${row.stat}`,
+        row.basis === 'history' ? t('page.forecast.sources.basis_history') : t('page.forecast.sources.basis_forecast')
+      ]
+        .filter(Boolean)
+        .join(' · ')
+  }
+]);
 </script>
 
 <template>
@@ -225,6 +372,30 @@ const bytes = (value?: number) => (value ? `${Math.round(value / MIB)} MiB` : '-
       <span v-if="parsed.score !== undefined">{{ t('page.forecast.scores.score') }} {{ parsed.score.toFixed(1) }}</span>
     </div>
 
+    <div v-if="parsed.resource_spec" class="flex flex-col gap-6px">
+      <div class="flex flex-wrap items-center gap-8px text-13px">
+        <span class="font-medium">{{ t('page.forecast.explain.spec') }}</span>
+        <NTag size="small" :bordered="false" type="info">
+          {{ t('page.forecast.explain.specVersion', { version: parsed.resource_spec.version }) }}
+        </NTag>
+        <NTag v-if="parsed.resource_spec.held" size="small" :bordered="false" type="default">
+          {{ t('page.forecast.recommendations.specHeld') }}
+        </NTag>
+        <span v-if="parsed.resource_spec.changed_at" class="opacity-70">
+          {{ t('page.forecast.explain.specChangedAt', { time: when(parsed.resource_spec.changed_at) }) }}
+        </span>
+      </div>
+      <NDataTable size="small" :columns="specColumns" :data="specRows" :row-key="(row: any) => row.name" />
+      <div class="text-12px leading-20px opacity-70">
+        {{
+          t('page.forecast.explain.specHelp', {
+            percent: parsed.resource_spec.change_percent,
+            hours: parsed.resource_spec.hold_hours
+          })
+        }}
+      </div>
+    </div>
+
     <NDataTable
       size="small"
       :columns="fieldColumns"
@@ -232,6 +403,29 @@ const bytes = (value?: number) => (value ? `${Math.round(value / MIB)} MiB` : '-
       :row-key="(row: any) => row.name"
       :scroll-x="760"
     />
+    <div class="text-12px leading-20px opacity-70">{{ t('page.forecast.explain.precedence') }}</div>
+
+    <div v-if="parsed.periods?.length">
+      <div class="mb-4px text-13px font-medium">{{ t('page.forecast.periods.title') }}</div>
+      <NDataTable
+        size="small"
+        :columns="periodColumns"
+        :data="parsed.periods"
+        :row-key="(row: any) => row.name"
+        :scroll-x="820"
+      />
+    </div>
+
+    <div v-if="parsed.sources?.length">
+      <div class="mb-4px text-13px font-medium">{{ t('page.forecast.explain.sources') }}</div>
+      <NDataTable
+        size="small"
+        :columns="sourceColumns"
+        :data="parsed.sources"
+        :row-key="(row: any) => row.key"
+        :scroll-x="900"
+      />
+    </div>
 
     <div v-if="parsed.multi?.rows?.length">
       <div class="mb-4px text-13px font-medium">{{ t('page.forecast.explain.multi') }}</div>

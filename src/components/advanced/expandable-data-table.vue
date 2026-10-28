@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, h, useAttrs } from 'vue';
+import { computed, h, ref, useAttrs } from 'vue';
+import { useElementSize } from '@vueuse/core';
 import type { DataTableColumns } from 'naive-ui';
 import { NDataTable, NEmpty, NText } from 'naive-ui';
 import { useAppStore } from '@/store/modules/app';
@@ -50,6 +51,13 @@ const emit = defineEmits<{
 
 const attrs = useAttrs();
 const appStore = useAppStore();
+
+// the width the table has to fill: its container. The columns grow into it a little, in proportion to their own width, and
+// what they cannot use is left as empty space at the right of the table instead of being poured into one column.
+const tableRef = ref<{ $el?: HTMLElement } | null>(null);
+const containerEl = computed(() => tableRef.value?.$el?.parentElement ?? null);
+const { width: availableWidth } = useElementSize(containerEl);
+const SCROLLBAR_ROOM = 14;
 
 const forwardedAttrs = computed(() => {
   const { onUnstableColumnResize: _columnResizeListener, ...rest } = attrs;
@@ -164,11 +172,39 @@ const compactColumns = computed<DataTableColumns<TableRow>>(() => {
     ...operationColumns.value.map(compactColumn)
   ];
 
+  // When the table is wider than its columns the browser spreads the extra width over every column, the operate column
+  // included, which leaves blank space around its buttons and a name column hundreds of pixels wide. The content columns
+  // grow instead by the same proportion until the table fills its container; the lead columns (selection, expand) and the
+  // operate column keep exactly the width they were given.
+  const stretchable = (column: any) => {
+    const key = hasColumnKey(column) ? String(column.key).toLowerCase() : '';
+    return !(column.type || column.fixed || operationKeys.has(key));
+  };
+  const own = columns.reduce((sum: number, column: any) => sum + Number(column.width ?? column.minWidth ?? 0), 0);
+  const growable = columns
+    .filter(stretchable)
+    .reduce((sum: number, column: any) => sum + Number(column.width ?? column.minWidth ?? 0), 0);
+  const surplus = availableWidth.value - SCROLLBAR_ROOM - own;
+  if (availableWidth.value > 0 && surplus > 0 && growable > 0) {
+    const factor = 1 + surplus / growable;
+    columns.forEach((column: any, index) => {
+      if (stretchable(column))
+        columns[index] = { ...column, width: Math.round(Number(column.width ?? column.minWidth ?? 0) * factor) };
+    });
+  }
+
   return columns as DataTableColumns<TableRow>;
 });
 
 const compactScrollX = computed(() =>
   compactColumns.value.reduce((total, column: any) => total + Number(column.width || column.minWidth || 140), 0)
+);
+
+/** a table whose columns are narrower than its container does not stretch to fill it */
+const tableStyle = computed(() =>
+  availableWidth.value > 0 && compactScrollX.value + SCROLLBAR_ROOM < availableWidth.value
+    ? { width: `${compactScrollX.value}px` }
+    : undefined
 );
 
 function flattenColumns(columns: TableColumn[]): TableColumn[] {
@@ -189,7 +225,7 @@ function compactColumn(column: TableColumn): TableColumn {
   const operation = operationKeys.has(key);
   const booleanLike = compactBooleanKeyPattern.test(key);
   const shortValue = compactShortKeyPattern.test(key);
-  const contentMinWidth = operation ? 120 : booleanLike ? 64 : shortValue ? 68 : 80;
+  const contentMinWidth = operation ? 72 : booleanLike ? 64 : shortValue ? 68 : 80;
   const minWidth = Number(column.minWidth ?? contentMinWidth);
   const fallbackWidth = operation ? 180 : booleanLike ? 80 : shortValue ? 88 : 160;
   const configuredWidth = Number(column.width ?? fallbackWidth);
@@ -293,12 +329,14 @@ function renderValue(column: TableColumn, row: TableRow, index: number) {
 
 <template>
   <NDataTable
+    ref="tableRef"
     v-bind="forwardedAttrs"
     :columns="compactColumns"
     :data="data"
     :row-key="rowKey"
     :checked-row-keys="checkedRowKeys"
     :scroll-x="compactScrollX"
+    :style="tableStyle"
     class="expandable-data-table"
     @unstable-column-resize="handleColumnResize"
     @update:checked-row-keys="keys => emit('update:checkedRowKeys', keys)"

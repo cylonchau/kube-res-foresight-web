@@ -1,5 +1,3 @@
-import { getServiceBaseURL } from '@/utils/service';
-import { localStg } from '@/utils/storage';
 import { request } from '../request';
 
 const base = '/api/v1';
@@ -68,6 +66,11 @@ export function fetchGetTrainingRuns(params: {
 }
 
 /** how the training records of a filter ended, per algorithm, and why runs did not produce a forecast */
+/** the samples of the history window of a training record and the forecast it wrote */
+export function fetchGetTrainingData(id: number) {
+  return request<Api.Forecast.TrainingData>({ url: `${base}/training-runs/${id}/data`, method: 'get' });
+}
+
 export function fetchGetTrainingSummary(params: {
   module_id?: number;
   metric?: string;
@@ -244,6 +247,8 @@ export function fetchGetRecommendations(
     source?: string;
     degraded?: boolean;
     oom_floor?: boolean;
+    /** one snapshot per module: the current one */
+    latest?: boolean;
   }
 ) {
   return request<Api.Forecast.Paged<Api.Forecast.Recommendation>>({
@@ -253,7 +258,17 @@ export function fetchGetRecommendations(
   });
 }
 
-export function fetchGetFallbacks(params: ListWindow & { module_id?: number; reason?: string }) {
+export function fetchGetSnapshots(params: ListWindow & { module_id?: number; state?: string }) {
+  return request<Api.Forecast.Paged<Api.Forecast.Snapshot>>({ url: `${base}/snapshots`, method: 'get', params });
+}
+
+export function fetchGetSnapshot(id: number) {
+  return request<Api.Forecast.Snapshot>({ url: `${base}/snapshots/${id}`, method: 'get' });
+}
+
+export function fetchGetFallbacks(
+  params: ListWindow & { module_id?: number; reason?: string; kind?: Api.Forecast.FallbackKind }
+) {
   return request<Api.Forecast.Paged<Api.Forecast.FallbackRecord>>({ url: `${base}/fallbacks`, method: 'get', params });
 }
 
@@ -273,43 +288,6 @@ export function fetchBypassModule(moduleId: number, reason: string) {
 
 export function fetchResumeModule(moduleId: number) {
   return request({ url: `${base}/controls/${moduleId}/resume`, method: 'post' });
-}
-
-/**
- * Download a CSV export of the audit trail. The response is a file, not the JSON envelope the request layer
- * unwraps, so it is fetched directly with the session token; a cheap authenticated call first lets the request
- * layer refresh an expiring token.
- */
-export async function downloadAuditExport(params: {
-  kind: 'recommendations' | 'fallbacks' | 'executions' | 'evaluations' | 'predictions';
-  module_id?: number;
-  since_hours?: number;
-  from?: string;
-  to?: string;
-  reason?: string;
-  result?: string;
-}) {
-  await request({ url: `${base}/auth/session-status`, method: 'get' });
-  const { baseURL } = getServiceBaseURL(
-    import.meta.env,
-    import.meta.env.DEV && import.meta.env.VITE_HTTP_PROXY === 'Y'
-  );
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) query.set(key, String(value));
-  });
-  // The base URL is "/" in production: "/" + "/api/..." would be a protocol-relative URL to a host named "api".
-  const root = baseURL.replace(/\/+$/, '');
-  const response = await fetch(`${root}${base}/audit/export?${query.toString()}`, {
-    headers: { Authorization: `Bearer ${localStg.get('token') || ''}`, 'X-kube-resource-fcst-Client': 'web' }
-  });
-  if (!response.ok) throw new Error(`export failed: ${response.status}`);
-  const blob = await response.blob();
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `kube-resource-fcst-${params.kind}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
 }
 
 export function fetchGetLdapSettings() {

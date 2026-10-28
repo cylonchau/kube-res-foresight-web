@@ -24,6 +24,8 @@ declare namespace Api {
       nickName: string;
       email: string;
       phone: string;
+      /** the ways to reach the user: any type name and its value */
+      contacts: Array<{ type: string; value: string }>;
       otpEnabled: boolean;
       /** Saved account-level UI language preference, e.g. "zh-CN"/"en-US". Empty = no preference set. */
       language: string;

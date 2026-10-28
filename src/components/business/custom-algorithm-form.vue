@@ -17,6 +17,7 @@ import {
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import StatusSelect from '@/components/business/status-select.vue';
 import AlgorithmParamsEditor from '@/components/advanced/algorithm-params-editor.vue';
 import ParamSchemaEditor from '@/components/advanced/param-schema-editor.vue';
 import FormulaPreview from '@/components/business/formula-preview.vue';
@@ -433,7 +434,7 @@ async function save() {
 
       <NForm :model="form" label-placement="top" class="mt-16px">
         <NFormItem :label="t('page.forecast.algorithms.columns.enabled')">
-          <NSwitch v-model:value="form.enabled" />
+          <StatusSelect v-model:value="form.enabled" />
         </NFormItem>
         <NFormItem :label="t('page.forecast.algorithms.columns.weight')">
           <NInputNumber v-model:value="form.weight" :min="0.1" :max="100" :step="0.1" class="w-full" />

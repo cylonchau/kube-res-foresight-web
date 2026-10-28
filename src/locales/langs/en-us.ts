@@ -106,7 +106,19 @@ const local = {
     enableSuccess: 'Enabled successfully',
     disableSuccess: 'Disabled successfully',
     pass: 'Passed',
-    notPass: 'Failed'
+    notPass: 'Failed',
+    timeLast: 'Last {n} {unit}',
+    timeUnit_minute: 'minutes',
+    timeUnit_hour: 'hours',
+    timeUnit_day: 'days',
+    timeAll: 'No time limit',
+    timeQuick: 'Quick select',
+    timeRelative: 'Relative',
+    timeLastShort: 'Last',
+    timeAbsolute: 'Fixed range',
+    timeApply: 'Apply',
+    copied: 'Copied',
+    copyFailed: 'Copy failed'
   },
   request: {
     logout: 'Logout user after request failed',
@@ -298,39 +310,34 @@ const local = {
     forecast: 'Forecast management',
     datasource: 'Data Sources',
     datasource_connections: 'Data source connections',
-    'datasource_metric-mappings': 'Metric mappings',
     system: 'System Management',
     system_config: 'System Parameters',
     'system_login-log': 'Login Logs',
     'system_operation-log': 'Operation Logs',
     system_task: 'Task Definition',
     system_job: 'Job History',
-    'system_secret-keys': 'API Credentials',
+    'system_secret-keys': 'Cluster credentials',
+    'datasource_metric-mappings': 'Metric templates',
     datasource_presets: 'Built-in metric presets',
     forecast_algorithms: 'Algorithm management',
     'forecast_score-records': 'Algorithm scores',
     forecast_ranking: 'Current ranking',
-    'forecast_ranking-history': 'Ranking history',
-    'forecast-results_runs': 'Training records',
     monitoring_datasets: 'Metrics dataset',
     'forecast-results': 'Forecast results',
     'forecast-results_history': 'History data',
-    'forecast-results_backtests': 'Rolling backtests',
     'forecast-results_evaluations': 'Measured accuracy',
-    'forecast-results_leaderboard': 'Algorithm leaderboard',
-    'forecast-results_trends': 'Forecast trend comparison',
+    'forecast-results_leaderboard': 'Measured leaderboard',
     'forecast-actions': 'Recommendations and execution',
-    'forecast-actions_recommendations': 'Resource recommendation snapshots',
-    'forecast-actions_executions': 'Scaling execution records',
-    'forecast-actions_fallbacks': 'Fallback and degradation records',
-    'forecast-actions_audit-exports': 'Audit exports',
+    'forecast-actions_recommendations': 'Resource recommendations',
+    'forecast-actions_executions': 'Scaling records',
+    'forecast-actions_fallbacks': 'Degradation and rollback records',
     monitoring: 'Monitoring',
-    monitoring_metrics: 'Metric catalog',
     'forecast-modules': 'Module management',
     'forecast-modules_modules': 'Modules',
     'forecast-modules_bindings': 'Bindings',
     'forecast-actions_admissions': 'Admission decisions',
-    monitoring_curves: 'Metric curves'
+    monitoring_curves: 'Metric curves',
+    'forecast-results_algorithm-runs': 'Algorithm run status'
   },
   page: {
     monitoring: {
@@ -427,7 +434,11 @@ const local = {
           'How the samples that fall into one granularity are combined when the module samples more coarsely than the query steps. A point only contains samples from before its own granularity, never from after it.',
         missingHint:
           'How a missing step (up to the max interpolation steps of the module) is filled when a forecast is prepared: interpolation suits levels, 0 suits counts such as OOM where no sample means nothing happened, no fill cuts the history at a gap.',
-        sectionRole: 'Role in the recommendation'
+        sectionRole: 'Role in the recommendation',
+        usePreset: 'Use a built-in template',
+        usePresetHint: 'Optional: fill the query below',
+        template: 'Metric template',
+        templatePlaceholder: 'Pick the template'
       }
     },
     forecast: {
@@ -653,11 +664,19 @@ const local = {
         dataHint:
           'What the module reads: the history window decides how much data is collected and trained on, the forecast period how far ahead every algorithm forecasts.',
         lookbackHours: 'History window (hours)',
-        horizonMinutes: 'Forecast period (minutes)'
+        horizonMinutes: 'Forecast period (minutes)',
+        sectionMetrics: 'Metric preview',
+        metricsAfterSave:
+          'Save the module, then add the metrics to read on the Metrics dataset page; edit the module again and they can be previewed here.',
+        metricsNone: 'This module has no metrics yet: add them on the Metrics dataset page.',
+        previewMetric: 'Metric preview',
+        metricOf: 'Metric',
+        metricsPreviewHelp:
+          'Pick a module and one of its metrics to open the query test dialog, which runs the PromQL against Prometheus live (the variables filled with the workload of the module) and draws the curve; the PromQL can also be rewritten in the dialog to look at any metric, such as a log metric. The metrics themselves are managed on the Metrics dataset page.'
       },
       history: {
         title: 'History data',
-        help: 'The actual values are queried from Prometheus for the chosen range, including the history from before the module existed, not only what was collected after it was enabled. The predicted values are what each algorithm forecast for that time, and the replicas belong to the same module and the same Pods. History counts as missing only when Prometheus has no sample in the whole range; a few steps without a sample are only gaps.',
+        help: 'The real history and the forecasts against it in one page: actual values are queried from Prometheus for the chosen range (the history from before the module existed included), the actual replicas belong to the same Pods of the same module, and the forecasts the algorithms stored are drawn next to them. The chart, the error of each algorithm (MAE, WAPE, bias), the prediction records (prediction time, predicted value, the actual value of that time and the error) and the data gaps are four views, one at a time. The window reaches one forecast horizon ahead to show forecasts that have not happened yet. History is missing only when Prometheus has no sample in the whole range; single steps without a sample are only gaps. What data an algorithm was trained on and how is in the detail of a training record.',
         pointsHelp:
           'For every time point of the chart: the predicted value and replicas of each algorithm next to the actual value and replicas of the same time. Check rows to export them.',
         missing: 'History missing',
@@ -679,9 +698,11 @@ const local = {
         qualityHint:
           'Quality report: missing share, longest gap (steps), jumps, points off the step grid and the lag of the newest sample.',
         notCollected:
-          'Nothing has been collected for this metric yet: run Collect history from the module page, then look again.'
+          'Nothing has been collected for this metric yet: run Collect history from the module page, then look again.',
+        recordsTitle: 'Prediction records and actual values'
       },
       evaluation: {
+        status: 'Status',
         leaderboard: 'Leaderboard',
         backtests: 'Rolling backtests',
         evaluations: 'Prediction evaluations',
@@ -692,6 +713,7 @@ const local = {
         candidate: 'Candidate',
         bias: 'Bias',
         peakUnder: 'Peak underestimation',
+        riskWape: 'Underestimate-weighted error',
         coverage: 'Coverage',
         runs: 'Runs',
         points: 'Points',
@@ -704,7 +726,7 @@ const local = {
         range: 'Window'
       },
       recommendations: {
-        title: 'Recommendations',
+        title: 'Resource recommendations',
         executions: 'Scaling records',
         allModules: 'All modules',
         version: 'Version',
@@ -729,6 +751,8 @@ const local = {
         source_algorithm: 'algorithm',
         source_fallback: 'default',
         source_original: 'original',
+        source_decision: 'decision',
+        source_previous: 'previously valid',
         help: 'Every decision becomes an immutable version that records which source decided each field (algorithm, fixed period, fallback or the original kept) and why.',
         executionsHelp:
           'Reports from kube-resource-fcst-operator after each scale, observation, hold, conflict or error.',
@@ -742,6 +766,61 @@ const local = {
         source_oom_floor: 'OOM floor',
         algorithm: 'Algorithm (score)',
         effectiveMax: 'Effective maximum'
+      },
+      snapshots: {
+        name: '{module} snapshot V{version}',
+        history: 'Snapshot history',
+        backToHistory: 'Back to the history',
+        partVersion: 'Module and version',
+        partResult: 'Recommendation',
+        partWhy: 'Why this version exists',
+        partConfig: 'Configuration and calculation',
+        title: 'Recommendation snapshots',
+        help: 'The history of recommendations: the first one of a module, every change of the outcome (replicas, Pod spec, algorithm, degradation ...) and one an hour at least. A snapshot keeps the whole recommendation as it was: parameters, algorithm, metric sources, the calculation and what became of it. The same answer repeated every cycle is not a snapshot: it only keeps the current recommendation valid and is cleaned up soon after; a module keeps at most the number of snapshots of the system parameter.',
+        empty:
+          'No snapshots yet: the first recommendation of a module in recommend mode or above is its first snapshot.',
+        why: 'Why kept',
+        snapshot: 'Snapshot',
+        recommendation: 'Recommendation',
+        current: 'Current',
+        state: 'State',
+        stateHelp:
+          'Pending: the current snapshot, nothing has used it yet. Applied: the operator scaled to its replicas (or they were already right) or an admission gave Pods its resources. Failed: the operator reported an error or a conflict and nothing succeeded. Expired: replaced by a newer snapshot or past its validity without being used. Advisory: the module only recommends, nothing applies it.',
+        state_pending: 'Pending',
+        state_applied: 'Applied',
+        state_failed: 'Failed',
+        state_expired: 'Expired',
+        state_advisory: 'Advisory',
+        outcomeApplied: 'the operator scaled {applied} time(s)',
+        outcomeObserved: 'the replicas were already right {observed} time(s)',
+        outcomeAdmitted: '{admitted} admission(s) gave Pods its resources',
+        outcomeFailed: '{error} error(s) and {conflict} conflict(s), nothing succeeded',
+        outcomeHeld: 'the operator held back {held} time(s) (cooldown, step limit or no fresh decision)',
+        outcomeExpired: 'replaced by a newer snapshot or past its validity, never used',
+        outcomePending: 'the current snapshot, nothing has used it yet',
+        outcomeAdvisory: 'the module only recommends, nothing applies it',
+        executions: 'Executions during this snapshot',
+        noExecutions: 'No executions',
+        detailTitle: 'Snapshot v{version}',
+        span: 'Covers versions v{from} to v{to}',
+        spanOpen: 'Covers versions from v{from} (current)',
+        loadFailed: 'Could not read the snapshot',
+        why_first: 'The first recommendation of the module',
+        why_mode: 'Mode {from} -> {to}',
+        why_replicas: 'Replicas {from} -> {to}',
+        why_spec: 'Pod spec v{from} -> v{to}',
+        why_resources: 'CPU or memory changed',
+        why_gpu: 'GPU changed',
+        why_algorithm: 'Algorithm {from} -> {to}',
+        why_source: 'The source of a value changed',
+        why_degraded: 'Degraded',
+        why_recovered: 'Recovered from degradation',
+        why_oom: 'OOM protection changed',
+        why_ceiling: 'Replica ceiling changed',
+        why_periodic: 'Stable for an hour: one is kept periodically',
+        why_backfill: 'Marked when the history was introduced',
+        why_current: 'The current recommendation at the upgrade',
+        why_other: '{text}'
       },
       replica: {
         algorithm: 'Algorithm',
@@ -834,6 +913,16 @@ const local = {
         originBuiltin: 'Built-in',
         originCustom: 'Custom',
         originVariant: 'Derived',
+        runtime: {
+          disabled: 'Disabled',
+          invalid: 'Invalid parameters',
+          waiting: 'Waiting for the first run',
+          running: 'Running',
+          skipped: 'Skipped',
+          failed: 'Failed',
+          help: 'Whether the algorithm has really entered the forecast pipeline: once enabled with parameters that build a model it first runs on the next cycle of the forecast task (every 5 minutes by default); after that the latest run decides.',
+          lastRun: 'Last run {time}, {runs} runs'
+        },
         impl: {
           label: 'Implementation',
           idLabel: 'Algorithm ID',
@@ -904,6 +993,7 @@ const local = {
         help: "Algorithms are configured once and applied to everything: an enabled algorithm is applied to every module automatically, with no instance to create and no module to bind. Each algorithm forecasts the metrics of a module over the module's forecast period with its parameters; the system backtests, scores and picks the best one, and the recommendation is handed to the Controller.",
         catalog: 'Catalog',
         columns: {
+          runtime: 'Run state',
           origin: 'Origin',
           minSamples: 'Minimum samples',
           id: 'Algorithm',
@@ -1176,7 +1266,9 @@ const local = {
       trends: {
         title: 'Forecast and measured curves',
         summaryTitle: 'Forecast summary',
-        help: 'Draws the newest forecast of the chosen algorithms with the measured values of the same metric; the window reaches one horizon ahead so the part that has not happened yet is visible.'
+        help: "This compares the algorithms' forecasts: each algorithm's predicted values are drawn with the actual values of the same metric, the window reaches one forecast horizon ahead to show the part that has not happened yet; the error is summed up per algorithm below and listed for every point. The real metric history and the prediction records are on the history page.",
+        pointsHelp:
+          'One row per algorithm and time: the predicted value, the actual value of that time, the error and error rate, and the predicted and actual replicas. A time that has not happened yet has no actual value, so its error shows -.'
       },
       executions: {
         decisionVersion: 'Snapshot',
@@ -1189,8 +1281,8 @@ const local = {
       },
       fallbacks: {
         title: 'Fallback and degradation records',
-        help: 'Every snapshot where a field did not come from a usable forecast (module fallback, original value, or raised by the OOM floor). It starts at that snapshot and ends at the next healthy one.',
-        empty: 'No degradation records.',
+        help: 'Degradation: the forecast, the data or the decision service is not usable, so a safe preset runs (a degradation starts at its first degraded snapshot and ends at the next healthy one). Rollback: a change that was decided was not applied and the workload stays on the configuration that was valid before. Each record says why, from which configuration to which, what became of it and when.',
+        empty: 'No degradation or rollback records.',
         reason: 'Reason',
         reasons: 'Degraded fields and reasons',
         startedAt: 'Started',
@@ -1198,6 +1290,41 @@ const local = {
         recoveredAt: 'Recovered',
         ongoing: 'Ongoing',
         detailTitle: 'Degradation detail',
+        reason_decision_unavailable: 'No usable decision',
+        reason_error: 'Execution error',
+        reason_conflict: 'Conflict with another autoscaler',
+        kind: 'Type',
+        kind_degrade: 'Degradation',
+        kind_rollback: 'Rollback',
+        kindHelp:
+          'Degradation: the forecast, the data or the decision service is not usable, so a safe preset runs (module default, the original value or the OOM floor). Rollback: a change that was decided was not applied (the operator failed or another autoscaler holds the target) and the workload stays on the configuration that was valid before.',
+        trigger: 'Trigger',
+        original: 'Original configuration',
+        target: 'Target configuration',
+        result: 'Actual result',
+        at: 'Occurred',
+        changes: 'Changes',
+        change: 'Original -> target configuration',
+        originalHelp: 'Degradation: what was in force before. Rollback: what was wanted.',
+        targetHelp:
+          'Degradation: the safe configuration now used. Rollback: what the workload actually stays on (the previous valid value).',
+        keptOriginal: 'Original kept',
+        state_held: 'Held',
+        state_not_applied: 'Not applied',
+        none: 'None',
+        field_cpu: 'CPU',
+        field_memory: 'Memory',
+        field_replicas: 'Replicas',
+        field_gpu: 'GPU',
+        field_memory_floor: 'Memory (OOM floor)',
+        resultHeld: 'Held: the operator had no usable decision and keeps {current} replica(s)',
+        resultNotApplied:
+          'Not applied: stays on {current} replica(s) (the previous valid configuration), {desired} were wanted; reason: {reason}',
+        recoveredHelp:
+          'Degradation: the time of the next healthy snapshot. Rollback: the time of the next successful execution.',
+        kindLabel: 'Type',
+        detailLink: 'Open snapshot',
+        executionRecord: 'Execution record',
         reason_no_data: 'No data',
         reason_stale_data: 'Stale data',
         reason_insufficient_history: 'Insufficient history',
@@ -1212,6 +1339,15 @@ const local = {
         reason_predict_timeout: 'Prediction timed out'
       },
       explain: {
+        spec: 'Pod resource spec',
+        specVersion: 'Spec version v{version}',
+        specChangedAt: 'Last changed {time}',
+        specComputed: 'Computed',
+        specPinned: 'In the snapshot',
+        specKept: 'Kept: {reason}',
+        specTaken: 'Taken: {reason}',
+        specHelp:
+          'The CPU and memory spec of the Pods is set at admission and then stays: a forecast within {percent}% of it changes nothing, a decrease waits until the spec has stood {hours} hours, and an increase, a fixed period, a bypass and the OOM protection act at once. Replicas are not affected: they follow the forecast every cycle.',
         field: 'Field',
         field_cpu: 'CPU',
         field_memory: 'Memory',
@@ -1246,34 +1382,18 @@ const local = {
         triggered: 'Threshold reached',
         note: 'Note',
         pressure: 'Pressure {pressure}, largest ratio {max}',
-        borrowed: 'The {source} forecast was taken from {from}'
-      },
-      auditExports: {
-        exportTitle: 'Export audit data',
-        exportedWithin: 'Exported within',
-        title: 'Export types',
-        help: "Exports the records in the current filter. A cell starting with = + - {'@'} is prefixed so a spreadsheet never runs it. Every export is entered in the operation log.",
-        kind: 'Type',
-        content: 'Content',
-        allModules: 'All modules',
-        done: 'Exported',
-        historyTitle: 'Export history',
-        historyHelp: 'From the operation log: who exported what, and when.',
-        historyEmpty: 'Nothing has been exported yet.',
-        user: 'User',
-        scope: 'Scope',
-        kind_recommendations: 'Recommendation snapshots',
-        kind_fallbacks: 'Fallback records',
-        kind_executions: 'Scaling executions',
-        kind_evaluations: 'Measured evaluations',
-        kind_predictions: 'Predictions',
-        content_recommendations:
-          'CPU, memory, replicas, sources, degradation and the full explanation of every version',
-        content_fallbacks: 'Snapshots that degraded or were raised by the OOM floor, with reason codes',
-        content_executions:
-          'Current and desired replicas, action, result and the snapshot version reported by the operator',
-        content_evaluations: 'MAE, WAPE, bias, peak underestimation and coverage of every forecast run',
-        content_predictions: 'The predicted value per target time with the algorithm and model version'
+        borrowed: 'The {source} forecast was taken from {from}',
+        precedence: 'Order: bypass > fixed period > algorithm > module fallback > original value, decided per field.',
+        period_active: 'Applied',
+        period_idle: 'Not applied',
+        period_disabled: 'Disabled',
+        period_weekly: 'Weekly',
+        period_values: 'Pinned values',
+        cores: 'cores',
+        memory: 'Memory',
+        sources: 'Metric sources',
+        sourceFeeds: 'Feeds',
+        sourceShape: 'Level · unit · step · statistic · basis'
       },
       sources: {
         title: 'Metric sources',
@@ -1327,6 +1447,7 @@ const local = {
         score: 'Score',
         rank: 'Rank',
         inUse: 'In use',
+        wasInUse: 'In use then',
         challenger: 'Challenger ×{cycles}',
         windows: 'Windows',
         weighted: 'Score × weight',
@@ -1361,6 +1482,13 @@ const local = {
         coverage: 'Coverage',
         rmse: 'RMSE',
         pinball: 'Pinball loss',
+        risk_wape: 'Underestimate-weighted error',
+        windows: 'Scored windows',
+        windowsValue: '{cutoffs} windows · {points} points',
+        risk_wape_how:
+          'Underestimate-weighted error = WAPE with the part below the actual counted three times; lower is better. The further above WAPE, the more often the algorithm forecasts low.',
+        windows_how:
+          'How many origins (windows) the backtest used and how many points were scored. Origins are spread over the history and the candidate and its baseline are compared on the same windows; with few windows the score is unstable.',
         rmse_how:
           'RMSE = square root of the mean squared error; it weighs large misses more, in the unit of the metric.',
         pinball_how:
@@ -1389,6 +1517,11 @@ const local = {
         high: 'high',
         empty: 'No data in the range: Prometheus has no such metric for it and no algorithm made a forecast for it.',
         actualMissing: 'Prometheus has no data of this metric in the chosen range (history missing)',
+        gapLegend:
+          'Dashed line and grey shade: there is no actual data in this stretch; the line only marks where data is missing, nothing is filled in',
+        refreshChart: 'Read the chart again with the current filters, without pressing search',
+        gapNote:
+          'The forecast of {algorithm} breaks off at {count} places: no run covered those times (the platform was not running, or there was no fresh data)',
         actualError: 'Could not read Prometheus: {error}',
         candle: 'Candles',
         line: 'Line',
@@ -1400,7 +1533,30 @@ const local = {
         time: 'Time',
         actualValue: 'Actual',
         replicasNow: 'Actual replicas',
-        bucket: 'One candle = {seconds} s'
+        bucket: 'One candle = {seconds} s',
+        toolZoom: 'Zoom area',
+        toolZoomBack: 'Undo zoom',
+        toolRestore: 'Reset chart',
+        toolSave: 'Save as image',
+        statusTitle: 'Enabled algorithms',
+        error: 'Error (predicted - actual)',
+        errorRate: 'Error rate',
+        errorSummary: 'Error of each algorithm',
+        errorSummaryHelp:
+          'Computed over the points that have both a forecast and an actual value at the same time: MAE is the mean absolute error, WAPE the sum of absolute errors over the sum of actuals, and a positive bias means over-prediction. Algorithms without a result come last, with the reason.',
+        noActualYet:
+          'It has forecasts, but the actual values of those times have not happened yet or Prometheus has no sample for them, so no error can be computed',
+        viewChart: 'Chart',
+        viewErrors: 'Error of each algorithm',
+        viewRecords: 'Prediction records',
+        viewGaps: 'Data gaps',
+        noGaps: 'Prometheus has no gap in the range',
+        futureZone: 'Forecast (not happened yet)',
+        now: 'Now',
+        lineType: 'Line type',
+        lineType_line: 'Line',
+        lineType_step: 'Step line',
+        lineType_candle: 'Candles'
       },
       ranking: {
         best: 'Best',
@@ -1429,18 +1585,48 @@ const local = {
         trendTitle: 'Score of each algorithm over time',
         historyTitle: 'Ranking history',
         historyHelp:
-          'The ranking of every evaluation is kept: see whether the best algorithm changes between modules and over time, and which one was in use.'
+          'The ranking of every evaluation is kept: see whether the best algorithm changes between modules and over time, and which one was in use.',
+        measured: 'Measured accuracy',
+        state_ready: 'Scored',
+        state_skipped: 'Skipped',
+        state_failed: 'Run failed',
+        state_not_run: 'Not run yet',
+        state_no_result: 'No result',
+        snapshotTitle: 'Ranking of a past evaluation',
+        openSnapshot: 'Open this ranking',
+        backToCurrent: 'Back to the current ranking',
+        mergedHelp:
+          'Current and past rankings on one page: without a past one chosen the newest evaluation is shown; the list of past rankings below holds every evaluation in the time range, and Open this ranking shows it here. Every enabled algorithm is listed: one without a score says why (too little history, run failed, not run yet). Measured accuracy compares the forecasts with what Prometheus reported.',
+        historyEmpty:
+          'No evaluations in the time range. The scoring task saves each evaluation on its schedule; Score now makes one.',
+        noReplayWindow:
+          'It has a measured accuracy, but the replay found no usable window of history (too few samples or too poor quality), so there is no composite score',
+        tabNow: 'Current ranking',
+        tabIndicators: 'Ranking per metric',
+        tabPast: 'How it moved',
+        evaluation: 'Evaluation',
+        evaluationLatest: 'Latest',
+        allMetrics: 'All resources',
+        historyCompare: 'Rank over time'
+      },
+      algorithmRuns: {
+        title: 'Algorithm run status',
+        help: 'How each enabled algorithm ran in the range: the runs, successful / skipped / failed, the hit rate, the average duration, the latest run and the common reasons it produced no forecast. Every figure is counted from the training records, the record of what the scheduled tasks actually executed; an algorithm that never ran is listed too, as not run yet.',
+        latest: 'Latest run',
+        reasons: 'Common reasons (skipped / failed)',
+        records: 'Training records',
+        allModules: 'All modules',
+        empty: 'No algorithm is enabled and no run is recorded.'
       },
       runs: {
         title: 'Training records',
         help: 'The training records answer three questions: did the algorithms run on time; when a run produced no forecast, why (too few samples, missing covariates, timeout); and how a forecast came about. Every run of an algorithm on a metric leaves one: the window of history it read, the parameters (and the formula of a custom algorithm), the duration and the outcome. The platform keeps no model weights; the algorithms fit on the history at every run, and the implementation version, parameters and window in the record reproduce the same forecast. Records are kept for 30 days.',
         overview: 'Run overview',
-        overviewHelp:
-          'Counted over the current filter: the number of runs, the success rate, how each algorithm fared, and the most common reasons a run produced no forecast.',
         total: 'Runs',
         hitRate: 'Hit rate',
         hitRateHelp:
           'Hit rate = successful runs / all runs: under the current filter, how many real training runs produced a usable forecast. It is counted from the training records themselves, never from fixed numbers.',
+        backToList: 'Back to the records',
         meaning_ok: 'The algorithm trained on the window of history and produced a forecast, which is stored.',
         meaning_skipped:
           'Not run: too few samples, a covariate the algorithm needs is missing, or the dataset does not meet its requirements. Nothing is forced with made-up data; the reason is in the record.',
@@ -1471,7 +1657,19 @@ const local = {
         reason: 'Reason',
         params: 'Parameters',
         reproduceHint:
-          'The model version is a hash of the implementation version, the parameters and the sources: the same version on the same window gives the same forecast.'
+          'The model version is a hash of the implementation version, the parameters and the sources: the same version on the same window gives the same forecast.',
+        meaning: 'What the status means',
+        noReason: 'The run succeeded; there is nothing to explain',
+        overviewHelp:
+          'Counted from the training records of the current filter: the runs, the hit rate (successful runs over all runs), the average duration and the latest run. Whether a run succeeded, was skipped or failed, and why, is in the detail of each record; the runs, durations and common failure reasons of each algorithm are on the Algorithm run status page.',
+        tabInfo: 'Run',
+        tabData: 'Training data',
+        dataInput: 'Input',
+        dataForecast: 'Forecast',
+        dataHelp:
+          'The solid line is the stored samples of the history window the run read (the input of the algorithm), the dashed line the forecast it wrote (the output).',
+        dataEmpty:
+          'There is nothing to show for this record: a skipped or failed run has no forecast, and the samples of its window may have been pruned by the retention.'
       },
       detail: {
         promoted: 'Promoted',
@@ -1487,13 +1685,82 @@ const local = {
         limitMemory: 'Memory limits',
         title: 'Admission decisions',
         help: 'Every time Kyverno asks the platform for a new Pod resources, the answer is recorded here: applied or not, the CPU/memory/GPU given, the original values and the reason. GPU applies to new Pods only.',
-        empty: 'No admission records yet.',
+        empty:
+          'No admission records in the time range: a record is written only when the Kyverno policy asks the platform about a Pod whose namespace and workload match a module (refusals included, such as the switch Allow admission mode being off or the module not being in admission mode). No record means no such request has reached the platform yet: check that the Kyverno policy is deployed and can reach /api/v1/admission/recommendations, and the mode of the module.',
         target: 'Workload',
         result: 'Result',
         applied: 'Applied',
         refused: 'Not applied',
         memory: 'Memory',
         reason: 'Reason'
+      },
+      metricHelp: {
+        runs: 'How many forecasts were evaluated (each one is evaluated against the measured values once its time has passed). More runs make the errors more reliable.',
+        points: 'How many points in time the forecasts were compared with the measured values in total.',
+        beatsBaseline:
+          'Whether the under-forecast weighted error is smaller than that of the baseline (naive) on the same origins and windows. One of the conditions for promoting a candidate.',
+        promoted:
+          'Whether the promotion rule is met: enough samples, an error below the baseline, no worse peak under-forecast and enough quantile coverage. Only then can the algorithm become the one in use.',
+        rank: 'The place by under-forecast weighted error (an under-forecast counts more), 1 is the best. An algorithm without a measured result is not ranked.',
+        status:
+          'Whether the algorithm has a usable measured result. One that has not says why, for example not enough history or no forecast made.',
+        wape: 'Weighted absolute percentage error: the sum of |predicted - actual| over the sum of actuals, lower is better; 0% is exact. Accuracy = 1 - WAPE (never below 0).',
+        mae: 'Mean absolute error: the mean of |predicted - actual| over the points, in the unit of the metric, lower is better.',
+        bias: 'Bias: the mean of (predicted - actual). Positive means over-prediction, negative under-prediction; they cancel, so read it with MAE.',
+        peakUnder:
+          'Peak under-prediction: how far the predicted peak falls below the actual peak (as a share of it). The larger, the likelier resources are short at the peak.',
+        riskWape:
+          'Underestimate-weighted error (RiskWAPE): like WAPE, but the part where the forecast is below the actual counts three times. Running low starves the workload and running high only wastes some capacity, so the ranking and the promotion use it; the same size of error scores worse when it is low.',
+        coverage:
+          'Coverage: forecast points that have an actual value to compare with over all forecast points. Below 100% means some target times have no actual sample yet.',
+        score:
+          'Score (0-100): the replay of the last windows, with the accuracy of replicas, CPU, memory and GPU combined by weight, less the OOM penalty and the penalty for incomplete windows.',
+        accuracy:
+          'Accuracy = 1 - error (never below 0): how closely the recommendation of this resource matched what the replay window actually needed.',
+        oomPenalty: 'OOM penalty: the share taken off the score when the replay window had an OOM.'
+      },
+      periods: {
+        title: 'Fixed periods',
+        rules:
+          'Within the window the replicas, CPU and memory are pinned to the values given and the algorithms cannot override them.',
+        col_name: 'Name',
+        col_enabled: 'State',
+        col_range: 'Window',
+        col_replicas: 'Replicas',
+        col_cores: 'CPU (cores)',
+        col_memory: 'Memory (GiB)',
+        col_priority: 'Priority',
+        helpName: 'Name of the period.',
+        helpEnabled: 'A disabled period is not applied.',
+        helpRange: 'Start and end of the period.',
+        helpReplicas: 'Pinned replicas; 0 does not pin.',
+        helpCores: 'Pinned CPU in cores; 0 does not pin.',
+        helpMemory: 'Pinned memory in GiB; 0 does not pin.',
+        helpPriority: 'Larger wins when periods overlap.',
+        defaultName: 'Fixed period {n}',
+        add: 'Add a fixed period',
+        weeklyKept: '{name} (weekly, kept as it is)',
+        nameRequired: 'A fixed period needs a name',
+        nameDuplicate: 'Duplicate fixed period name: {name}',
+        rangeInvalid: 'The end of {name} must be after its start',
+        valueRequired: '{name} must pin replicas, CPU or memory',
+        saveFailed: 'The module is saved but not every fixed period was'
+      },
+      moduleMetrics: {
+        title: 'Metrics used',
+        preview: 'Preview',
+        empty: 'The module has no metrics yet. Add a metric template; a metric that is not added takes no part.',
+        add: 'Add a metric template',
+        col_template: 'Metric template',
+        col_weight: 'Weight',
+        col_enabled: 'State',
+        helpTemplate: 'A template from the Metric templates page, rendered with this module.',
+        helpWeight: "Weight among the module's metrics.",
+        helpEnabled: 'A disabled metric takes no part.',
+        templateRequired: 'Every row needs a template',
+        templateDuplicate: 'Duplicate template: {name}',
+        weightInvalid: 'The weight cannot be negative',
+        rules: 'A metric that is not added, or is disabled, takes no part in the module.'
       }
     },
     ldap: {
@@ -1583,11 +1850,11 @@ const local = {
         baseUrlRequired: 'Enter the datasource URL'
       },
       mappings: {
-        name: 'Mapping name',
+        name: 'Template name',
         keyword: 'Keyword',
-        keywordPlaceholder: 'Search by name or PromQL',
-        title: 'Metric mappings',
-        help: 'A metric mapping binds one Prometheus metric (a PromQL query) to a metric type a module can use (CPU, memory, RPS, replicas and so on). The data collection, forecasting and scaling evaluation of a module read the Prometheus metrics defined here. The PromQL can be generated from a template of the built-in mapping library or edited by hand.',
+        keywordPlaceholder: 'Search the name or PromQL',
+        title: 'Metric templates',
+        help: 'A metric template is a PromQL written once.',
         template: 'PromQL template (generated)',
         templateHint:
           'Pick a template of the built-in mapping library that fits the metric and level: it fills in the PromQL and the step, and you can still edit them. Leave it empty to write the PromQL yourself.',
@@ -1613,9 +1880,9 @@ const local = {
         level_service: 'Service',
         level_pod: 'Pod',
         level_container: 'Container',
-        required: 'Fill in datasource, name, metric, level and PromQL',
-        addTitle: 'Add metric mapping',
-        editTitle: 'Edit metric mapping',
+        required: 'Fill the datasource, name, metric, level and PromQL',
+        addTitle: 'Add a metric template',
+        editTitle: 'Edit the metric template',
         metric_replicas: 'Ready replicas',
         preset: 'Preset',
         fromPreset: 'Create from preset',
@@ -1640,7 +1907,8 @@ const local = {
         metric_gpu_memory: 'GPU memory',
         metric_network_rx: 'Network receive rate',
         metric_network_tx: 'Network transmit rate',
-        metric_custom: 'Custom Prometheus metric'
+        metric_custom: 'Custom Prometheus metric',
+        previewModule: 'Preview with module'
       },
       presets: {
         title: 'Metric presets',
@@ -1750,7 +2018,23 @@ const local = {
           editPassword: 'Leave blank to keep the current password',
           userPhone: 'Enter phone number',
           userStatus: 'Select user status'
-        }
+        },
+        source: 'Account type',
+        source_local: 'Local',
+        source_ldap: 'LDAP',
+        contacts: 'Contacts',
+        contactsHelp:
+          'A user can have any number of contacts, each a type and a value: pick a usual type (email, phone, WhatsApp, Telegram, WeChat, ...) or type another name; notifications pick them by type. A type can appear more than once.',
+        contactType_email: 'Email',
+        contactType_phone: 'Phone',
+        contactType_whatsapp: 'WhatsApp',
+        contactType_telegram: 'Telegram',
+        contactType_wechat: 'WeChat',
+        contactType_wecom: 'WeCom',
+        contactType_dingtalk: 'DingTalk',
+        contactType_feishu: 'Feishu',
+        contactType_slack: 'Slack',
+        contactType_teams: 'Teams'
       },
       role: {
         roleName: 'Role Name',
@@ -1897,21 +2181,32 @@ const local = {
         auth: 'Sign-in and logs',
         ui: 'Interface',
         notify: 'Notifications',
-        ldap: 'LDAP sign-in'
+        ldap: 'LDAP sign-in',
+        forecast: 'Forecast and resources'
       },
       readbackMismatch:
         "The value read back after writing doesn't match 鈥?check which database this server instance is using",
       secretKeys: {
         name: 'Credential Name',
-        maskedValue: 'Masked Value',
+        maskedValue: 'Secret Key (SK, hidden)',
         remark: 'Remark',
-        addTitle: 'Add Credential',
+        addTitle: 'Add cluster credential',
         editTitle: 'Edit Credential',
-        rotate: 'Rotate Secret',
+        rotate: 'Reset SK',
         saveNow: 'Save This Credential Now',
         nameRequired: 'Enter a credential name',
-        copySuccess: 'Copied'
-      }
+        copySuccess: 'Copied',
+        purpose: 'Purpose',
+        purposeHelp:
+          'Which cluster component calls the platform API with this credential: each purpose is one permission, and the credential can do nothing else. The scaling controller reads decisions and reports results; the admission policy (Kyverno) reads resource recommendations.',
+        purpose_operator: 'Scaling controller',
+        purpose_admission: 'Admission policy (Kyverno)',
+        clusterUse: 'Format used in the cluster',
+        accessKey: 'Access Key (AK)',
+        kindTitle: 'Cluster access credential: Access Key + Secret Key',
+        kindHelp: 'An AK/SK pair for cluster components calling the platform API.'
+      },
+      ldapEntry: 'LDAP settings'
     },
     task: {
       title: 'Task Definition Management',
@@ -2023,6 +2318,80 @@ const local = {
       noDetail: 'No content',
       clear: 'Clear',
       clearConfirm: 'Clear every operation log entry? This cannot be undone.'
+    },
+    formHelp: {
+      roleName: 'Display name of the role.',
+      roleCode: 'Unique code the permission check matches on.',
+      roleStatus: 'A disabled role grants nothing.',
+      roleRemark: 'A note for administrators.',
+      userName: 'Account used to sign in.',
+      userPassword: 'Password of a local account; leave empty on edit to keep it.',
+      userNick: 'Name shown in the UI.',
+      userStatus: 'A disabled account cannot sign in.',
+      userRoles: 'The account gets the union of the permissions of its roles.',
+      configName: 'Name shown in the list.',
+      configKey: 'Key the program reads the value by.',
+      configValue: 'Value of the parameter.',
+      configRemark: 'A note for administrators.',
+      menuName: 'Name of the menu or button.',
+      menuParent: 'The menu this item belongs to.',
+      menuCode: 'Unique permission code.',
+      menuRoute: 'Page address of the menu.',
+      menuComponent: 'Path of the page component.',
+      menuIcon: 'Icon name.',
+      menuApis: 'APIs granted with this item, as METHOD path.',
+      menuSort: 'Order among siblings, smaller first.',
+      menuLink: 'Points to an external address.',
+      menuCache: 'Keep the page state when leaving.',
+      menuVisible: 'Show in the sidebar.',
+      menuStatus: 'A disabled item is off for every role.',
+      taskType: 'Type of the task handler.',
+      taskCron: 'Five-field cron expression.',
+      taskDescription: 'What the task is for.',
+      taskParams: 'JSON parameters passed to the handler.',
+      taskMaxRetry: 'Maximum retries after a failure.',
+      taskRetryForever: 'Retry until it succeeds.',
+      taskRetryInitial: 'Seconds before the first retry.',
+      taskRetryFactor: 'Growth of the wait between retries.',
+      taskRetryMax: 'Upper bound of the wait in seconds.',
+      taskExecInterval: 'Stored on the task definition; the scheduler does not read it yet.',
+      taskWatchInterval: 'Stored on the task definition; the scheduler does not read it yet.',
+      keyName: 'Name of the credential.',
+      keyStatus: 'A disabled credential cannot call the platform.',
+      keyRemark: 'A note for administrators.',
+      taskEnabled: 'A disabled task does not run on its schedule.',
+      ldapEnabled: 'See the field.',
+      ldapStartTls: 'See the field.',
+      ldapClearCa: 'See the field.',
+      ldapBindPassword: 'See the field.',
+      ldapTimeout: 'See the field.',
+      ldapUserBase: 'See the field.',
+      ldapDisplayName: 'See the field.',
+      ldapEmail: 'See the field.',
+      ldapPhone: 'See the field.',
+      ldapGroupBase: 'See the field.',
+      ldapGroupName: 'See the field.',
+      mappingDatasource: 'See the field.',
+      mappingName: 'See the field.',
+      mappingMetric: 'See the field.',
+      mappingLevel: 'See the field.',
+      mappingUnit: 'See the field.',
+      mappingEnabled: 'See the field.',
+      mappingRemark: 'See the field.',
+      testStep: 'See the field.',
+      testScale: 'See the field.',
+      testPrecision: 'See the field.',
+      testRange: 'See the field.',
+      testDatasource: 'See the field.',
+      testMetric: 'See the field.',
+      testLevel: 'See the field.',
+      datasetDatasource: 'Datasource the query runs on.',
+      datasetLevel: 'Aggregation level of the metric.',
+      datasetUnit: 'Unit of a custom metric.',
+      datasetStep: 'Sampling step of the query.',
+      datasetPreset: 'Fill the fields below from a built-in template.',
+      templatePreviewModule: 'Render the template for this module and run it; preview only.',
+      datasetTemplate: 'The metric template this dataset uses.'
     }
   },
   form: {

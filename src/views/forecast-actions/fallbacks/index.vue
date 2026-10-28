@@ -1,19 +1,27 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue';
-import { NButton, NFormItemGi, NModal, NSelect, NSpace, NTag, useMessage } from 'naive-ui';
+import { NButton, NFormItemGi, NModal, NSelect, NSpace, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import RecommendationExplain from '@/components/business/recommendation-explain.vue';
-import { useForecastModules, windowStart, useWindowOptions } from '@/hooks/business/use-forecast-modules';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { downloadAuditExport, fetchGetFallbacks } from '@/service/api';
+import { fetchGetFallbacks, fetchGetSnapshot } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
+import { helpTitle } from '@/utils/help-title';
 
 defineOptions({ name: 'ForecastActionsFallbacks' });
 
+/**
+ * Two different things, kept apart. A degradation is the system switching to a safe preset because the forecast, the data or the
+ * decision service is not usable. A rollback is a change that was decided and not applied, so the workload stays on the configuration
+ * that was valid before. Each record says why, from which configuration to which, what became of it, and when.
+ */
 const REASONS: Api.Forecast.DegradeReason[] = [
   'no_data',
   'stale_data',
@@ -30,20 +38,22 @@ const REASONS: Api.Forecast.DegradeReason[] = [
 ];
 
 const { t } = useI18n();
-const message = useMessage();
 const { moduleOptions, moduleName, loadModules } = useForecastModules();
 const search = reactive({
   moduleId: null as number | null,
+  kind: null as string | null,
   reason: null as string | null,
-  hours: (24 * 7) as number | null
+  range: lastHours(24 * 7) as [number, number] | null
 });
-const exporting = ref(false);
 const detail = ref<Api.Forecast.FallbackRecord | null>(null);
+const snapshot = ref<Api.Forecast.Snapshot | null>(null);
 
-const reasonOptions = computed(() =>
-  REASONS.map(value => ({ label: t(`page.forecast.fallbacks.reason_${value}`), value }))
+const kindOptions = computed(() =>
+  (['degrade', 'rollback'] as const).map(value => ({ label: t(`page.forecast.fallbacks.kind_${value}`), value }))
 );
-const hoursOptions = useWindowOptions();
+const reasonOptions = computed(() =>
+  [...REASONS, 'decision_unavailable'].map(value => ({ label: t(`page.forecast.fallbacks.reason_${value}`), value }))
+);
 
 // the list below reads the sort parameters, and a change of the sort searches it again
 let searchList: () => void = () => {};
@@ -51,8 +61,9 @@ const { handleSorterChange, sortParams } = useTableSort(() => searchList());
 const list = usePagedList<Api.Forecast.FallbackRecord>(async (page, pageSize) => {
   const { data } = await fetchGetFallbacks({
     module_id: search.moduleId ?? undefined,
+    kind: (search.kind as Api.Forecast.FallbackKind) ?? undefined,
     reason: search.reason ?? undefined,
-    from: windowStart(search.hours),
+    ...rangeParams(search.range),
     page,
     page_size: pageSize,
     ...sortParams()
@@ -64,78 +75,191 @@ searchList = () => {
 };
 
 function resetSearch() {
-  Object.assign(search, { moduleId: null, reason: null, hours: 24 * 7 });
+  Object.assign(search, { moduleId: null, kind: null, reason: null, range: lastHours(24 * 7) });
 }
 
-async function exportCsv() {
-  exporting.value = true;
-  try {
-    await downloadAuditExport({
-      kind: 'fallbacks',
-      module_id: search.moduleId ?? undefined,
-      reason: search.reason ?? undefined,
-      from: windowStart(search.hours)
-    });
-  } catch (error) {
-    message.error(String((error as Error).message || error));
-  } finally {
-    exporting.value = false;
+async function openDetail(row: Api.Forecast.FallbackRecord) {
+  detail.value = row;
+  snapshot.value = null;
+  if (row.snapshot_id) {
+    const { data } = await fetchGetSnapshot(row.snapshot_id);
+    snapshot.value = data ?? null;
   }
 }
 
 function duration(seconds: number) {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
-  return `${(seconds / 3600).toFixed(1)} h`;
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} 分钟`;
+  return `${(seconds / 3600).toFixed(1)} 小时`;
+}
+
+/** a configuration value in the unit it is set in */
+function pointText(field: string, point: Api.Forecast.ConfigPoint) {
+  if (!point.set) return t('page.forecast.fallbacks.keptOriginal');
+  switch (field) {
+    case 'cpu':
+      return formatCpuMilli(point.value);
+    case 'memory':
+    case 'memory_floor':
+      return formatMemoryBytes(point.value);
+    case 'gpu':
+      return `${point.value} GPU`;
+    default:
+      return String(point.value);
+  }
+}
+const sourceText = (point: Api.Forecast.ConfigPoint) =>
+  point.set && point.source ? t(`page.forecast.recommendations.source_${point.source}`, point.source) : '';
+
+const kindType = (kind: Api.Forecast.FallbackKind) => (kind === 'rollback' ? 'error' : 'warning');
+const resultTypes: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
+  applied: 'success',
+  failed: 'error',
+  not_applied: 'error',
+  held: 'warning',
+  pending: 'info',
+  advisory: 'warning'
+};
+const resultType = (state: string) => resultTypes[state] ?? 'default';
+
+/** the sentence of the result, built from the figures of the record in Chinese */
+function resultText(row: Api.Forecast.FallbackRecord) {
+  const change = row.changes[0];
+  if (row.execution_id && change) {
+    const key = row.result_state === 'held' ? 'resultHeld' : 'resultNotApplied';
+    return t(`page.forecast.fallbacks.${key}`, {
+      current: change.target.value,
+      desired: change.original.value,
+      reason: change.note || ''
+    });
+  }
+  return t(`page.forecast.snapshots.state_${row.result_state}`, row.result_state);
 }
 
 const columnMap: Record<string, any> = {
-  created_at: {
-    title: t('page.forecast.fallbacks.startedAt'),
-    key: 'created_at',
+  at: {
+    title: t('page.forecast.fallbacks.at'),
+    key: 'at',
     width: 170,
     sorter: true,
-    render: (row: Api.Forecast.FallbackRecord) => formatDateTime(row.created_at)
+    render: (row: Api.Forecast.FallbackRecord) => formatDateTime(row.at)
+  },
+  kind: {
+    title: () => helpTitle(t('page.forecast.fallbacks.kind'), t('page.forecast.fallbacks.kindHelp')),
+    key: 'kind',
+    width: 90,
+    align: 'center',
+    render: (row: Api.Forecast.FallbackRecord) =>
+      h(NTag, { size: 'small', bordered: false, type: kindType(row.kind) }, () =>
+        t(`page.forecast.fallbacks.kind_${row.kind}`)
+      )
   },
   module: {
     title: t('page.forecast.modules.name'),
     key: 'module',
-    width: 150,
+    width: 130,
     resizable: true,
     render: (row: Api.Forecast.FallbackRecord) => moduleName(row.module_id)
   },
-  version: {
-    title: t('page.forecast.recommendations.version'),
-    key: 'version',
-    width: 90,
-    align: 'center',
-    sorter: true
-  },
-  reasons: {
-    title: t('page.forecast.fallbacks.reasons'),
-    key: 'reasons',
-    minWidth: 280,
+  trigger: {
+    title: () => helpTitle(t('page.forecast.fallbacks.trigger'), t('page.forecast.fallbacks.kindHelp')),
+    key: 'trigger',
+    minWidth: 260,
     render: (row: Api.Forecast.FallbackRecord) =>
-      h(NSpace, { size: 4, wrap: true }, () =>
-        Object.entries(row.reasons).map(([field, code]) =>
+      h(NSpace, { size: 4, wrap: true }, () => [
+        h(NTag, { size: 'small', bordered: false, type: kindType(row.kind), strong: true }, () =>
+          t(`page.forecast.fallbacks.kind_${row.kind}`)
+        ),
+        ...row.changes.map(change =>
           h(
             NTag,
-            { size: 'small', bordered: false, type: code === 'oom_floor' ? 'error' : 'warning' },
+            {
+              size: 'small',
+              bordered: false,
+              type: change.trigger === 'oom_floor' ? 'error' : 'warning',
+              title: change.note || ''
+            },
             () =>
-              `${t(`page.forecast.explain.field_${field === 'memory_floor' ? 'memory' : field}`)}: ${t(`page.forecast.fallbacks.reason_${code}`, String(code))}`
+              `${t(`page.forecast.fallbacks.field_${change.field}`)}: ${t(`page.forecast.fallbacks.reason_${change.trigger}`, change.trigger)}`
           )
         )
+      ])
+  },
+  change: {
+    title: () =>
+      helpTitle(
+        t('page.forecast.fallbacks.change'),
+        `${t('page.forecast.fallbacks.originalHelp')} ${t('page.forecast.fallbacks.targetHelp')}`
+      ),
+    key: 'change',
+    minWidth: 260,
+    render: (row: Api.Forecast.FallbackRecord) =>
+      h(
+        'div',
+        { class: 'leading-20px' },
+        row.changes.map(change =>
+          h('div', [
+            `${t(`page.forecast.fallbacks.field_${change.field}`)} `,
+            pointText(change.field, change.original),
+            ' → ',
+            pointText(change.field, change.target),
+            sourceText(change.target) ? ` (${sourceText(change.target)})` : ''
+          ])
+        )
       )
+  },
+  original: {
+    title: () => helpTitle(t('page.forecast.fallbacks.original'), t('page.forecast.fallbacks.originalHelp')),
+    key: 'original',
+    minWidth: 150,
+    render: (row: Api.Forecast.FallbackRecord) =>
+      h(
+        'div',
+        { class: 'leading-20px' },
+        row.changes.map(change => h('div', pointText(change.field, change.original)))
+      )
+  },
+  target: {
+    title: () => helpTitle(t('page.forecast.fallbacks.target'), t('page.forecast.fallbacks.targetHelp')),
+    key: 'target',
+    minWidth: 190,
+    render: (row: Api.Forecast.FallbackRecord) =>
+      h(
+        'div',
+        { class: 'leading-20px' },
+        row.changes.map(change =>
+          h('div', [
+            pointText(change.field, change.target),
+            sourceText(change.target) ? ` (${sourceText(change.target)})` : ''
+          ])
+        )
+      )
+  },
+  result: {
+    title: t('page.forecast.fallbacks.result'),
+    key: 'result',
+    minWidth: 260,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.FallbackRecord) =>
+      h('span', [
+        h(NTag, { size: 'small', bordered: false, type: resultType(row.result_state), class: 'mr-6px' }, () =>
+          t(
+            `page.forecast.snapshots.state_${row.result_state}`,
+            t(`page.forecast.fallbacks.state_${row.result_state}`, row.result_state)
+          )
+        ),
+        resultText(row)
+      ])
   },
   duration: {
     title: t('page.forecast.fallbacks.duration'),
     key: 'duration',
-    width: 110,
+    width: 100,
     align: 'center',
     render: (row: Api.Forecast.FallbackRecord) => duration(row.duration_seconds)
   },
   recovered_at: {
-    title: t('page.forecast.fallbacks.recoveredAt'),
+    title: () => helpTitle(t('page.forecast.fallbacks.recoveredAt'), t('page.forecast.fallbacks.recoveredHelp')),
     key: 'recovered_at',
     width: 170,
     render: (row: Api.Forecast.FallbackRecord) =>
@@ -146,12 +270,12 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 110,
+    width: 100,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.FallbackRecord) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () =>
           t('page.forecast.recommendations.explain')
         )
       ])
@@ -160,7 +284,7 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_fallback',
   columnMap,
-  defaultKeys: ['created_at', 'module', 'reasons', 'duration', 'recovered_at', 'operate']
+  defaultKeys: ['at', 'module', 'trigger', 'change', 'result', 'kind', 'original', 'target', 'recovered_at', 'operate']
 });
 
 onMounted(async () => {
@@ -172,14 +296,26 @@ onMounted(async () => {
 
 <template>
   <div class="h-full flex-col overflow-hidden gap-12px">
-    <ListSearchCard :model="search" :action-span="8" @search="list.search" @reset="resetSearch">
-      <NFormItemGi class="list-search-select-field" :span="8" :label="t('page.forecast.modules.name')">
+    <ListSearchCard :model="search" :action-span="6" @search="list.search" @reset="resetSearch">
+      <NFormItemGi class="list-search-select-field" :span="6" :label="t('page.forecast.modules.name')">
         <NSelect
           v-model:value="search.moduleId"
           filterable
           clearable
           :options="moduleOptions"
           :placeholder="t('common.selectField', { field: t('page.forecast.modules.name') })"
+        />
+      </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="3"
+        :label="t('page.forecast.fallbacks.kind')"
+      >
+        <NSelect
+          v-model:value="search.kind"
+          clearable
+          :options="kindOptions"
+          :placeholder="t('common.selectField', { field: t('page.forecast.fallbacks.kind') })"
         />
       </NFormItemGi>
       <NFormItemGi class="list-search-select-field" :span="5" :label="t('page.forecast.fallbacks.reason')">
@@ -190,12 +326,8 @@ onMounted(async () => {
           :placeholder="t('common.selectField', { field: t('page.forecast.fallbacks.reason') })"
         />
       </NFormItemGi>
-      <NFormItemGi
-        class="list-search-select-field list-search-short-field"
-        :span="3"
-        :label="t('page.forecast.evaluation.range')"
-      >
-        <NSelect v-model:value="search.hours" clearable :options="hoursOptions" />
+      <NFormItemGi :span="6" :label="t('common.timeRange')">
+        <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
     <ListTablePanel
@@ -208,13 +340,7 @@ onMounted(async () => {
       :empty-hint="t('page.forecast.fallbacks.empty')"
       @refresh="list.reload"
       @sorter="handleSorterChange"
-    >
-      <template #suffix>
-        <NButton size="small" :loading="exporting" @click="exportCsv">
-          {{ t('page.forecast.recommendations.export') }}
-        </NButton>
-      </template>
-    </ListTablePanel>
+    ></ListTablePanel>
     <NModal
       :show="detail !== null"
       preset="card"
@@ -222,8 +348,21 @@ onMounted(async () => {
       class="edit-modal-wide"
       @update:show="value => !value && (detail = null)"
     >
-      <div class="max-h-60vh overflow-auto">
-        <RecommendationExplain v-if="detail" :detail="detail.detail" />
+      <div v-if="detail" class="max-h-60vh flex flex-col gap-12px overflow-auto">
+        <div class="flex flex-wrap items-center gap-8px text-13px">
+          <NTag size="small" :bordered="false" :type="kindType(detail.kind)">
+            {{ t(`page.forecast.fallbacks.kind_${detail.kind}`) }}
+          </NTag>
+          <span>{{ formatDateTime(detail.at) }}</span>
+          <span>{{ resultText(detail) }}</span>
+        </div>
+        <div v-for="change in detail.changes" :key="change.field" class="text-13px leading-22px">
+          <b>{{ t(`page.forecast.fallbacks.field_${change.field}`) }}</b>
+          · {{ t(`page.forecast.fallbacks.reason_${change.trigger}`, change.trigger) }} ·
+          {{ pointText(change.field, change.original) }} → {{ pointText(change.field, change.target) }}
+          <span v-if="change.note" class="opacity-70">· {{ change.note }}</span>
+        </div>
+        <RecommendationExplain v-if="snapshot" :detail="snapshot.detail" />
       </div>
     </NModal>
   </div>

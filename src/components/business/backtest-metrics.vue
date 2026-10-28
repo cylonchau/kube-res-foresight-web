@@ -17,9 +17,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { baselineId: '', unit: '' });
 const { t } = useI18n();
 
-const KEYS = ['accuracy', 'wape', 'mae', 'rmse', 'pinball', 'peak_under', 'coverage'] as const;
+const KEYS = ['accuracy', 'wape', 'risk_wape', 'mae', 'rmse', 'pinball', 'peak_under', 'coverage', 'windows'] as const;
 type Key = (typeof KEYS)[number];
-const picked = ref<Key[]>(['accuracy', 'wape', 'mae', 'peak_under', 'coverage']);
+const picked = ref<Key[]>(['accuracy', 'wape', 'risk_wape', 'mae', 'peak_under', 'coverage', 'windows']);
 
 function parse(raw: string): Api.Forecast.BacktestMetrics | null {
   try {
@@ -41,6 +41,11 @@ function show(m: Api.Forecast.BacktestMetrics | null, key: Key) {
     case 'peak_under':
     case 'coverage':
       return formatPercent(m[key]);
+    case 'risk_wape':
+      // results stored before the metric existed carry no weight: there is nothing to show
+      return m.under_weight ? formatPercent(m.risk_wape ?? 0) : '-';
+    case 'windows':
+      return t('page.forecast.evalMetric.windowsValue', { cutoffs: m.cutoffs, points: m.points });
     case 'mae':
     case 'rmse':
     case 'pinball':

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { h, reactive, ref, computed } from 'vue';
+import StatusSelect from '@/components/business/status-select.vue';
+import HelpLabel from '@/components/common/help-label.vue';
+import BatchActions from '@/components/business/batch-actions.vue';
 import { formatDateTime } from '@/utils/date';
+import IconTooltip from '@/components/common/icon-tooltip.vue';
 import type { VNodeChild } from 'vue';
 import { useRoute } from 'vue-router';
 import type { DataTableColumns, PaginationProps } from 'naive-ui';
@@ -9,7 +13,6 @@ import {
   NPopconfirm,
   NPopover,
   NSpace,
-  NSwitch,
   NTag,
   NCard,
   NForm,
@@ -23,6 +26,7 @@ import {
   NModal,
   NFormItem,
   NCheckbox,
+  NDynamicInput,
   NCheckboxGroup
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
@@ -52,14 +56,21 @@ const { bool: visible, setTrue: openModal, setFalse: closeModal } = useBoolean()
 interface SearchParams {
   username: string;
   nickName: string;
+  source: string | null;
   status: boolean | null;
 }
 
 const searchParams = reactive<SearchParams>({
   username: '',
   nickName: '',
+  source: null,
   status: null
 });
+
+const sourceOptions = computed(() => [
+  { label: t('page.manage.user.source_local'), value: 'local' },
+  { label: t('page.manage.user.source_ldap'), value: 'ldap' }
+]);
 
 const statusFilterOptions: NaiveUI.SelectOptionOf<boolean | null>[] = [
   { label: t('common.allStatuses'), value: null },
@@ -76,6 +87,23 @@ const statusFilterValue = computed({
     searchParams.status = value as unknown as boolean | null;
   }
 });
+
+/** The usual kinds of contact, offered in the form; any other name can be typed, and it is stored as typed. */
+const CONTACT_TYPES = [
+  'email',
+  'phone',
+  'whatsapp',
+  'telegram',
+  'wechat',
+  'wecom',
+  'dingtalk',
+  'feishu',
+  'slack',
+  'teams'
+];
+const contactLabel = (type: string) =>
+  CONTACT_TYPES.includes(type) ? t(`page.manage.user.contactType_${type}`) : type;
+const contactTypeOptions = computed(() => CONTACT_TYPES.map(value => ({ label: contactLabel(value), value })));
 
 const tableData = ref<Api.System.User[]>([]);
 const checkedRowKeys = ref<any[]>([]);
@@ -104,6 +132,7 @@ async function getTableData() {
     page_size: pagination.pageSize,
     username: searchParams.username || undefined,
     nick_name: searchParams.nickName || undefined,
+    source: searchParams.source || undefined,
     status: searchParams.status === null ? undefined : searchParams.status
   });
   if (data) {
@@ -148,11 +177,33 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
         : h(NTag, { type: 'error', bordered: false }, { default: () => t('page.manage.user.status.inactive') });
     }
   },
-  phone: {
-    title: t('page.manage.user.userPhone'),
+  source: {
+    title: t('page.manage.user.source'),
     resizable: true,
     align: 'center',
-    minWidth: 120
+    width: 90,
+    render: row =>
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: row.source === 'ldap' ? 'info' : 'default' },
+        { default: () => t(`page.manage.user.source_${row.source === 'ldap' ? 'ldap' : 'local'}`) }
+      )
+  },
+  contacts: {
+    title: t('page.manage.user.contacts'),
+    resizable: true,
+    minWidth: 200,
+    render: row => {
+      const list = row.contacts || [];
+      if (!list.length) return '-';
+      return h(
+        'div',
+        { class: 'flex flex-wrap gap-4px' },
+        list.map(item =>
+          h(NTag, { size: 'small', bordered: false }, { default: () => `${contactLabel(item.type)} ${item.value}` })
+        )
+      );
+    }
   },
   roles: {
     title: t('page.manage.role.roleName'),
@@ -172,12 +223,6 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
         }
       );
     }
-  },
-  email: {
-    title: t('page.manage.user.email'),
-    resizable: true,
-    align: 'center',
-    width: 150
   },
   otpEnabled: {
     title: t('page.manage.user.otpStatus'),
@@ -238,25 +283,6 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     width: 170,
     render: row => formatDateTime(row.lastLoginAt)
   },
-  lastLoginIp: {
-    title: t('page.manage.user.lastLoginIp'),
-    resizable: true,
-    align: 'center',
-    width: 140,
-    render: row => row.lastLoginIp || '-'
-  },
-  id: {
-    title: t('common.id'),
-    resizable: true,
-    align: 'center',
-    width: 70
-  },
-  avatar: {
-    title: t('page.manage.user.avatar'),
-    resizable: true,
-    align: 'center',
-    width: 80
-  },
   createdAt: {
     title: t('common.createTime'),
     resizable: true,
@@ -264,18 +290,11 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     width: 180,
     render: row => formatDateTime(row.createdAt, '')
   },
-  updatedAt: {
-    title: t('common.updateTime'),
-    resizable: true,
-    align: 'center',
-    width: 180,
-    render: row => formatDateTime(row.updatedAt, '')
-  },
   operate: {
     title: t('common.operate'),
     key: 'operate',
     align: 'center',
-    width: 320,
+    width: 190,
     fixed: 'right',
     resizable: true,
     render: row => {
@@ -288,7 +307,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
             h(
               NButton,
               {
-                size: 'small',
+                size: 'tiny',
                 type: (btn.btnType as any) || 'primary',
                 onClick: () => handleEdit(row)
               },
@@ -307,7 +326,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
                 trigger: () =>
                   h(
                     NButton,
-                    { size: 'small', type: 'warning', ghost: true },
+                    { size: 'tiny', type: 'warning', ghost: true },
                     { default: () => t('page.manage.user.resetOtp') }
                   )
               }
@@ -329,7 +348,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
               {
                 default: () => t('common.confirmDelete'),
                 trigger: () =>
-                  h(NButton, { size: 'small', type: 'error', ghost: true }, { default: () => t('common.delete') })
+                  h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => t('common.delete') })
               }
             )
           );
@@ -345,7 +364,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
             trigger: () =>
               h(
                 NButton,
-                { size: 'small', type: row.status ? 'warning' : 'success', ghost: true, disabled: isSelf },
+                { size: 'tiny', type: row.status ? 'warning' : 'success', ghost: true, disabled: isSelf },
                 { default: () => (row.status ? t('common.disable') : t('common.enable')) }
               ),
             default: () => (row.status ? t('common.confirmDisable') : t('common.confirmEnable'))
@@ -370,12 +389,11 @@ const defaultKeys = [
   '__selection__',
   'username',
   'nickName',
+  'source',
+  'roles',
+  'contacts',
   'isOnline',
   'lastLoginAt',
-  'lastLoginIp',
-  'roles',
-  'phone',
-  'email',
   'otpEnabled',
   'status',
   'createdAt',
@@ -405,7 +423,7 @@ const userForm = reactive({
   username: '',
   password: '',
   nickName: '',
-  phone: '',
+  contacts: [] as Array<{ type: string; value: string }>,
   status: true,
   role_ids: [] as number[]
 });
@@ -428,7 +446,7 @@ function handleAdd() {
     username: '',
     password: '',
     nickName: '',
-    phone: '',
+    contacts: [],
     status: true,
     role_ids: []
   });
@@ -442,7 +460,7 @@ function handleEdit(row: Api.System.User) {
     username: row.username,
     password: '',
     nickName: row.nickName || '',
-    phone: (row as any).phone || '',
+    contacts: (row.contacts || []).map(item => ({ ...item })),
     status: row.status,
     role_ids: row.roles?.map(r => r.id) || []
   });
@@ -466,6 +484,27 @@ async function handleResetOTP(row: Api.System.User) {
   }
 }
 
+/** The batch menu of every list: enable, disable and delete the checked rows. */
+const batchActions = computed(() => [
+  { key: 'enable', label: t('common.enable') },
+  { key: 'disable', label: t('common.disable') },
+  { key: 'delete', label: t('common.delete'), danger: true }
+]);
+
+async function runBatch(key: string) {
+  if (key === 'delete') return handleBatchDelete();
+  if (checkedRowKeys.value.length === 0) return;
+  const status = key === 'enable';
+  let done = 0;
+  for (const id of checkedRowKeys.value) {
+    const { error } = await updateUser(id, { status });
+    if (!error) done += 1;
+  }
+  window.$message?.success(t('common.batchDone', { done }));
+  checkedRowKeys.value = [];
+  getTableData();
+}
+
 async function handleBatchDelete() {
   if (checkedRowKeys.value.length === 0) return;
   const { error } = await batchDeleteUser(checkedRowKeys.value);
@@ -479,6 +518,7 @@ async function handleBatchDelete() {
 function resetSearchParams() {
   searchParams.username = '';
   searchParams.nickName = '';
+  searchParams.source = null;
   searchParams.status = null;
   getTableData();
 }
@@ -513,7 +553,21 @@ onMounted(() => {
               </NFormItemGi>
               <NFormItemGi
                 class="list-search-select-field list-search-short-field"
-                :span="6"
+                :span="3"
+                :label="t('page.manage.user.source')"
+                path="source"
+              >
+                <NSelect
+                  v-model:value="searchParams.source"
+                  clearable
+                  :placeholder="t('page.manage.user.source')"
+                  :options="sourceOptions"
+                  @update:value="getTableData"
+                />
+              </NFormItemGi>
+              <NFormItemGi
+                class="list-search-select-field list-search-short-field"
+                :span="3"
                 :label="t('page.manage.user.userStatus')"
                 path="status"
               >
@@ -552,12 +606,15 @@ onMounted(() => {
           v-model:columns="columnChecks"
           v-model:density="density"
           class="pb-12px"
-          :disabled-delete="checkedRowKeys.length === 0"
+          :show-delete="false"
           :loading="loading"
           @add="handleAdd"
           @delete="handleBatchDelete"
           @refresh="getTableData"
         >
+          <template #suffix>
+            <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
+          </template>
           <template #prefix>
             <template v-for="btn in getButtonsByPosition('header')" :key="btn.code">
               <NButton
@@ -580,7 +637,7 @@ onMounted(() => {
             :pagination="pagination"
             :row-key="row => row.id"
             :size="density"
-            :scroll-x="2000"
+            :scroll-x="1500"
             class="h-full"
             flex-height
             @update:columns="handleColumnUpdate"
@@ -594,14 +651,20 @@ onMounted(() => {
 
     <NModal v-model:show="visible" preset="card" :title="isEdit ? t('common.edit') : t('common.add')" class="w-500px">
       <NForm :model="userForm" label-placement="top">
-        <NFormItem :label="t('page.manage.user.userName')" path="username">
+        <NFormItem path="username">
+          <template #label>
+            <HelpLabel :label="t('page.manage.user.userName')" :help="t('page.formHelp.userName')" />
+          </template>
           <NInput
             v-model:value="userForm.username"
             :placeholder="t('page.manage.user.form.userName')"
             :disabled="isEdit"
           />
         </NFormItem>
-        <NFormItem :label="t('page.manage.user.userPassword')" path="password">
+        <NFormItem path="password">
+          <template #label>
+            <HelpLabel :label="t('page.manage.user.userPassword')" :help="t('page.formHelp.userPassword')" />
+          </template>
           <NInput
             v-model:value="userForm.password"
             type="password"
@@ -609,23 +672,46 @@ onMounted(() => {
             :placeholder="isEdit ? t('page.manage.user.form.editPassword') : t('page.manage.user.form.userPassword')"
           />
         </NFormItem>
-        <NFormItem :label="t('page.manage.user.nickName')" path="nickName">
+        <NFormItem path="nickName">
+          <template #label>
+            <HelpLabel :label="t('page.manage.user.nickName')" :help="t('page.formHelp.userNick')" />
+          </template>
           <NInput v-model:value="userForm.nickName" :placeholder="t('page.manage.user.form.nickName')" />
         </NFormItem>
-        <NFormItem :label="t('page.manage.user.userPhone')" path="phone">
-          <NInput v-model:value="userForm.phone" :placeholder="t('page.manage.user.form.userPhone')" />
-        </NFormItem>
-        <NFormItem :label="t('page.manage.user.userStatus')" path="status">
-          <NSwitch v-model:value="userForm.status" :disabled="isEditingSelf">
-            <template #checked>
-              {{ t('page.manage.user.status.active') }}
+        <NFormItem path="contacts">
+          <template #label>
+            <span class="inline-flex items-center gap-4px">
+              {{ t('page.manage.user.contacts') }}
+              <IconTooltip icon="mdi-help-circle" placement="top">
+                <div class="max-w-320px leading-22px">{{ t('page.manage.user.contactsHelp') }}</div>
+              </IconTooltip>
+            </span>
+          </template>
+          <NDynamicInput v-model:value="userForm.contacts" :on-create="() => ({ type: 'email', value: '' })">
+            <template #default="{ value }">
+              <div class="w-full flex gap-8px">
+                <NSelect
+                  v-model:value="value.type"
+                  filterable
+                  tag
+                  :options="contactTypeOptions"
+                  class="w-150px flex-shrink-0"
+                />
+                <NInput v-model:value="value.value" />
+              </div>
             </template>
-            <template #unchecked>
-              {{ t('page.manage.user.status.inactive') }}
-            </template>
-          </NSwitch>
+          </NDynamicInput>
         </NFormItem>
-        <NFormItem :label="t('page.manage.role.roleName')" path="role_ids">
+        <NFormItem path="status">
+          <template #label>
+            <HelpLabel :label="t('page.manage.user.userStatus')" :help="t('page.formHelp.userStatus')" />
+          </template>
+          <StatusSelect v-model:value="userForm.status" :disabled="isEditingSelf" />
+        </NFormItem>
+        <NFormItem path="role_ids">
+          <template #label>
+            <HelpLabel :label="t('page.manage.role.roleName')" :help="t('page.formHelp.userRoles')" />
+          </template>
           <NCard :bordered="true" size="small" class="bg-[#f9fafb] dark:bg-[#18181c] rounded-8px w-full">
             <NCheckboxGroup v-model:value="userForm.role_ids">
               <NGrid :cols="2" :y-gap="8">

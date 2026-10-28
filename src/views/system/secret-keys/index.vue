@@ -8,14 +8,18 @@ import {
   NInput,
   NModal,
   NPopconfirm,
+  NSelect,
   NSpace,
-  NSwitch,
   NTag,
   useDialog,
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import StatusSelect from '@/components/business/status-select.vue';
+import HelpLabel from '@/components/common/help-label.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
+import CopyText from '@/components/common/copy-text.vue';
+import IconTooltip from '@/components/common/icon-tooltip.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
@@ -24,6 +28,8 @@ import {
   fetchGetSecretKeys,
   fetchUpdateSecretKey
 } from '@/service/api/system';
+import { fetchAllPermissions } from '@/service/api/permission';
+import { copyText } from '@/utils/copy';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
@@ -38,7 +44,30 @@ const visible = ref(false);
 const editing = ref<number>();
 const credentialVisible = ref(false);
 const credential = reactive({ accessKey: '', accessSecret: '' });
-const form = reactive({ name: '', status: true, remark: '' });
+/**
+ * What a credential is for: the cluster component that calls the platform with it. Each purpose is one API permission, so a
+ * credential can do nothing but that (the operator reads decisions and reports, Kyverno reads admission recommendations).
+ */
+const PURPOSES = [
+  { value: 'forecast:operator:use', key: 'operator' },
+  { value: 'forecast:admission:read', key: 'admission' }
+];
+const purposeOptions = computed(() =>
+  PURPOSES.map(item => ({ label: t(`page.system.secretKeys.purpose_${item.key}`), value: item.value }))
+);
+const permissionIds = ref<Record<string, number>>({});
+const form = reactive({ name: '', status: true, remark: '', purposes: [] as string[] });
+
+async function loadPermissionIds() {
+  const { data } = await fetchAllPermissions();
+  const walk = (items: any[]) => {
+    for (const item of items || []) {
+      permissionIds.value[item.code] = item.id;
+      walk(item.children);
+    }
+  };
+  walk((data as any) || []);
+}
 
 const pagination = reactive({
   page: 1,
@@ -77,6 +106,9 @@ function open(row?: any) {
   form.name = row?.name || '';
   form.status = row?.status ?? true;
   form.remark = row?.remark || '';
+  form.purposes = PURPOSES.filter(item => (row?.permission_ids || []).includes(permissionIds.value[item.value])).map(
+    item => item.value
+  );
   visible.value = true;
 }
 
@@ -89,6 +121,7 @@ async function save() {
     name: form.name.trim(),
     key_type: 'developer_access',
     server_enabled: true,
+    permission_ids: form.purposes.map(code => permissionIds.value[code]).filter(Boolean),
     status: form.status,
     remark: form.remark
   };
@@ -142,17 +175,12 @@ async function rotate(row: any) {
 }
 
 async function copyValue(value: string) {
-  await navigator.clipboard.writeText(value);
-  message.success(t('page.system.secretKeys.copySuccess'));
+  if (await copyText(value)) message.success(t('common.copied'));
+  else message.error(t('common.copyFailed'));
 }
 
 function renderCopyable(value?: string) {
-  if (!value) return '-';
-  return h(
-    NButton,
-    { text: true, type: 'primary', title: t('common.copy'), onClick: () => copyValue(value) },
-    { default: () => value }
-  );
+  return value ? h(CopyText, { text: value }) : '-';
 }
 
 const columnMap: Record<string, any> = {
@@ -166,11 +194,24 @@ const columnMap: Record<string, any> = {
   },
   name: { title: t('page.system.secretKeys.name'), key: 'name', width: 180, resizable: true },
   access_key: {
-    title: 'Access Key',
+    title: t('page.system.secretKeys.accessKey'),
     key: 'access_key',
     width: 220,
     resizable: true,
     render: (row: any) => renderCopyable(row.access_key)
+  },
+  purpose: {
+    title: t('page.system.secretKeys.purpose'),
+    key: 'purpose',
+    width: 200,
+    render: (row: any) =>
+      h(NSpace, { size: 4 }, () =>
+        PURPOSES.filter(item => (row.permission_ids || []).includes(permissionIds.value[item.value])).map(item =>
+          h(NTag, { size: 'small', bordered: false, type: 'info' }, () =>
+            t(`page.system.secretKeys.purpose_${item.key}`)
+          )
+        )
+      )
   },
   masked_value: { title: t('page.system.secretKeys.maskedValue'), key: 'masked_value', width: 180, resizable: true },
   status: {
@@ -203,18 +244,18 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 240,
+    width: 156,
     fixed: 'right',
     align: 'center',
     render: (row: any) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => open(row) }, () => t('common.edit')),
-        h(NButton, { size: 'small', onClick: () => rotate(row) }, () => t('page.system.secretKeys.rotate')),
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
+        h(NButton, { size: 'tiny', onClick: () => rotate(row) }, () => t('page.system.secretKeys.rotate')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         )
@@ -225,6 +266,7 @@ const columnMap: Record<string, any> = {
 const defaultColumnKeys = [
   '__selection__',
   'name',
+  'purpose',
   'access_key',
   'masked_value',
   'status',
@@ -248,8 +290,9 @@ const modalTitle = computed(() =>
   editing.value ? t('page.system.secretKeys.editTitle') : t('page.system.secretKeys.addTitle')
 );
 
-onMounted(() => {
+onMounted(async () => {
   initColumnConfig();
+  await loadPermissionIds();
   load();
 });
 </script>
@@ -267,7 +310,15 @@ onMounted(() => {
           @add="open()"
           @delete="batchRemove"
           @refresh="load"
-        />
+        >
+          <template #prefix>
+            <HelpLabel
+              class="text-12px opacity-80"
+              :label="t('page.system.secretKeys.kindTitle')"
+              :help="t('page.system.secretKeys.kindHelp')"
+            />
+          </template>
+        </TableHeaderOperation>
         <div class="flex-1 overflow-hidden">
           <ExpandableDataTable
             v-model:columns="tableColumns"
@@ -291,14 +342,36 @@ onMounted(() => {
 
     <NModal v-model:show="visible" preset="card" :title="modalTitle" class="w-520px max-w-90vw">
       <NForm :model="form" label-placement="top">
-        <NFormItem :label="t('page.system.secretKeys.name')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.system.secretKeys.name')" :help="t('page.formHelp.keyName')" />
+          </template>
           <NInput
             v-model:value="form.name"
             :placeholder="t('common.inputField', { field: t('page.system.secretKeys.name') })"
           />
         </NFormItem>
-        <NFormItem :label="t('common.status')"><NSwitch v-model:value="form.status" /></NFormItem>
-        <NFormItem :label="t('page.system.secretKeys.remark')">
+        <NFormItem>
+          <template #label>
+            <span class="inline-flex items-center gap-4px">
+              {{ t('page.system.secretKeys.purpose') }}
+              <IconTooltip icon="mdi-help-circle" placement="top">
+                <div class="max-w-320px leading-22px">{{ t('page.system.secretKeys.purposeHelp') }}</div>
+              </IconTooltip>
+            </span>
+          </template>
+          <NSelect v-model:value="form.purposes" multiple :options="purposeOptions" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('common.status')" :help="t('page.formHelp.keyStatus')" />
+          </template>
+          <StatusSelect v-model:value="form.status" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.system.secretKeys.remark')" :help="t('page.formHelp.keyRemark')" />
+          </template>
           <NInput
             v-model:value="form.remark"
             :placeholder="t('common.inputField', { field: t('page.system.secretKeys.remark') })"
@@ -323,18 +396,24 @@ onMounted(() => {
     >
       <NForm label-placement="top">
         <NFormItem label="Access Key">
-          <NInput
-            :placeholder="t('common.inputField', { field: 'Access Key' })"
-            :value="credential.accessKey"
-            readonly
-          />
+          <div class="w-full flex gap-8px">
+            <NInput :value="credential.accessKey" readonly />
+            <NButton @click="copyValue(credential.accessKey)">{{ t('common.copy') }}</NButton>
+          </div>
         </NFormItem>
         <NFormItem label="Access Secret">
-          <NInput
-            :placeholder="t('common.inputField', { field: 'Access Secret' })"
-            :value="credential.accessSecret"
-            readonly
-          />
+          <div class="w-full flex gap-8px">
+            <NInput :value="credential.accessSecret" readonly />
+            <NButton @click="copyValue(credential.accessSecret)">{{ t('common.copy') }}</NButton>
+          </div>
+        </NFormItem>
+        <NFormItem :label="t('page.system.secretKeys.clusterUse')">
+          <div class="w-full flex gap-8px">
+            <NInput :value="`${credential.accessKey}:${credential.accessSecret}`" readonly />
+            <NButton @click="copyValue(`${credential.accessKey}:${credential.accessSecret}`)">
+              {{ t('common.copy') }}
+            </NButton>
+          </div>
         </NFormItem>
       </NForm>
     </NModal>

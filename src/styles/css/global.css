@@ -217,6 +217,13 @@ html {
   max-width: var(--list-search-short-field-width) !important;
 }
 
+/* The time filter is the last field of every search row and is as tall as the fields beside it. */
+.list-search-row .time-range-field.n-button {
+  height: var(--list-search-control-height);
+  padding: 0 10px;
+  text-align: left;
+}
+
 .list-search-row > .list-search-switch-field {
   flex: 0 0 var(--list-search-switch-width) !important;
   width: var(--list-search-switch-width) !important;
@@ -413,6 +420,11 @@ html {
   column-gap: 20px;
 }
 
+/* Section titles and blocks of a form (a test result, a table) that are not fields take the whole row. */
+.n-card.n-modal .n-form:not(.list-search-form):not(.n-form--inline):has(> .n-form-item) > :not(.n-form-item) {
+  grid-column: 1 / -1;
+}
+
 .n-card.n-modal .n-form > .n-form-item:has(textarea),
 .n-card.n-modal .n-form > .n-form-item:has(.n-dynamic-input),
 .n-card.n-modal .n-form > .n-form-item:has(.n-dynamic-tags),
@@ -424,4 +436,33 @@ html {
 .n-card.n-modal > .n-card__content {
   max-height: calc(90vh - 130px);
   overflow-y: auto;
+}
+
+/* The scrollbar of a dropdown has a gutter of its own, so it never lies over the text of the options or the tags of a multiple select. */
+.n-base-select-menu .n-scrollbar > .n-scrollbar-container > .n-scrollbar-content,
+.n-dropdown-menu .n-scrollbar > .n-scrollbar-container > .n-scrollbar-content {
+  padding-right: 12px;
+}
+
+.n-base-select-menu .n-scrollbar-rail.n-scrollbar-rail--vertical,
+.n-dropdown-menu .n-scrollbar-rail.n-scrollbar-rail--vertical {
+  right: 2px;
+}
+
+/* Operate columns: every button of a table row is the same small size and style, so no page spends more column width on its buttons than on its data. */
+.n-data-table .n-data-table-td .n-button {
+  --n-height: 24px;
+  --n-padding: 0 8px;
+  --n-font-size: 12px;
+  --n-icon-size: 14px;
+}
+
+.n-data-table .n-data-table-td .n-space {
+  gap: 4px !important;
+}
+
+/* Denser tables: the columns take the width of their content, not of their padding. */
+.n-data-table {
+  --n-th-padding: 8px 10px;
+  --n-td-padding: 6px 10px;
 }

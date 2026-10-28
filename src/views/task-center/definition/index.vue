@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, h, reactive, computed, watch } from 'vue';
+import StatusSelect from '@/components/business/status-select.vue';
+import HelpLabel from '@/components/common/help-label.vue';
 import { fetchGetJobTypes, fetchGetTasks, fetchUpdateTask } from '@/service/api/system';
 import { formatDateTime } from '@/utils/date';
 import {
@@ -486,27 +488,42 @@ onMounted(async () => {
 
     <NModal v-model:show="showModal" preset="card" :title="t('page.task.editTask')" class="w-600px">
       <NForm ref="formRef" :model="editForm" :rules="rules" label-placement="top">
-        <NFormItem :label="t('page.task.columns.taskType')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.columns.taskType')" :help="t('page.formHelp.taskType')" />
+          </template>
           <NInput
             v-model:value="editForm.task_type"
             :placeholder="t('common.inputField', { field: t('page.task.columns.taskType') })"
             disabled
           />
         </NFormItem>
-        <NFormItem :label="t('page.task.columns.cronExpr')" path="cron_expr">
+        <NFormItem path="cron_expr">
+          <template #label>
+            <HelpLabel :label="t('page.task.columns.cronExpr')" :help="t('page.formHelp.taskCron')" />
+          </template>
           <NInput v-model:value="editForm.cron_expr" placeholder="*/5 * * * *" />
         </NFormItem>
-        <NFormItem :label="t('page.task.columns.description')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.columns.description')" :help="t('page.formHelp.taskDescription')" />
+          </template>
           <NInput
             v-model:value="editForm.description"
             :placeholder="t('common.inputField', { field: t('page.task.columns.description') })"
             type="textarea"
           />
         </NFormItem>
-        <NFormItem :label="t('page.task.columns.params')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.columns.params')" :help="t('page.formHelp.taskParams')" />
+          </template>
           <NInput v-model:value="editForm.params" type="textarea" placeholder="{}" />
         </NFormItem>
-        <NFormItem :label="t('page.task.maxRetry')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.maxRetry')" :help="t('page.formHelp.taskMaxRetry')" />
+          </template>
           <NInputNumber
             v-model:value="editForm.max_retry"
             :placeholder="t('common.inputField', { field: t('page.task.maxRetry') })"
@@ -514,38 +531,59 @@ onMounted(async () => {
             :max="10"
           />
         </NFormItem>
-        <NFormItem :label="t('page.task.retryForever')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.retryForever')" :help="t('page.formHelp.taskRetryForever')" />
+          </template>
           <NSwitch v-model:value="editForm.retry_forever" />
         </NFormItem>
-        <NFormItem :label="t('page.task.retryInitial')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.retryInitial')" :help="t('page.formHelp.taskRetryInitial')" />
+          </template>
           <NInputNumber
             v-model:value="editForm.retry_initial_seconds"
             :placeholder="t('common.inputField', { field: t('page.task.retryInitial') })"
             :min="1"
           />
         </NFormItem>
-        <NFormItem :label="t('page.task.retryFactor')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.retryFactor')" :help="t('page.formHelp.taskRetryFactor')" />
+          </template>
           <NInputNumber
             v-model:value="editForm.retry_backoff_factor"
             :placeholder="t('common.inputField', { field: t('page.task.retryFactor') })"
             :min="1"
           />
         </NFormItem>
-        <NFormItem :label="t('page.task.retryMax')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.retryMax')" :help="t('page.formHelp.taskRetryMax')" />
+          </template>
           <NInputNumber
             v-model:value="editForm.retry_max_seconds"
             :placeholder="t('common.inputField', { field: t('page.task.retryMax') })"
             :min="1"
           />
         </NFormItem>
-        <NFormItem :label="t('page.task.executionInterval')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.executionInterval')" :help="t('page.formHelp.taskExecInterval')" />
+          </template>
           <NInputNumber v-model:value="editForm.execution_interval_seconds" :min="0" placeholder="0" />
         </NFormItem>
-        <NFormItem :label="t('page.task.watchInterval')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.watchInterval')" :help="t('page.formHelp.taskWatchInterval')" />
+          </template>
           <NInputNumber v-model:value="editForm.watch_interval_seconds" :min="0" placeholder="0" />
         </NFormItem>
-        <NFormItem :label="t('page.task.columns.enabled')">
-          <NSwitch v-model:value="editForm.enabled" />
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.task.columns.enabled')" :help="t('page.formHelp.taskEnabled')" />
+          </template>
+          <StatusSelect v-model:value="editForm.enabled" />
         </NFormItem>
       </NForm>
       <template #footer>

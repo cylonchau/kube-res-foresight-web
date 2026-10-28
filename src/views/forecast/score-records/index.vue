@@ -13,11 +13,13 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
 import { fetchGetAlgorithmScores, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { copyCell } from '@/utils/copy-cell';
+import { helpTitle } from '@/utils/help-title';
 
 defineOptions({ name: 'ForecastScoreRecords' });
 
 const { t } = useI18n();
-const { moduleOptions, loadModules } = useForecastModules();
+const { moduleOptions, moduleName, loadModules } = useForecastModules();
 const percent = (value: number | undefined) =>
   value === undefined || value < 0 ? '-' : `${(value * 100).toFixed(1)}%`;
 
@@ -73,20 +75,22 @@ const columnMap: Record<string, any> = {
   },
   module: {
     title: t('page.forecast.modules.name'),
-    key: 'module_name',
+    key: 'module',
     width: 150,
     resizable: true,
-    ellipsis: { tooltip: true }
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.AlgorithmScore) => row.module_name || moduleName(row.module_id)
   },
   algorithm: {
     title: t('page.forecast.modules.algorithm'),
     key: 'algorithm',
     width: 170,
     sorter: true,
-    resizable: true
+    resizable: true,
+    render: (row: Api.Forecast.AlgorithmScore) => copyCell(row.algorithm)
   },
   score: {
-    title: t('page.forecast.scores.score'),
+    title: () => helpTitle(t('page.forecast.scores.score'), t('page.forecast.metricHelp.score')),
     key: 'score',
     width: 100,
     align: 'center',
@@ -96,45 +100,38 @@ const columnMap: Record<string, any> = {
   rank: { title: t('page.forecast.scores.rank'), key: 'rank', width: 80, align: 'center', sorter: true },
   windows: { title: t('page.forecast.scores.windows'), key: 'windows', width: 90, align: 'center' },
   selected: {
-    title: t('page.forecast.scores.inUse'),
+    title: t('page.forecast.scores.wasInUse'),
     key: 'selected',
     width: 100,
     align: 'center',
     render: (row: Api.Forecast.AlgorithmScore) =>
       row.selected
-        ? h(NTag, { size: 'small', bordered: false, type: 'success' }, () => t('page.forecast.scores.inUse'))
+        ? h(NTag, { size: 'small', bordered: false, type: 'info' }, () => t('page.forecast.scores.wasInUse'))
         : '-'
   },
-  replica: {
-    title: t('page.forecast.scores.replicaAccuracy'),
-    key: 'replica',
-    width: 120,
-    align: 'center',
-    render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'replicas')
-  },
   cpu: {
-    title: t('page.forecast.scores.cpuAccuracy'),
+    title: () => helpTitle(t('page.forecast.scores.cpuAccuracy'), t('page.forecast.metricHelp.accuracy')),
     key: 'cpu',
     width: 110,
     align: 'center',
     render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'cpu')
   },
   memory: {
-    title: t('page.forecast.scores.memoryAccuracy'),
+    title: () => helpTitle(t('page.forecast.scores.memoryAccuracy'), t('page.forecast.metricHelp.accuracy')),
     key: 'memory',
     width: 110,
     align: 'center',
     render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'memory')
   },
   gpu: {
-    title: t('page.forecast.scores.gpuAccuracy'),
+    title: () => helpTitle(t('page.forecast.scores.gpuAccuracy'), t('page.forecast.metricHelp.accuracy')),
     key: 'gpu',
     width: 110,
     align: 'center',
     render: (row: Api.Forecast.AlgorithmScore) => accuracyOf(row, 'gpu')
   },
   oom: {
-    title: t('page.forecast.scores.oomPenalty'),
+    title: () => helpTitle(t('page.forecast.scores.oomPenalty'), t('page.forecast.metricHelp.oomPenalty')),
     key: 'oom',
     width: 110,
     align: 'center',
@@ -154,7 +151,7 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.AlgorithmScore) =>
-      h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
+      h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
         t('common.detail')
       )
   }
@@ -169,8 +166,6 @@ const cfg = useTableColumnConfig({
     'algorithm',
     'score',
     'rank',
-    'selected',
-    'replica',
     'cpu',
     'memory',
     'oom',
@@ -204,7 +199,12 @@ onMounted(async () => {
         />
       </NFormItemGi>
       <NFormItemGi :span="6" :label="t('page.forecast.modules.algorithm')">
-        <NInput v-model:value="search.algorithm" clearable @keyup.enter="list.search" />
+        <NInput
+          v-model:value="search.algorithm"
+          clearable
+          :placeholder="t('page.forecast.modules.algorithm')"
+          @keyup.enter="list.search"
+        />
       </NFormItemGi>
       <NFormItemGi :span="9" :label="t('common.timeRange')">
         <TimeRangeField v-model="search.range" />

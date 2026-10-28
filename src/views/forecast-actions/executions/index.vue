@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue';
-import { NButton, NFormItemGi, NInput, NSelect, NTag, useMessage } from 'naive-ui';
+import { NButton, NFormItemGi, NInput, NSelect, NTag } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
@@ -11,13 +11,14 @@ import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
-import { downloadAuditExport, fetchGetExecutions, fetchBatchDeleteRecords } from '@/service/api';
+import { fetchGetExecutions, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { copyCell } from '@/utils/copy-cell';
+import { reasonText, scalingActionText } from '@/utils/reason';
 
 defineOptions({ name: 'ForecastActionsExecutions' });
 
 const { t } = useI18n();
-const message = useMessage();
 const { moduleOptions, moduleName, loadModules } = useForecastModules();
 const search = reactive({
   moduleId: null as number | null,
@@ -26,7 +27,6 @@ const search = reactive({
   keyword: '',
   range: lastHours(24 * 7) as [number, number] | null
 });
-const exporting = ref(false);
 
 const resultOptions = computed(() =>
   ['applied', 'observed', 'held', 'conflict', 'error'].map(value => ({
@@ -73,22 +73,6 @@ function resetSearch() {
   Object.assign(search, { moduleId: null, result: null, action: null, keyword: '', range: lastHours(24 * 7) });
 }
 
-async function exportCsv() {
-  exporting.value = true;
-  try {
-    await downloadAuditExport({
-      kind: 'executions',
-      module_id: search.moduleId ?? undefined,
-      result: search.result ?? undefined,
-      ...rangeParams(search.range)
-    });
-  } catch (error) {
-    message.error(String((error as Error).message || error));
-  } finally {
-    exporting.value = false;
-  }
-}
-
 const resultType = (result: string) =>
   result === 'applied'
     ? 'success'
@@ -119,8 +103,7 @@ const columnMap: Record<string, any> = {
     key: 'target',
     width: 230,
     resizable: true,
-    ellipsis: { tooltip: true },
-    render: (row: Api.Forecast.Execution) => `${row.namespace}/${row.target_kind}/${row.target_name}`
+    render: (row: Api.Forecast.Execution) => copyCell(`${row.namespace}/${row.target_kind}/${row.target_name}`)
   },
   current: {
     title: t('page.forecast.recommendations.current'),
@@ -137,7 +120,13 @@ const columnMap: Record<string, any> = {
     align: 'center',
     sorter: true
   },
-  action: { title: t('page.forecast.recommendations.action'), key: 'action', width: 110, align: 'center' },
+  action: {
+    title: t('page.forecast.recommendations.action'),
+    key: 'action',
+    width: 90,
+    align: 'center',
+    render: (row: Api.Forecast.Execution) => scalingActionText(row.action)
+  },
   result: {
     title: t('page.forecast.recommendations.result'),
     key: 'result',
@@ -163,16 +152,22 @@ const columnMap: Record<string, any> = {
           )
         : '-'
   },
-  reason: { title: t('page.forecast.evaluation.reason'), key: 'reason', minWidth: 260, ellipsis: { tooltip: true } },
+  reason: {
+    title: t('page.forecast.evaluation.reason'),
+    key: 'reason',
+    minWidth: 260,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.Execution) => reasonText(row.reason) || '-'
+  },
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 170,
+    width: 140,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Execution) =>
       row.decision_version
-        ? h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => openSnapshot(row) }, () =>
+        ? h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => openSnapshot(row) }, () =>
             t('page.forecast.executions.openSnapshot', { version: row.decision_version })
           )
         : '-'
@@ -181,7 +176,18 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_execution',
   columnMap,
-  defaultKeys: ['__selection__', 'created_at', 'module', 'target', 'desired', 'result', 'operate']
+  defaultKeys: [
+    '__selection__',
+    'created_at',
+    'module',
+    'target',
+    'current',
+    'desired',
+    'action',
+    'result',
+    'reason',
+    'operate'
+  ]
 });
 
 const router = useRouter();
@@ -261,9 +267,6 @@ onMounted(async () => {
     >
       <template #suffix>
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
-        <NButton size="small" :loading="exporting" @click="exportCsv">
-          {{ t('page.forecast.recommendations.export') }}
-        </NButton>
       </template>
     </ListTablePanel>
   </div>

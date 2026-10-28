@@ -14,6 +14,8 @@ import { useTableSort } from '@/hooks/business/use-table-sort';
 import { fetchGetAdmissions, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatMilli } from '@/utils/format';
+import { copyCell } from '@/utils/copy-cell';
+import { reasonText } from '@/utils/reason';
 
 defineOptions({ name: 'ForecastActionsAdmissions' });
 
@@ -92,9 +94,8 @@ const columnMap: Record<string, any> = {
     title: t('page.forecast.admissions.target'),
     key: 'target',
     minWidth: 240,
-    ellipsis: { tooltip: true },
     render: (row: Api.Forecast.Admission) =>
-      `${row.namespace}/${row.workload}${row.container ? ` (${row.container})` : ''}`
+      copyCell(`${row.namespace}/${row.workload}${row.container ? `/${row.container}` : ''}`)
   },
   applied: {
     title: t('page.forecast.admissions.result'),
@@ -161,7 +162,13 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.Forecast.Admission) => row.gpu || '-'
   },
-  reason: { title: t('page.forecast.admissions.reason'), key: 'reason', minWidth: 320, ellipsis: { tooltip: true } },
+  reason: {
+    title: t('page.forecast.admissions.reason'),
+    key: 'reason',
+    minWidth: 320,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.Admission) => reasonText(row.reason) || '-'
+  },
   operate: {
     title: t('common.operate'),
     key: 'operate',
@@ -169,7 +176,7 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Admission) =>
-      h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
+      h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
         t('common.detail')
       )
   }
@@ -220,10 +227,20 @@ onMounted(async () => {
         :span="4"
         :label="t('page.forecast.admissions.result')"
       >
-        <NSelect v-model:value="search.applied" clearable :options="appliedOptions" />
+        <NSelect
+          v-model:value="search.applied"
+          clearable
+          :options="appliedOptions"
+          :placeholder="t('page.forecast.admissions.result')"
+        />
       </NFormItemGi>
       <NFormItemGi :span="4" :label="t('common.keyword')">
-        <NInput v-model:value="search.keyword" clearable @keyup.enter="list.search" />
+        <NInput
+          v-model:value="search.keyword"
+          clearable
+          :placeholder="t('common.keyword')"
+          @keyup.enter="list.search"
+        />
       </NFormItemGi>
       <NFormItemGi :span="9" :label="t('common.timeRange')">
         <TimeRangeField v-model="search.range" />

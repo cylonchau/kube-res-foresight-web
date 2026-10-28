@@ -1,8 +1,8 @@
-export type ConfigCategory = 'auth' | 'ui' | 'notify';
-export const CONFIG_CATEGORIES: ConfigCategory[] = ['auth', 'ui', 'notify'];
-/** The directory login settings, shown as a form beside the parameter categories. */
-export const LDAP_CATEGORY = 'ldap';
+export type ConfigCategory = 'auth' | 'ldap' | 'forecast' | 'ui' | 'notify';
+export const CONFIG_CATEGORIES: ConfigCategory[] = ['auth', 'ldap', 'forecast', 'ui', 'notify'];
 export function categoryOf(key: string): ConfigCategory {
+  if (key.startsWith('ldap.')) return 'ldap';
+  if (key.startsWith('forecast.')) return 'forecast';
   if (key.startsWith('ui.')) return 'ui';
   if (key.startsWith('notify.')) return 'notify';
   return 'auth';

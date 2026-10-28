@@ -2,7 +2,6 @@
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NFormItemGi, NInput, NPopconfirm, NSelect, NSpace, NTag, useDialog, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import MetricMappingForm from '@/components/business/metric-mapping-form.vue';
@@ -22,7 +21,6 @@ defineOptions({ name: 'DatasourceMetricMappings' });
 const { t } = useI18n();
 const message = useMessage();
 const dialog = useDialog();
-const router = useRouter();
 
 const datasources = ref<Api.Datasource.DatasourceOption[]>([]);
 const catalog = ref<Api.Datasource.MetricCatalog>({
@@ -183,17 +181,17 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 170,
+    width: 104,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Datasource.MetricMapping) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => open(row) }, () => t('common.edit')),
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         )
@@ -304,13 +302,7 @@ onMounted(async () => {
       @add="open()"
       @delete="batchRemove"
       @refresh="reload"
-    >
-      <template #suffix>
-        <NButton size="small" ghost type="primary" @click="router.push({ name: 'datasource_presets' })">
-          {{ t('page.datasource.mappings.fromPreset') }}
-        </NButton>
-      </template>
-    </ListTablePanel>
+    />
 
     <MetricMappingForm v-model:show="formVisible" :editing="editing" @saved="reload" />
   </div>

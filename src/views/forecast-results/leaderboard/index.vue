@@ -9,7 +9,11 @@ import TimeRangeField from '@/components/business/time-range-field.vue';
 import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchGetLeaderboard } from '@/service/api';
+import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { formatDecimal, formatPercent } from '@/utils/format';
+import { copyCell } from '@/utils/copy-cell';
+import { reasonText } from '@/utils/reason';
+import { helpTitle } from '@/utils/help-title';
 
 defineOptions({ name: 'ForecastResultsLeaderboard' });
 
@@ -21,6 +25,17 @@ const search = reactive({
   range: lastHours(24 * 7) as [number, number] | null
 });
 const checkedRowKeys = ref<string[]>([]);
+const pagination = reactive({
+  page: 1,
+  pageSize: getAdaptivePageSize(),
+  showSizePicker: true,
+  pageSizes: getAdaptivePageSizes(),
+  onChange: (page: number) => (pagination.page = page),
+  onUpdatePageSize: (size: number) => {
+    pagination.pageSize = size;
+    pagination.page = 1;
+  }
+});
 const rows = ref<Api.Forecast.LeaderboardEntry[]>([]);
 const loading = ref(false);
 
@@ -33,8 +48,12 @@ const metricOptions = computed(() => {
   return kinds.map(value => ({ label: t(`page.datasource.mappings.metric_${value}`), value }));
 });
 
+const ranked = (row: Api.Forecast.LeaderboardEntry) => row.status === 'ready';
 const percent = (value: number) => formatPercent(value, 1);
 const number = (value: number) => formatDecimal(value);
+/** an enabled algorithm without a measured result has no figures; its status and reason are shown instead */
+const figure = (row: Api.Forecast.LeaderboardEntry, text: (value: number) => string, value: number) =>
+  ranked(row) ? text(value) : '-';
 const yesNo = (value: boolean | undefined) =>
   value === undefined
     ? '-'
@@ -52,6 +71,7 @@ async function load() {
   loading.value = false;
   rows.value = data || [];
   checkedRowKeys.value = [];
+  pagination.page = 1;
 }
 
 function resetSearch() {
@@ -72,14 +92,15 @@ const batchActions = computed(() => [{ key: 'export', label: t('page.forecast.me
 /** The checked rows as a CSV, with the values as shown (three decimals at most). */
 function exportChecked() {
   const keys = new Set(checkedRowKeys.value);
-  const lines = ['rank,algorithm,wape,mae,bias,peak_under,coverage,runs,points'];
-  rows.value.forEach((r, i) => {
-    if (keys.has(r.algorithm_id))
+  const lines = ['rank,algorithm,wape,risk_wape,mae,bias,peak_under,coverage,runs,points'];
+  rows.value.forEach(r => {
+    if (keys.has(`${r.algorithm_id}/${r.metric}`) && ranked(r))
       lines.push(
         [
-          i + 1,
+          r.rank,
           r.algorithm_id,
           r.wape.toFixed(3),
+          r.risk_wape.toFixed(3),
           r.mae.toFixed(3),
           r.bias.toFixed(3),
           r.peak_under.toFixed(3),
@@ -96,21 +117,45 @@ function exportChecked() {
   URL.revokeObjectURL(link.href);
 }
 
-const centered = { width: 100, align: 'center' };
+const centered = { width: 84, align: 'center' };
 const columnMap: Record<string, any> = {
   __selection__: { type: 'selection', width: 42, minWidth: 42 },
   rank: {
-    title: '#',
+    title: () => helpTitle('#', t('page.forecast.metricHelp.rank')),
     key: 'rank',
-    width: 60,
+    width: 56,
     align: 'center',
-    render: (_row: Api.Forecast.LeaderboardEntry, index: number) => index + 1
+    render: (row: Api.Forecast.LeaderboardEntry) => (ranked(row) ? row.rank : '-')
   },
   algorithm_id: {
     title: t('page.forecast.modules.algorithm'),
     key: 'algorithm_id',
-    width: 170,
-    resizable: true
+    width: 130,
+    resizable: true,
+    render: (row: Api.Forecast.LeaderboardEntry) => copyCell(row.algorithm_id)
+  },
+  status: {
+    title: () => helpTitle(t('page.forecast.evaluation.status'), t('page.forecast.metricHelp.status')),
+    key: 'status',
+    width: 96,
+    align: 'center',
+    render: (row: Api.Forecast.LeaderboardEntry) =>
+      h(
+        NTag,
+        {
+          size: 'small',
+          bordered: false,
+          type: row.status === 'failed' ? 'error' : ranked(row) ? 'success' : 'warning'
+        },
+        () => t(`page.forecast.ranking.state_${row.status}`)
+      )
+  },
+  reason: {
+    title: t('page.forecast.evaluation.reason'),
+    key: 'reason',
+    minWidth: 200,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Forecast.LeaderboardEntry) => reasonText(row.reason) || '-'
   },
   baseline: {
     title: t('page.forecast.evaluation.role'),
@@ -121,38 +166,64 @@ const columnMap: Record<string, any> = {
         t(row.baseline ? 'page.forecast.evaluation.baseline' : 'page.forecast.evaluation.candidate')
       )
   },
-  wape: { title: 'WAPE', key: 'wape', ...centered, render: (row: Api.Forecast.LeaderboardEntry) => percent(row.wape) },
-  mae: { title: 'MAE', key: 'mae', ...centered, render: (row: Api.Forecast.LeaderboardEntry) => number(row.mae) },
+  wape: {
+    title: () => helpTitle('WAPE', t('page.forecast.metricHelp.wape')),
+    key: 'wape',
+    ...centered,
+    render: (row: Api.Forecast.LeaderboardEntry) => figure(row, percent, row.wape)
+  },
+  risk_wape: {
+    title: () => helpTitle(t('page.forecast.evaluation.riskWape'), t('page.forecast.metricHelp.riskWape')),
+    key: 'risk_wape',
+    width: 104,
+    align: 'center',
+    render: (row: Api.Forecast.LeaderboardEntry) => figure(row, percent, row.risk_wape)
+  },
+  mae: {
+    title: () => helpTitle('MAE', t('page.forecast.metricHelp.mae')),
+    key: 'mae',
+    ...centered,
+    render: (row: Api.Forecast.LeaderboardEntry) => figure(row, number, row.mae)
+  },
   bias: {
-    title: t('page.forecast.evaluation.bias'),
+    title: () => helpTitle(t('page.forecast.evaluation.bias'), t('page.forecast.metricHelp.bias')),
     key: 'bias',
     ...centered,
-    render: (row: Api.Forecast.LeaderboardEntry) => number(row.bias)
+    render: (row: Api.Forecast.LeaderboardEntry) => figure(row, number, row.bias)
   },
   peak_under: {
-    title: t('page.forecast.evaluation.peakUnder'),
+    title: () => helpTitle(t('page.forecast.evaluation.peakUnder'), t('page.forecast.metricHelp.peakUnder')),
     key: 'peak_under',
-    width: 110,
+    width: 96,
     align: 'center',
-    render: (row: Api.Forecast.LeaderboardEntry) => percent(row.peak_under)
+    render: (row: Api.Forecast.LeaderboardEntry) => figure(row, percent, row.peak_under)
   },
   coverage: {
-    title: t('page.forecast.evaluation.coverage'),
+    title: () => helpTitle(t('page.forecast.evaluation.coverage'), t('page.forecast.metricHelp.coverage')),
     key: 'coverage',
     ...centered,
-    render: (row: Api.Forecast.LeaderboardEntry) => percent(row.coverage)
+    render: (row: Api.Forecast.LeaderboardEntry) => figure(row, percent, row.coverage)
   },
-  runs: { title: t('page.forecast.evaluation.runs'), key: 'runs', width: 90, align: 'center' },
-  points: { title: t('page.forecast.evaluation.points'), key: 'points', ...centered },
+  runs: {
+    title: () => helpTitle(t('page.forecast.evaluation.runs'), t('page.forecast.metricHelp.runs')),
+    key: 'runs',
+    width: 72,
+    align: 'center'
+  },
+  points: {
+    title: () => helpTitle(t('page.forecast.evaluation.points'), t('page.forecast.metricHelp.points')),
+    key: 'points',
+    ...centered
+  },
   beats_baseline: {
-    title: t('page.forecast.evaluation.beatsBaseline'),
+    title: () => helpTitle(t('page.forecast.evaluation.beatsBaseline'), t('page.forecast.metricHelp.beatsBaseline')),
     key: 'beats_baseline',
-    width: 120,
+    width: 104,
     align: 'center',
     render: (row: Api.Forecast.LeaderboardEntry) => yesNo(row.beats_baseline)
   },
   promoted: {
-    title: t('page.forecast.evaluation.promoted'),
+    title: () => helpTitle(t('page.forecast.evaluation.promoted'), t('page.forecast.metricHelp.promoted')),
     key: 'promoted',
     ...centered,
     render: (row: Api.Forecast.LeaderboardEntry) => yesNo(row.promoted)
@@ -161,7 +232,24 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_leaderboard',
   columnMap,
-  defaultKeys: Object.keys(columnMap)
+  defaultKeys: [
+    '__selection__',
+    'rank',
+    'algorithm_id',
+    'status',
+    'risk_wape',
+    'wape',
+    'baseline',
+    'mae',
+    'bias',
+    'peak_under',
+    'coverage',
+    'runs',
+    'points',
+    'beats_baseline',
+    'promoted',
+    'reason'
+  ]
 });
 
 onMounted(async () => {
@@ -169,7 +257,7 @@ onMounted(async () => {
   await loadModules();
   search.moduleId = modules.value[0]?.id ?? null;
   search.metric = metricOptions.value[0]?.value ?? null;
-  await load();
+  // the search is submitted by the list-search plugin when the filters above change
 });
 </script>
 
@@ -206,7 +294,9 @@ onMounted(async () => {
       :cfg="cfg"
       :loading="loading"
       :data="rows"
-      :row-key="(row: any) => row.algorithm_id"
+      :remote="false"
+      :pagination="pagination"
+      :row-key="(row: any) => `${row.algorithm_id}/${row.metric}`"
       :empty-hint="t('page.forecast.results.leaderboardEmpty')"
       @refresh="load"
     >

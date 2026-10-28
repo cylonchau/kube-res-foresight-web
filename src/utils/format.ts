@@ -68,3 +68,26 @@ export function formatPercent(ratio: number | null | undefined, digits = 1) {
   if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return '-';
   return `${formatDecimal(ratio * 100, digits)}%`;
 }
+
+const MIB = 1024 * 1024;
+
+/**
+ * A CPU request in millicores the way it is set and read: 420 -> '420m', 1500 -> '1.5 核', 2000 -> '2 核'. The unit word is a
+ * parameter so a page in another language can pass its own.
+ */
+export function formatCpuMilli(milli: number | null | undefined, coreWord = '核') {
+  if (milli === null || milli === undefined || !Number.isFinite(milli)) return '-';
+  if (Math.abs(milli) < 1000) return `${formatDecimal(milli, 0)}m`;
+  return `${formatDecimal(milli / 1000, 2)} ${coreWord}`;
+}
+
+/**
+ * A memory request in bytes the way a manifest writes it: 335544320 -> '320Mi', 2147483648 -> '2Gi'. Whole MiB stay in Mi unless
+ * they are an exact number of GiB; a value that is not a whole number of MiB shows one decimal of Mi, never raw bytes.
+ */
+export function formatMemoryBytes(bytes: number | null | undefined) {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '-';
+  const mib = bytes / MIB;
+  if (Number.isInteger(mib)) return mib !== 0 && mib % 1024 === 0 ? `${mib / 1024}Gi` : `${mib}Mi`;
+  return `${formatDecimal(mib, 1)}Mi`;
+}

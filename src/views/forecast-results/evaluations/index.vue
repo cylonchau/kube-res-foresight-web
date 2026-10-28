@@ -14,6 +14,8 @@ import { useTableSort } from '@/hooks/business/use-table-sort';
 import { fetchGetEvaluations, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatDecimal } from '@/utils/format';
+import { copyCell } from '@/utils/copy-cell';
+import { helpTitle } from '@/utils/help-title';
 
 defineOptions({ name: 'ForecastResultsEvaluations' });
 
@@ -100,11 +102,12 @@ const columnMap: Record<string, any> = {
     key: 'algorithm_id',
     width: 160,
     resizable: true,
-    sorter: true
+    sorter: true,
+    render: (row: Api.Forecast.Evaluation) => copyCell(row.algorithm_id)
   },
   points: { title: t('page.forecast.evaluation.points'), key: 'points', width: 100, align: 'center' },
   wape: {
-    title: 'WAPE',
+    title: () => helpTitle('WAPE', t('page.forecast.metricHelp.wape')),
     key: 'wape',
     width: 100,
     align: 'center',
@@ -112,7 +115,7 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Evaluation) => percent(row.wape)
   },
   mae: {
-    title: 'MAE',
+    title: () => helpTitle('MAE', t('page.forecast.metricHelp.mae')),
     key: 'mae',
     width: 100,
     align: 'center',
@@ -120,14 +123,14 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Evaluation) => number(row.mae)
   },
   bias: {
-    title: t('page.forecast.evaluation.bias'),
+    title: () => helpTitle(t('page.forecast.evaluation.bias'), t('page.forecast.metricHelp.bias')),
     key: 'bias',
     width: 100,
     align: 'center',
     render: (row: Api.Forecast.Evaluation) => number(row.bias)
   },
   peak_under: {
-    title: t('page.forecast.evaluation.peakUnder'),
+    title: () => helpTitle(t('page.forecast.evaluation.peakUnder'), t('page.forecast.metricHelp.peakUnder')),
     key: 'peak_under',
     width: 110,
     align: 'center',
@@ -135,7 +138,7 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Evaluation) => percent(row.peak_under)
   },
   coverage: {
-    title: t('page.forecast.evaluation.coverage'),
+    title: () => helpTitle(t('page.forecast.evaluation.coverage'), t('page.forecast.metricHelp.coverage')),
     key: 'coverage',
     width: 100,
     align: 'center',
@@ -155,7 +158,7 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Evaluation) =>
-      h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
+      h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
         t('common.detail')
       )
   }

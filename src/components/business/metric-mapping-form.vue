@@ -1,48 +1,36 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import {
-  NButton,
-  NForm,
-  NFormItem,
-  NInput,
-  NInputNumber,
-  NModal,
-  NSelect,
-  NSpace,
-  NSwitch,
-  NTag,
-  useMessage
-} from 'naive-ui';
+import { NButton, NForm, NFormItem, NInput, NModal, NSelect, NSpace, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import PromqlTester, { type QueryConfig } from '@/components/business/promql-tester.vue';
-import IconTooltip from '@/components/common/icon-tooltip.vue';
+import DurationInput from '@/components/advanced/duration-input.vue';
+import StatusSelect from '@/components/business/status-select.vue';
+import QueryTestResult, { type QueryConfig } from '@/components/business/query-test-result.vue';
+import HelpLabel from '@/components/common/help-label.vue';
+import { useForecastModules } from '@/hooks/business/use-forecast-modules';
 import {
-  fetchApplyMetricPreset,
   fetchCreateMetricMapping,
   fetchGetDatasourceOptions,
   fetchGetMetricCatalog,
   fetchGetMetricPresets,
   fetchUpdateMetricMapping
-} from '@/service/api';
+} from '@/service/api/datasource';
 
-defineOptions({ name: 'MetricMappingForm' });
+defineOptions({ name: 'MetricTemplateForm' });
 
-interface Props {
-  /** The mapping being edited; none creates one. */
-  editing?: Api.Datasource.MetricMapping | null;
-  /** A built-in template to start from: the mapping is created from it and remembers it. */
-  preset?: Api.Datasource.Preset | null;
-}
-
-const props = withDefaults(defineProps<Props>(), { editing: null, preset: null });
+/**
+ * A metric template: the PromQL of one kind of metric at one level, written once with the variables of a module
+ * ({{namespace}}, {{workload}}, ...). Modules choose the templates they are calculated from; the query is rendered with the
+ * module's own parameters. The test below renders it for the module picked beside it and runs it, in this same form.
+ */
+const props = defineProps<{ editing: Api.Datasource.MetricMapping | null }>();
 const emit = defineEmits<{ saved: [] }>();
 const show = defineModel<boolean>('show', { required: true });
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const message = useMessage();
+const { moduleOptions, loadModules } = useForecastModules();
 
 const datasources = ref<Api.Datasource.DatasourceOption[]>([]);
-const presets = ref<Api.Datasource.Preset[]>([]);
 const catalog = ref<Api.Datasource.MetricCatalog>({
   metrics: [],
   levels: [],
@@ -50,57 +38,23 @@ const catalog = ref<Api.Datasource.MetricCatalog>({
   min_step_seconds: 15,
   max_step_seconds: 3600
 });
+const presets = ref<Api.Datasource.Preset[]>([]);
 const saving = ref(false);
+const previewModule = ref<number | null>(null);
 
-/** Template variables are written with double braces, which cannot appear inside a Vue mustache. */
-const placeholder = (name: string) => `{{${name}}}`;
-const text = (value: Api.Datasource.PresetText) => (locale.value === 'en-US' ? value.en : value.zh);
-
-function emptyForm() {
-  return {
-    datasource_id: null as number | null,
-    name: '',
-    metric: null as string | null,
-    level: null as string | null,
-    query: '',
-    step_seconds: 60,
-    enabled: true,
-    remark: '',
-    template: null as string | null
-  };
-}
-const form = reactive(emptyForm());
-// ---- run the PromQL before it is saved
-const testerVisible = ref(false);
-const tested = ref(false);
-const testerInitial = computed<Partial<QueryConfig>>(() => ({
-  datasource_id: form.datasource_id,
-  query: form.query,
-  level: form.level || 'workload',
-  metric: form.metric || 'custom',
-  unit: catalog.value.metrics.find(item => item.metric === form.metric)?.unit,
-  step_seconds: form.step_seconds
-}));
-function applyTested(config: QueryConfig) {
-  Object.assign(form, {
-    datasource_id: config.datasource_id,
-    query: config.query,
-    level: config.level,
-    metric: config.metric,
-    step_seconds: config.step_seconds
-  });
-  tested.value = true;
-}
-
-const datasourceOptions = computed(() => {
-  const current = props.editing;
-  const options = datasources.value.map(item => ({ label: item.name, value: item.id }));
-  // a disabled datasource is not offered for new mappings but stays selectable on its own mappings
-  if (current && !datasources.value.some(item => item.id === current.datasource_id)) {
-    return [{ label: current.datasource_name, value: current.datasource_id }, ...options];
-  }
-  return options;
+const form = reactive({
+  datasource_id: null as number | null,
+  name: '',
+  metric: 'cpu',
+  level: 'workload',
+  unit: '',
+  step_seconds: 60,
+  query: '',
+  enabled: true,
+  remark: ''
 });
+
+const datasourceOptions = computed(() => datasources.value.map(item => ({ label: item.name, value: item.id })));
 const metricOptions = computed(() =>
   catalog.value.metrics.map(item => ({
     label: `${t(`page.datasource.mappings.metric_${item.metric}`)} (${item.unit})`,
@@ -110,240 +64,210 @@ const metricOptions = computed(() =>
 const levelOptions = computed(() =>
   catalog.value.levels.map(item => ({ label: t(`page.datasource.mappings.level_${item.level}`), value: item.level }))
 );
-const unit = computed(() => catalog.value.metrics.find(item => item.metric === form.metric)?.unit || '-');
-const requiredVariables = computed(
-  () => catalog.value.levels.find(item => item.level === form.level)?.required_variables || []
-);
+const kindUnit = computed(() => catalog.value.metrics.find(item => item.metric === form.metric)?.unit || '');
+const isCustom = computed(() => form.metric === 'custom');
+const presetOptions = computed(() => presets.value.map(item => ({ label: item.name.zh, value: item.id })));
+const pickedPreset = ref<Api.Datasource.Preset>();
+const variableList = computed(() => catalog.value.variables.map(name => '{{' + name + '}}').join(' '));
 
-/** The templates that fit the chosen metric and level: picking one generates the PromQL, which stays editable. */
-const templateOptions = computed(() =>
-  presets.value
-    .filter(item => (!form.metric || item.metric === form.metric) && (!form.level || item.level === form.level))
-    .map(item => ({
-      label: `${text(item.name)}${item.verified ? '' : ` (${t('page.datasource.presets.unverified')})`}`,
-      value: item.id
-    }))
-);
+const testConfig = computed<QueryConfig>(() => ({
+  datasource_id: form.datasource_id,
+  query: form.query,
+  level: form.level,
+  metric: form.metric,
+  unit: isCustom.value ? form.unit : kindUnit.value,
+  step_seconds: form.step_seconds,
+  scale: 1,
+  precision: 6
+}));
 
-function useTemplate(id: string | null) {
-  form.template = id;
-  const picked = presets.value.find(item => item.id === id);
-  if (!picked) return;
-  form.query = picked.query;
-  form.step_seconds = picked.step_seconds;
-  form.metric ??= picked.metric;
-  form.level ??= picked.level;
-  if (!form.name.trim()) form.name = picked.id;
+async function loadPresets(metric: string) {
+  presets.value = [];
+  pickedPreset.value = undefined;
+  if (!metric || metric === 'custom') return;
+  const { data } = await fetchGetMetricPresets({ metric });
+  presets.value = data?.list || [];
 }
 
-const title = computed(() => {
-  if (props.preset) return text(props.preset.name);
-  return t(props.editing ? 'page.datasource.mappings.editTitle' : 'page.datasource.mappings.addTitle');
-});
-
-watch(show, async visible => {
-  if (!visible) return;
-  Object.assign(form, emptyForm());
-  tested.value = false;
-  const [options, metricCatalog, presetList] = await Promise.all([
-    fetchGetDatasourceOptions(),
-    fetchGetMetricCatalog(),
-    fetchGetMetricPresets()
-  ]);
-  datasources.value = options.data || [];
-  if (metricCatalog.data) catalog.value = metricCatalog.data;
-  presets.value = presetList.data?.list || [];
-  if (props.editing) {
-    const row = props.editing;
-    Object.assign(form, {
-      datasource_id: row.datasource_id,
-      name: row.name,
-      metric: row.metric,
-      level: row.level,
-      query: row.query,
-      step_seconds: row.step_seconds,
-      enabled: row.enabled,
-      remark: row.remark,
-      template: row.preset_id || null
-    });
-  } else if (props.preset) {
-    Object.assign(form, {
-      name: props.preset.id,
-      metric: props.preset.metric,
-      level: props.preset.level,
-      query: props.preset.query,
-      step_seconds: props.preset.step_seconds,
-      template: props.preset.id
-    });
-  }
-});
+function applyPreset(id: string | null) {
+  const preset = presets.value.find(item => item.id === id);
+  pickedPreset.value = preset;
+  if (!preset) return;
+  Object.assign(form, { query: preset.query, level: preset.level, step_seconds: preset.step_seconds });
+  if (isCustom.value) form.unit = preset.unit;
+  if (!form.name) form.name = preset.name.zh;
+}
 
 async function save() {
-  // a query that was not written by a template of the library, or that was changed, has to run before it is stored
-  if (
-    !tested.value &&
-    !props.preset &&
-    form.query.trim() &&
-    form.datasource_id &&
-    form.query.trim() !== (props.editing?.query ?? '')
-  ) {
-    message.warning(t('page.monitoring.queryTest.mustTest'));
-    testerVisible.value = true;
-    return;
-  }
-  if (!form.datasource_id || !form.name.trim() || !form.metric || !form.level || !form.query.trim()) {
+  if (!form.name.trim() || !form.datasource_id || !form.query.trim()) {
     message.warning(t('page.datasource.mappings.required'));
     return;
   }
   saving.value = true;
   try {
-    let error: unknown;
-    if (props.preset) {
-      ({ error } = await fetchApplyMetricPreset(props.preset.id, {
-        datasource_id: form.datasource_id,
-        name: form.name.trim(),
-        step_seconds: form.step_seconds,
-        query: form.query.trim()
-      }));
-    } else {
-      const payload: Api.Datasource.MetricMappingPayload = {
-        datasource_id: form.datasource_id,
-        name: form.name.trim(),
-        metric: form.metric,
-        level: form.level,
-        query: form.query.trim(),
-        step_seconds: form.step_seconds,
-        enabled: form.enabled,
-        remark: form.remark
-      };
-      ({ error } = props.editing
-        ? await fetchUpdateMetricMapping(props.editing.id, payload)
-        : await fetchCreateMetricMapping(payload));
-    }
+    const payload: Api.Datasource.MetricMappingPayload = {
+      datasource_id: form.datasource_id,
+      name: form.name.trim(),
+      metric: form.metric,
+      level: form.level,
+      query: form.query.trim(),
+      unit: isCustom.value ? form.unit.trim() : kindUnit.value,
+      step_seconds: form.step_seconds,
+      enabled: form.enabled,
+      remark: form.remark
+    };
+    const { error } = props.editing
+      ? await fetchUpdateMetricMapping(props.editing.id, payload)
+      : await fetchCreateMetricMapping(payload);
     if (!error) {
-      show.value = false;
       message.success(props.editing ? t('common.modifySuccess') : t('common.addSuccess'));
+      show.value = false;
       emit('saved');
     }
   } finally {
     saving.value = false;
   }
 }
+
+watch(show, async visible => {
+  if (!visible) return;
+  const [options, metricCatalog] = await Promise.all([
+    fetchGetDatasourceOptions(),
+    fetchGetMetricCatalog(),
+    loadModules()
+  ]);
+  datasources.value = options.data || [];
+  if (metricCatalog.data) catalog.value = metricCatalog.data;
+  const row = props.editing;
+  Object.assign(form, {
+    datasource_id: row?.datasource_id ?? (datasources.value.length === 1 ? datasources.value[0].id : null),
+    name: row?.name ?? '',
+    metric: row?.metric ?? 'cpu',
+    level: row?.level ?? 'workload',
+    unit: row?.unit ?? '',
+    step_seconds: row?.step_seconds ?? 60,
+    query: row?.query ?? '',
+    enabled: row?.enabled ?? true,
+    remark: row?.remark ?? ''
+  });
+  previewModule.value = null;
+  await loadPresets(form.metric);
+});
 </script>
 
 <template>
-  <NModal v-model:show="show" preset="card" :title="title" class="edit-modal-wide">
-    <div class="max-h-70vh overflow-y-auto pr-8px">
+  <NModal
+    v-model:show="show"
+    preset="card"
+    :title="editing ? t('page.datasource.mappings.editTitle') : t('page.datasource.mappings.addTitle')"
+    class="edit-modal-wide"
+  >
+    <div class="max-h-72vh overflow-y-auto pr-8px">
       <NForm :model="form" label-placement="top">
-        <NFormItem :label="t('page.datasource.mappings.datasource')">
-          <NSelect
-            v-model:value="form.datasource_id"
-            :placeholder="t('common.selectField', { field: t('page.datasource.mappings.datasource') })"
-            :options="datasourceOptions"
-          />
-        </NFormItem>
-        <NFormItem :label="t('page.datasource.mappings.name')">
-          <NInput
-            v-model:value="form.name"
-            :placeholder="t('common.inputField', { field: t('page.datasource.mappings.name') })"
-          />
-        </NFormItem>
-        <NFormItem :label="t('page.datasource.mappings.metric')">
-          <NSelect v-model:value="form.metric" :disabled="Boolean(preset)" :options="metricOptions" />
-        </NFormItem>
-        <NFormItem :label="t('page.datasource.mappings.level')">
-          <NSelect v-model:value="form.level" :disabled="Boolean(preset)" :options="levelOptions" />
-        </NFormItem>
-        <NFormItem :label="t('page.datasource.mappings.unit')">
-          <NInput :value="unit" readonly />
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.datasource.mappings.name')" :help="t('page.formHelp.mappingName')" />
+          </template>
+          <NInput v-model:value="form.name" />
         </NFormItem>
         <NFormItem>
           <template #label>
-            <span class="inline-flex items-center gap-4px">
-              {{ t('page.datasource.mappings.step') }}
-              <IconTooltip icon="mdi-help-circle" placement="top">
-                <div class="max-w-320px leading-22px">
-                  {{
-                    t('page.datasource.mappings.stepHint', {
-                      min: catalog.min_step_seconds,
-                      max: catalog.max_step_seconds
-                    })
-                  }}
-                </div>
-              </IconTooltip>
-            </span>
+            <HelpLabel :label="t('page.datasource.mappings.datasource')" :help="t('page.formHelp.mappingDatasource')" />
           </template>
-          <NInputNumber
-            v-model:value="form.step_seconds"
+          <NSelect v-model:value="form.datasource_id" filterable :options="datasourceOptions" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.datasource.mappings.metric')" :help="t('page.formHelp.mappingMetric')" />
+          </template>
+          <NSelect
+            v-model:value="form.metric"
+            :disabled="Boolean(editing)"
+            :options="metricOptions"
+            @update:value="loadPresets"
+          />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.datasource.mappings.level')" :help="t('page.formHelp.mappingLevel')" />
+          </template>
+          <NSelect v-model:value="form.level" :options="levelOptions" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.datasource.mappings.unit')" :help="t('page.formHelp.mappingUnit')" />
+          </template>
+          <NInput
+            v-if="isCustom"
+            v-model:value="form.unit"
+            :placeholder="t('page.monitoring.datasets.unitPlaceholder')"
+          />
+          <NInput v-else :value="kindUnit" readonly />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.monitoring.datasets.queryStep')" :help="t('page.formHelp.datasetStep')" />
+          </template>
+          <DurationInput
+            v-model="form.step_seconds"
+            unit="seconds"
             :min="catalog.min_step_seconds"
             :max="catalog.max_step_seconds"
-            class="w-full"
+            :presets="[60, 300, 900, 3600]"
           />
         </NFormItem>
-        <NFormItem v-if="!preset">
+        <NFormItem v-if="presetOptions.length">
           <template #label>
-            <span class="inline-flex items-center gap-4px">
-              {{ t('page.datasource.mappings.template') }}
-              <IconTooltip icon="mdi-help-circle" placement="top">
-                <div class="max-w-360px leading-22px">{{ t('page.datasource.mappings.templateHint') }}</div>
-              </IconTooltip>
-            </span>
+            <HelpLabel :label="t('page.monitoring.datasets.usePreset')" :help="t('page.formHelp.datasetPreset')" />
           </template>
           <NSelect
-            :value="form.template"
+            :value="null"
             clearable
             filterable
-            :options="templateOptions"
-            :placeholder="t('page.datasource.mappings.templatePlaceholder')"
-            @update:value="useTemplate"
+            :options="presetOptions"
+            :placeholder="t('page.monitoring.datasets.usePresetHint')"
+            @update:value="applyPreset"
           />
+          <div v-if="pickedPreset" class="mt-4px text-12px opacity-70">
+            {{ pickedPreset.scenario.zh }}{{ pickedPreset.limitations.zh ? `；${pickedPreset.limitations.zh}` : '' }}
+          </div>
         </NFormItem>
         <NFormItem>
           <template #label>
-            <span class="inline-flex items-center gap-4px">
-              {{ t('page.datasource.mappings.query') }}
-              <IconTooltip icon="mdi-help-circle" placement="top">
-                <div class="max-w-420px leading-22px">
-                  <div>{{ t('page.datasource.mappings.queryHint') }}</div>
-                  <div>
-                    {{ t('page.datasource.mappings.variables') }}: {{ catalog.variables.map(placeholder).join(' ') }}
-                  </div>
-                </div>
-              </IconTooltip>
-              <template v-if="requiredVariables.length">
-                <NTag v-for="name in requiredVariables" :key="name" size="small" :bordered="false" type="warning">
-                  {{ placeholder(name) }}
-                </NTag>
-              </template>
-            </span>
+            <HelpLabel label="PromQL" :help="`${t('page.monitoring.queryTest.queryHint')} ${variableList}`" />
           </template>
           <NInput
             v-model:value="form.query"
             type="textarea"
-            :rows="5"
             class="font-mono"
-            :placeholder="t('common.inputField', { field: t('page.datasource.mappings.query') })"
-            @update:value="tested = false"
+            :autosize="{ minRows: 3, maxRows: 8 }"
+            :placeholder="t('page.monitoring.datasets.queryHint')"
           />
-          <NButton class="mt-6px" type="primary" ghost @click="testerVisible = true">
-            {{ t('page.monitoring.queryTest.test') }}
-          </NButton>
-          <NTag v-if="tested" class="ml-8px mt-6px" size="small" type="success" :bordered="false">
-            {{ t('page.monitoring.queryTest.stage_ok') }}
-          </NTag>
         </NFormItem>
-        <template v-if="!preset">
-          <NFormItem :label="t('page.datasource.connections.enabled')">
-            <NSwitch v-model:value="form.enabled" />
-          </NFormItem>
-          <NFormItem :label="t('common.remark')">
-            <NInput
-              v-model:value="form.remark"
-              type="textarea"
-              :placeholder="t('common.inputField', { field: t('common.remark') })"
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.datasource.connections.enabled')" :help="t('page.formHelp.mappingEnabled')" />
+          </template>
+          <StatusSelect v-model:value="form.enabled" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('common.remark')" :help="t('page.formHelp.mappingRemark')" />
+          </template>
+          <NInput v-model:value="form.remark" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <HelpLabel
+              :label="t('page.datasource.mappings.previewModule')"
+              :help="t('page.formHelp.templatePreviewModule')"
             />
-          </NFormItem>
-        </template>
+          </template>
+          <NSelect v-model:value="previewModule" clearable filterable :options="moduleOptions" />
+        </NFormItem>
+        <div>
+          <QueryTestResult :config="testConfig" :module-id="previewModule" />
+        </div>
       </NForm>
     </div>
     <template #footer>
@@ -353,5 +277,4 @@ async function save() {
       </NSpace>
     </template>
   </NModal>
-  <PromqlTester v-model:show="testerVisible" :initial="testerInitial" @apply="applyTested" />
 </template>

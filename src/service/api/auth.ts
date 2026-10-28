@@ -164,10 +164,10 @@ export function fetchUpdatePassword(oldPassword: string, password: string) {
  * @param email Email
  * @param phone Phone
  */
-export function fetchUpdateProfile(email: string, phone: string) {
+export function fetchUpdateProfile(contacts: Array<{ type: string; value: string }>) {
   return request({
     url: '/api/v1/auth/profile',
     method: 'put',
-    data: { email, phone }
+    data: { contacts }
   });
 }

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, h, reactive, computed, watch } from 'vue';
+import StatusSelect from '@/components/business/status-select.vue';
+import HelpLabel from '@/components/common/help-label.vue';
 import { fetchGetConfig, fetchGetConfigs, fetchUpdateConfig } from '@/service/api/system';
 import { formatDateTime } from '@/utils/date';
 import {
@@ -12,19 +14,17 @@ import {
   NFormItem,
   NInput,
   NInputNumber,
-  NSwitch,
   NSelect,
   NCollapse,
   NCollapseItem,
   NTag
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { CONFIG_CATEGORIES, LDAP_CATEGORY, categoryOf, noteOf } from './config-catalogue';
+import { CONFIG_CATEGORIES, categoryOf, noteOf } from './config-catalogue';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useLoading } from '@sa/hooks';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
-import LdapSettingsPanel from '@/components/business/ldap-settings-panel.vue';
 import { refreshDefaultVisibleColumnCount, useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 
 const message = useMessage();
@@ -48,11 +48,8 @@ const moduleOptions = computed(() => [
   ...CONFIG_CATEGORIES.filter(code => configs.value.some(item => categoryOf(item.config_key) === code)).map(code => ({
     label: categoryLabel(code),
     value: code
-  })),
-  // the directory login settings are not rows of the parameter table: they have their own form
-  { label: categoryLabel(LDAP_CATEGORY), value: LDAP_CATEGORY }
+  }))
 ]);
-const isLdap = computed(() => searchForm.module === LDAP_CATEGORY);
 
 /** The name and the purpose of a parameter in the language of the page (the database holds the English ones). */
 const isChinese = computed(() => locale.value.startsWith('zh'));
@@ -86,12 +83,19 @@ const editForm = reactive({
 });
 
 const rules = {
-  config_value: { required: true, message: t('form.required'), trigger: 'blur' }
+  // most LDAP parameters may stay empty (bind account, phone attribute, group search ...): the server validates the whole
+  config_value: {
+    validator: () => editForm.config_key.startsWith('ldap.') || editForm.config_value.trim() !== '',
+    message: t('form.required'),
+    trigger: 'blur'
+  }
 };
 
 function getModuleTagType(key: string): 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error' {
   const types: Record<string, 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'> = {
     auth: 'default',
+    ldap: 'info',
+    forecast: 'success',
     ui: 'primary',
     notify: 'warning'
   };
@@ -105,6 +109,10 @@ function getModuleLabel(key: string): string {
 function isSecretKey(key: string): boolean {
   const lower = key.toLowerCase();
   return lower.includes('token') || lower.includes('secret') || lower.includes('password') || lower.includes('key');
+}
+
+function isMultilineKey(key: string): boolean {
+  return key === 'ldap.ca_cert' || key === 'ldap.group_role_mappings';
 }
 
 function isBooleanKey(key: string, value: string): boolean {
@@ -306,6 +314,12 @@ function handleEdit(row: Api.System.Config) {
   showModal.value = true;
 }
 
+// a secret is read back as a mask, never as the text that was sent
+function sameAsSent(persisted: string) {
+  if (isSecretKey(editForm.config_key) || editForm.config_key === 'ldap.ca_cert') return persisted !== '';
+  return persisted === editForm.config_value;
+}
+
 async function handleSubmit() {
   formRef.value?.validate(async (errors: any) => {
     if (!errors) {
@@ -314,7 +328,7 @@ async function handleSubmit() {
         const { error } = await fetchUpdateConfig(editForm.config_key, editForm.config_value);
         if (!error) {
           const { data: persisted, error: readError } = await fetchGetConfig(editForm.config_key);
-          if (readError || String(persisted?.config_value ?? '') !== editForm.config_value) {
+          if (readError || !sameAsSent(String(persisted?.config_value ?? ''))) {
             message.error(t('page.system.readbackMismatch'));
             return;
           }
@@ -387,10 +401,7 @@ onMounted(() => {
       </NCollapse>
     </NCard>
 
-    <div v-if="isLdap" class="flex-1 overflow-auto">
-      <LdapSettingsPanel />
-    </div>
-    <NCard v-else :bordered="false" size="small" class="flex-1 rounded-16px shadow-sm overflow-hidden">
+    <NCard :bordered="false" size="small" class="flex-1 rounded-16px shadow-sm overflow-hidden">
       <div class="h-full flex-col">
         <TableHeaderOperation
           v-model:columns="columnChecks"
@@ -423,7 +434,10 @@ onMounted(() => {
 
     <NModal v-model:show="showModal" preset="card" :title="t('page.system.editValue')" class="w-560px">
       <NForm ref="formRef" :model="editForm" :rules="rules" label-placement="top">
-        <NFormItem :label="t('page.system.columns.configName')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.system.columns.configName')" :help="t('page.formHelp.configName')" />
+          </template>
           <NInput
             v-model:value="editForm.config_name"
             :placeholder="t('common.inputField', { field: t('page.system.columns.configName') })"
@@ -431,7 +445,10 @@ onMounted(() => {
           />
         </NFormItem>
 
-        <NFormItem :label="t('page.system.columns.configKey')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.system.columns.configKey')" :help="t('page.formHelp.configKey')" />
+          </template>
           <NInput
             v-model:value="editForm.config_key"
             :placeholder="t('common.inputField', { field: t('page.system.columns.configKey') })"
@@ -440,19 +457,19 @@ onMounted(() => {
           />
         </NFormItem>
 
-        <NFormItem :label="t('page.system.columns.configValue')" path="config_value">
+        <NFormItem path="config_value">
+          <template #label>
+            <HelpLabel :label="t('page.system.columns.configValue')" :help="t('page.formHelp.configValue')" />
+          </template>
           <!-- Boolean Switch / Select -->
           <div
             v-if="isBooleanKey(editForm.config_key, editForm.config_value)"
             class="flex items-center gap-12px w-full"
           >
-            <NSwitch
+            <StatusSelect
               :value="editForm.config_value === 'true'"
               @update:value="(val: boolean) => (editForm.config_value = String(val))"
             />
-            <NTag :type="editForm.config_value === 'true' ? 'success' : 'default'" size="small" :bordered="false">
-              {{ editForm.config_value === 'true' ? t('common.enable', '已启用') : t('common.disable', '已禁用') }}
-            </NTag>
           </div>
 
           <!-- Integer Number Input -->
@@ -474,11 +491,24 @@ onMounted(() => {
             :placeholder="t('page.system.columns.configValue')"
           />
 
+          <!-- Multi-line values: certificate, group to role lines -->
+          <NInput
+            v-else-if="isMultilineKey(editForm.config_key)"
+            v-model:value="editForm.config_value"
+            type="textarea"
+            :rows="6"
+            class="font-mono"
+            :placeholder="t('page.system.columns.configValue')"
+          />
+
           <!-- General Text / List Input -->
           <NInput v-else v-model:value="editForm.config_value" :placeholder="t('page.system.columns.configValue')" />
         </NFormItem>
 
-        <NFormItem :label="t('page.system.columns.remark')">
+        <NFormItem>
+          <template #label>
+            <HelpLabel :label="t('page.system.columns.remark')" :help="t('page.formHelp.configRemark')" />
+          </template>
           <NInput
             v-model:value="editForm.remark"
             :placeholder="t('common.inputField', { field: t('page.system.columns.remark') })"

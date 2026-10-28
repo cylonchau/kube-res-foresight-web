@@ -2,6 +2,8 @@ declare namespace Api {
   namespace Forecast {
     /** the key of a metric source of a module: its kind, then kind_2 ... for further sources of the same kind */
     type Metric = string;
+    /** how the sources of one resource are combined: weighted mean, the largest, the sum, or the one with the lowest priority number */
+    type CombineMode = 'weighted' | 'max' | 'sum' | 'primary';
     type MetricKind =
       | 'cpu'
       | 'memory'
@@ -215,6 +217,8 @@ declare namespace Api {
       mapping_name: string;
       query: string;
       unit: string;
+      /** the level of the mapping's query: workload, pod, container, ... */
+      level: string;
       datasource_id: number;
       datasource_name: string;
       query_step_seconds: number;
@@ -334,7 +338,17 @@ declare namespace Api {
      * An algorithm of the catalog with its platform-wide setting: the definition (and its parameter schema) and how it
      * runs for every module. There is one per catalog algorithm; an enabled one is applied to every module automatically.
      */
+    /** how far an algorithm has got into the pipeline: loaded and enabled, and what its latest run did */
+    interface AlgorithmRuntime {
+      state: 'disabled' | 'invalid' | 'waiting' | 'running' | 'skipped' | 'failed';
+      reason?: string;
+      runs: number;
+      last_run_at: string | null;
+      last_status?: string;
+    }
+
     interface Algorithm extends AlgorithmDefinition {
+      runtime: AlgorithmRuntime;
       /** builtin: Go code; variant: a built-in algorithm under another id with its own parameter values; formula: written on the pages */
       origin: 'builtin' | 'variant' | 'formula';
       enabled: boolean;
@@ -405,8 +419,35 @@ declare namespace Api {
       failed: number;
       avg_duration_ms: number;
       last_at: string | null;
-      algorithms: Array<{ algorithm_id: string; ok: number; skipped: number; failed: number }>;
-      reasons: Array<{ status: string; reason: string; count: number }>;
+      algorithms: Array<{
+        algorithm_id: string;
+        ok: number;
+        skipped: number;
+        failed: number;
+        avg_duration_ms: number;
+        last_at: string | null;
+        last_status: string;
+        reasons: TrainingReasonCount[];
+      }>;
+      reasons: TrainingReasonCount[];
+    }
+
+    interface TrainingPoint {
+      time: string;
+      value: number;
+    }
+
+    /** what a training record worked on: the stored samples of its window and the forecast it wrote */
+    interface TrainingData {
+      unit: string;
+      input: TrainingPoint[];
+      forecast: TrainingPoint[];
+    }
+
+    interface TrainingReasonCount {
+      status: string;
+      reason: string;
+      count: number;
     }
 
     /** the record of one run of an algorithm on a source of a module: what it read, with which parameters, and how it ended */
@@ -560,6 +601,8 @@ declare namespace Api {
       from: string;
       to: string;
       actual_error?: string;
+      /** every enabled algorithm, with the reason for the ones that have no forecast in the window */
+      statuses: AlgorithmStatus[];
     }
 
     interface QueryTestRequest {
@@ -629,6 +672,11 @@ declare namespace Api {
       peak_under: number;
       coverage: number;
       alpha: number;
+      /** mean of prediction minus actual; absent in results stored before it existed */
+      bias?: number;
+      /** WAPE with an underestimate counting under_weight times; absent (under_weight 0) in older results */
+      risk_wape?: number;
+      under_weight?: number;
       skipped?: string;
     }
 
@@ -651,7 +699,20 @@ declare namespace Api {
       reason: string;
     }
 
+    type AlgorithmState = 'ready' | 'skipped' | 'failed' | 'not_run' | 'no_result';
+
+    /** the state of an enabled algorithm for a module metric, taken from the recorded runs */
+    interface AlgorithmStatus {
+      algorithm_id: string;
+      status: AlgorithmState;
+      reason: string;
+      last_run_at?: string;
+    }
+
     interface LeaderboardEntry {
+      status: AlgorithmState;
+      reason: string;
+      metric: string;
       rank: number;
       algorithm_id: string;
       baseline: boolean;
@@ -661,6 +722,7 @@ declare namespace Api {
       mae: number;
       bias: number;
       peak_under: number;
+      risk_wape: number;
       coverage: number;
       beats_baseline?: boolean;
       promoted?: boolean;
@@ -709,6 +771,38 @@ declare namespace Api {
       /** JSON object: field -> reason code */
       degrade_reasons: string;
       oom_floor: boolean;
+      /** the version of the Pod resource spec the snapshot carries: it changes only when the spec does */
+      resource_version: number;
+      resource_changed_at: string | null;
+      /** the snapshot kept the spec in force although the forecast computed another value */
+      resource_held: boolean;
+      /** kept as history (the first, every change, one an hour at least) and why */
+      snapshot: boolean;
+      snapshot_reason: string;
+    }
+
+    type SnapshotState = 'pending' | 'applied' | 'failed' | 'expired' | 'advisory';
+
+    interface SnapshotOutcome {
+      Applied: number;
+      Observed: number;
+      Held: number;
+      Conflict: number;
+      Error: number;
+      Admitted: number;
+      LastAt: string | null;
+      LastError: string;
+    }
+
+    /** a snapshot of the recommendation history with what became of it */
+    interface Snapshot extends Recommendation {
+      state: SnapshotState;
+      state_reason: string;
+      current: boolean;
+      outcome: SnapshotOutcome;
+      /** the version of the next snapshot (0 while this one is current) */
+      span_end: number;
+      executions?: Execution[];
     }
 
     type DegradeReason =
@@ -725,13 +819,40 @@ declare namespace Api {
       | 'predict_timeout'
       | 'oom_floor';
 
-    /** a snapshot where a field did not come from a usable forecast */
-    interface FallbackRecord extends Recommendation {
-      reasons: Record<string, DegradeReason>;
-      notes: Record<string, string>;
+    type FallbackKind = 'degrade' | 'rollback';
+
+    interface ConfigPoint {
+      set: boolean;
+      value: number;
+      source?: string;
+    }
+
+    /** what happened to one field: why, from which configuration to which */
+    interface FallbackChange {
+      field: 'cpu' | 'memory' | 'replicas' | 'gpu' | 'memory_floor';
+      trigger: string;
+      note?: string;
+      original: ConfigPoint;
+      target: ConfigPoint;
+    }
+
+    /** a degradation episode (a safe preset ran because the forecast, data or decision was not usable) or a rollback (a decided change was not applied) */
+    interface FallbackRecord {
+      id: string;
+      kind: FallbackKind;
+      at: string;
+      module_id: number;
+      changes: FallbackChange[];
+      result_state: string;
+      result: string;
+      snapshot_id?: number;
+      version?: number;
+      execution_id?: number;
       recovered_at: string | null;
       duration_seconds: number;
       ongoing: boolean;
+      reasons: Record<string, string>;
+      notes: Record<string, string>;
     }
 
     interface Execution {
@@ -839,6 +960,8 @@ declare namespace Api {
       error: number;
       weight: number;
       contribution: number;
+      /** the grade of this resource by itself (0-100): what ranks the algorithms for CPU, for memory and for GPU */
+      score?: number;
     }
 
     /** how one algorithm forecast one source of a module against the actuals */
@@ -885,6 +1008,8 @@ declare namespace Api {
       best: string;
       comparable: boolean;
       sources: string[];
+      /** enabled algorithms with nothing measured in the range, with the reason */
+      unranked: AlgorithmStatus[];
     }
 
     interface CurrentRankingRow {
@@ -962,6 +1087,9 @@ declare namespace Api {
       /** rank and score at the evaluation before the latest one; null when it was evaluated once */
       previous_rank: number | null;
       previous_score: number | null;
+      /** ready for a scored algorithm; otherwise why an enabled one has no score */
+      status: AlgorithmState;
+      reason: string;
     }
 
     interface Ranking {

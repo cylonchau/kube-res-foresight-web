@@ -6,7 +6,6 @@ import {
   NCard,
   NCollapse,
   NCollapseItem,
-  NDatePicker,
   NForm,
   NFormItemGi,
   NGi,
@@ -24,6 +23,8 @@ import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { resolveRange } from '@/hooks/business/use-forecast-modules';
 
 defineOptions({ name: 'SystemLoginLog' });
 
@@ -73,15 +74,15 @@ const { handleSorterChange, sortParams, resetSort } = useTableSort(() => {
   load();
 });
 
-function formatQueryTime(ms: number, endOfDay: boolean) {
+function formatQueryTime(ms: number) {
   const date = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, '0');
-  const time = endOfDay ? '23:59:59' : '00:00:00';
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 async function load() {
   loading.value = true;
+  const resolved = resolveRange(search.range);
   const { data } = await fetchGetLoginLogs({
     page: pagination.page,
     page_size: pagination.pageSize,
@@ -90,8 +91,8 @@ async function load() {
     result: search.result || undefined,
     reason: search.reason || undefined,
     method: search.method || undefined,
-    start_time: search.range ? formatQueryTime(search.range[0], false) : undefined,
-    end_time: search.range ? formatQueryTime(search.range[1], true) : undefined,
+    start_time: resolved ? formatQueryTime(resolved[0]) : undefined,
+    end_time: resolved ? formatQueryTime(resolved[1]) : undefined,
     ...sortParams()
   });
   loading.value = false;
@@ -252,13 +253,7 @@ onMounted(() => {
                 />
               </NFormItemGi>
               <NFormItemGi :span="4" :label="$t('page.loginLog.dateRange')" path="range">
-                <NDatePicker
-                  v-model:value="search.range"
-                  type="daterange"
-                  clearable
-                  class="w-full"
-                  :placeholder="$t('common.selectField', { field: $t('page.loginLog.dateRange') })"
-                />
+                <TimeRangeField v-model="search.range" />
               </NFormItemGi>
               <NGi class="list-search-actions" :span="3">
                 <NSpace justify="end" class="w-full">

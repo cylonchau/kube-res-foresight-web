@@ -31,12 +31,15 @@ const props = withDefaults(defineProps<Props>(), {
 const model = defineModel<number | null>({ required: true });
 
 const toSeconds: Record<BaseUnit, number> = { seconds: 1, minutes: 60, hours: 3600 };
-const displayUnits = [
-  { label: 's', value: 1 },
-  { label: 'm', value: 60 },
-  { label: 'h', value: 3600 },
-  { label: 'd', value: 86400 }
-];
+// a model that holds whole minutes cannot take seconds: only units of at least one model unit are offered
+const displayUnits = computed(() =>
+  [
+    { label: 's', value: 1 },
+    { label: 'm', value: 60 },
+    { label: 'h', value: 3600 },
+    { label: 'd', value: 86400 }
+  ].filter(unit => unit.value >= toSeconds[props.unit])
+);
 const label = (seconds: number) => {
   if (seconds % 86400 === 0) return `${seconds / 86400}d`;
   if (seconds % 3600 === 0) return `${seconds / 3600}h`;
@@ -50,7 +53,8 @@ const amount = ref<number | null>(null);
 
 /** the display shows the largest unit that divides the value exactly */
 function show(value: number) {
-  const unit = [86400, 3600, 60, 1].find(u => value > 0 && value % u === 0) ?? 1;
+  const base = toSeconds[props.unit];
+  const unit = [86400, 3600, 60, 1].find(u => u >= base && value > 0 && value % u === 0) ?? base;
   factor.value = unit;
   amount.value = value / unit;
 }
@@ -64,7 +68,8 @@ watch(
 );
 
 function emit(valueSeconds: number | null) {
-  model.value = valueSeconds === null ? null : valueSeconds / toSeconds[props.unit];
+  // the model holds whole units (the API fields are integers): a fraction is rounded, never sent
+  model.value = valueSeconds === null ? null : Math.round(valueSeconds / toSeconds[props.unit]);
 }
 
 function onAmount(value: number | null) {

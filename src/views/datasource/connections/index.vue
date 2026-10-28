@@ -23,6 +23,7 @@ import {
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import StatusSelect from '@/components/business/status-select.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
@@ -326,20 +327,20 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 240,
+    width: 148,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Datasource.Datasource) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', loading: testingId.value === row.id, onClick: () => runTest(row) }, () =>
+        h(NButton, { size: 'tiny', loading: testingId.value === row.id, onClick: () => runTest(row) }, () =>
           t('page.datasource.connections.test')
         ),
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => open(row) }, () => t('common.edit')),
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         )
@@ -557,10 +558,10 @@ onMounted(() => {
               </IconTooltip>
             </span>
           </template>
-          <NInputNumber v-model:value="form.max_concurrency" :min="1" :max="16" class="w-full" />
+          <NInputNumber v-model:value="form.max_concurrency" :min="1" :precision="0" class="w-full" />
         </NFormItem>
         <NFormItem :label="t('page.datasource.connections.enabled')">
-          <NSwitch v-model:value="form.enabled" />
+          <StatusSelect v-model:value="form.enabled" />
         </NFormItem>
         <NFormItem>
           <template #label>

@@ -18,7 +18,6 @@ import {
 import { useRouter } from 'vue-router';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
-import MetricMappingForm from '@/components/business/metric-mapping-form.vue';
 import {
   fetchCreateForecastDemo,
   fetchDeleteForecastDemo,
@@ -72,20 +71,6 @@ function resetSearch() {
 
 // ---- detail
 const detail = ref<Api.Datasource.Preset | null>(null);
-
-// ---- add a mapping from the template: the same form as the mappings page, started from the template
-const applying = ref<Api.Datasource.Preset | null>(null);
-const applyVisible = ref(false);
-
-function openApply(row: Api.Datasource.Preset) {
-  applying.value = row;
-  applyVisible.value = true;
-}
-
-function applied() {
-  message.success(t('page.datasource.presets.applied'));
-  router.push({ name: 'datasource_metric-mappings' });
-}
 
 // ---- demo
 const demo = ref<{ exists: boolean; module_id?: number }>({ exists: false });
@@ -183,16 +168,12 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 170,
+    width: 80,
     fixed: 'right',
     align: 'center',
+    // a template is used from the dataset form (pick it there); here it is read
     render: (row: Api.Datasource.Preset) =>
-      h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', onClick: () => (detail.value = row) }, () => t('page.datasource.presets.detail')),
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => openApply(row) }, () =>
-          t('page.datasource.presets.apply')
-        )
-      ])
+      h(NButton, { size: 'tiny', onClick: () => (detail.value = row) }, () => t('page.datasource.presets.detail'))
   }
 };
 
@@ -306,7 +287,5 @@ onMounted(() => {
         <NCode :code="detail.query" language="promql" word-wrap />
       </div>
     </NModal>
-
-    <MetricMappingForm v-model:show="applyVisible" :preset="applying" @saved="applied" />
   </div>
 </template>

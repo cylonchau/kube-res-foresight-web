@@ -7,7 +7,6 @@ import {
   NCard,
   NCollapse,
   NCollapseItem,
-  NDatePicker,
   NForm,
   NFormItemGi,
   NGi,
@@ -26,6 +25,8 @@ import { fetchClearOperationLogs, fetchGetOperationLogs } from '@/service/api/sy
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
+import TimeRangeField from '@/components/business/time-range-field.vue';
+import { resolveRange } from '@/hooks/business/use-forecast-modules';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -81,14 +82,15 @@ function formatQueryTime(ms: number) {
 
 async function load() {
   loading.value = true;
+  const resolved = resolveRange(search.range);
   const { data } = await fetchGetOperationLogs({
     page: pagination.page,
     page_size: pagination.pageSize,
     keyword: search.keyword || undefined,
     client_type: search.clientType || undefined,
     status: search.status || undefined,
-    start_time: search.range ? formatQueryTime(search.range[0]) : undefined,
-    end_time: search.range ? formatQueryTime(search.range[1]) : undefined
+    start_time: resolved ? formatQueryTime(resolved[0]) : undefined,
+    end_time: resolved ? formatQueryTime(resolved[1]) : undefined
   });
   loading.value = false;
   if (data) {
@@ -209,7 +211,7 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.System.OperationLog) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => openDetail(row) }, () =>
+        h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => openDetail(row) }, () =>
           t('page.operationLog.detail')
         )
       ])
@@ -283,13 +285,7 @@ onMounted(() => {
                 />
               </NFormItemGi>
               <NFormItemGi :span="6" :label="$t('page.operationLog.dateRange')" path="range">
-                <NDatePicker
-                  v-model:value="search.range"
-                  :placeholder="$t('common.selectField', { field: $t('page.operationLog.dateRange') })"
-                  type="daterange"
-                  clearable
-                  class="w-full"
-                />
+                <TimeRangeField v-model="search.range" />
               </NFormItemGi>
               <NGi class="list-search-actions" :span="4">
                 <NSpace justify="end" class="w-full">

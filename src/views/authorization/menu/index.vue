@@ -19,6 +19,8 @@ import {
   useMessage
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import StatusSelect from '@/components/business/status-select.vue';
+import HelpLabel from '@/components/common/help-label.vue';
 import SvgIcon from '@/components/custom/svg-icon.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
@@ -627,11 +629,17 @@ onMounted(async () => {
         label-placement="top"
         require-mark-placement="right-hanging"
       >
-        <NFormItem :label="t('page.authorization.nodeName')" path="name">
+        <NFormItem path="name">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.nodeName')" :help="t('page.formHelp.menuName')" />
+          </template>
           <NInput v-model:value="formModel.name" :placeholder="t('page.authorization.nodeName')" />
         </NFormItem>
 
-        <NFormItem :label="t('page.authorization.parentNode')" path="parent_id">
+        <NFormItem path="parent_id">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.parentNode')" :help="t('page.formHelp.menuParent')" />
+          </template>
           <NTreeSelect
             v-model:value="formModel.parent_id"
             :options="parentOptions"
@@ -640,7 +648,10 @@ onMounted(async () => {
           />
         </NFormItem>
 
-        <NFormItem :label="t('page.authorization.permissionCode')" path="code">
+        <NFormItem path="code">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.permissionCode')" :help="t('page.formHelp.menuCode')" />
+          </template>
           <NInput
             v-model:value="formModel.code"
             :placeholder="
@@ -649,26 +660,34 @@ onMounted(async () => {
           />
         </NFormItem>
 
-        <NFormItem v-if="formModel.type !== 'BUTTON'" :label="t('page.authorization.routePath')" path="fe_route">
+        <NFormItem v-if="formModel.type !== 'BUTTON'" path="fe_route">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.routePath')" :help="t('page.formHelp.menuRoute')" />
+          </template>
           <NInput v-model:value="formModel.fe_route" placeholder="/dns/zones" />
         </NFormItem>
 
-        <NFormItem
-          v-if="formModel.type !== 'BUTTON'"
-          :label="t('page.authorization.componentPath')"
-          path="fe_component"
-        >
+        <NFormItem v-if="formModel.type !== 'BUTTON'" path="fe_component">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.componentPath')" :help="t('page.formHelp.menuComponent')" />
+          </template>
           <NInput
             v-model:value="formModel.fe_component"
             :placeholder="formModel.type === 'DIRECTORY' ? 'layout.base' : 'view.dns_zones'"
           />
         </NFormItem>
 
-        <NFormItem v-if="formModel.type !== 'BUTTON'" :label="t('page.authorization.icon')" path="icon">
+        <NFormItem v-if="formModel.type !== 'BUTTON'" path="icon">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.icon')" :help="t('page.formHelp.menuIcon')" />
+          </template>
           <NInput v-model:value="formModel.icon" placeholder="ant-design:global-outlined" />
         </NFormItem>
 
-        <NFormItem :label="t('page.authorization.beApisLabel')" path="be_apis">
+        <NFormItem path="be_apis">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.beApisLabel')" :help="t('page.formHelp.menuApis')" />
+          </template>
           <NInput
             v-model:value="formModel.be_apis"
             type="textarea"
@@ -677,7 +696,10 @@ onMounted(async () => {
           />
         </NFormItem>
 
-        <NFormItem :label="t('page.authorization.sort')" path="sort">
+        <NFormItem path="sort">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.sort')" :help="t('page.formHelp.menuSort')" />
+          </template>
           <NInputNumber
             v-model:value="formModel.sort"
             :placeholder="t('common.inputField', { field: t('page.authorization.sort') })"
@@ -686,20 +708,32 @@ onMounted(async () => {
           />
         </NFormItem>
 
-        <NFormItem v-if="formModel.type !== 'BUTTON'" :label="t('page.authorization.isLink')" path="is_link">
+        <NFormItem v-if="formModel.type !== 'BUTTON'" path="is_link">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.isLink')" :help="t('page.formHelp.menuLink')" />
+          </template>
           <NSwitch v-model:value="formModel.is_link" />
         </NFormItem>
 
-        <NFormItem v-if="formModel.type === 'MENU'" :label="t('page.authorization.cache')" path="is_cache">
+        <NFormItem v-if="formModel.type === 'MENU'" path="is_cache">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.cache')" :help="t('page.formHelp.menuCache')" />
+          </template>
           <NSwitch v-model:value="formModel.is_cache" />
         </NFormItem>
 
-        <NFormItem v-if="formModel.type !== 'BUTTON'" :label="t('page.authorization.visible')" path="visible">
+        <NFormItem v-if="formModel.type !== 'BUTTON'" path="visible">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.visible')" :help="t('page.formHelp.menuVisible')" />
+          </template>
           <NSwitch v-model:value="formModel.visible" />
         </NFormItem>
 
-        <NFormItem :label="t('page.authorization.status')" path="status">
-          <NSwitch v-model:value="formModel.status" />
+        <NFormItem path="status">
+          <template #label>
+            <HelpLabel :label="t('page.authorization.status')" :help="t('page.formHelp.menuStatus')" />
+          </template>
+          <StatusSelect v-model:value="formModel.status" />
         </NFormItem>
       </NForm>
 

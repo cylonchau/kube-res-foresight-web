@@ -117,32 +117,39 @@ function toggle(key: string, on: boolean) {
 </template>
 
 <style scoped>
+/* The card is a column of definite height (its parent gives it one): the body scrolls, the pager stays in view. */
 .rank-list {
   display: flex;
+  flex-direction: column;
   flex: 1 1 0;
   min-height: 240px;
   overflow: hidden;
 }
-.rank-list :deep(.n-card__content) {
+.rank-list :deep(.n-card-content) {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   min-height: 0;
   padding: 0;
 }
 .rank-list__frame {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
-  flex: 1;
   gap: 12px;
   min-height: 0;
   padding: 12px 16px;
 }
+/* the content of the spin fills the space the card leaves (absolute, so its height does not depend on the rows) */
 .rank-list__spin {
-  flex: 1;
+  position: relative;
+  flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
 }
 .rank-list__spin :deep(.n-spin-content) {
-  height: 100%;
+  position: absolute;
+  inset: 0;
 }
 .rank-list__body {
   display: flex;
@@ -154,6 +161,7 @@ function toggle(key: string, on: boolean) {
 }
 .rank-list__foot {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
 }
