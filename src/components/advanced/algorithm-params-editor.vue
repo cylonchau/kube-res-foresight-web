@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NFormItem, NInputNumber, NSelect, NSwitch } from 'naive-ui';
+import { NFormItem, NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 
 defineOptions({ name: 'AlgorithmParamsEditor' });
@@ -75,6 +75,13 @@ const enumOptions = computed(() =>
         v-else-if="spec.type === 'string' && spec.enum"
         :value="(valueOf(spec) as string | undefined) ?? null"
         :options="enumOptions[spec.name]"
+        @update:value="value => update(spec, value)"
+      />
+      <!-- a text parameter (the members of a combination: ids separated by commas) -->
+      <NInput
+        v-else-if="spec.type === 'string'"
+        :value="(valueOf(spec) as string | undefined) ?? ''"
+        :placeholder="String(spec.default ?? '')"
         @update:value="value => update(spec, value)"
       />
       <NInputNumber
