@@ -1221,6 +1221,84 @@ declare namespace Api {
       lagging?: boolean;
     }
 
+    /** the replicas one algorithm asks for in a look-ahead window, and how far it is trusted */
+    interface AheadVote {
+      algorithm: string;
+      replicas: number;
+      credibility: number;
+    }
+
+    interface AheadConsensus {
+      replicas: number;
+      quantile: number;
+      min: number;
+      max: number;
+      leader: string;
+      votes: AheadVote[];
+      reason: string;
+    }
+
+    interface AheadWindow {
+      seconds: number;
+      steps: number;
+      lead?: boolean;
+      horizon?: boolean;
+      needs: Array<{ algorithm: string; replicas: number }>;
+      consensus: number;
+    }
+
+    /** how far ahead of the load the capacity is asked for, and what that is made of */
+    interface AheadLead {
+      seconds: number;
+      ready_seconds: number;
+      ready_source: 'measured' | 'configured';
+      ready_samples: number;
+      node_seconds: number;
+      decision_seconds: number;
+      margin_seconds: number;
+      capped: boolean;
+      reason: string;
+    }
+
+    /** the forward-looking part of the replica decision */
+    interface Ahead {
+      lead: AheadLead;
+      windows: AheadWindow[];
+      up: AheadConsensus;
+      down: AheadConsensus;
+      live: { ok: boolean; need: number; resource?: string; value?: number; at?: string; note?: string };
+      settlement: { replicas: number; action: 'up' | 'down' | 'hold'; emergency: boolean; reason: string };
+      current: number;
+      outcomes: { judged: number; timely: number; late: number; unneeded: number; open: number };
+      notes?: string[];
+      leader?: string;
+    }
+
+    /** a scale-up decided ahead of the load, and later whether the replicas were Ready before the load needed them */
+    interface ScaleOutcome {
+      id: number;
+      created_at: string;
+      module_id: number;
+      version: number;
+      decided_at: string;
+      from_replicas: number;
+      to_replicas: number;
+      emergency: boolean;
+      lead_seconds: number;
+      lead_source: string;
+      algorithm: string;
+      votes: string;
+      verdict: 'pending' | 'timely' | 'late' | 'unneeded';
+      final: boolean;
+      actual_need: number;
+      needed_at: string | null;
+      ready_at: string | null;
+      ready_seconds: number;
+      late_seconds: number;
+      slack_seconds: number;
+      note: string;
+    }
+
     interface Expansion {
       mode: MaxReplicasMode;
       base: number;

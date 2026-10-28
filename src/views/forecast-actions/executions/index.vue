@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import ScaleOutcomeModal from '@/components/business/scale-outcome-modal.vue';
 import SnapshotHistoryModal from '@/components/business/snapshot-history-modal.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
@@ -191,6 +192,7 @@ const cfg = useTableColumnConfig({
 
 /** The snapshot an execution acted on, opened over this page: no other page is opened. */
 const snapshotOf = ref<{ moduleId: number; version: number } | null>(null);
+const showOutcomes = ref(false);
 function openSnapshot(row: Api.Forecast.Execution) {
   snapshotOf.value = { moduleId: row.module_id, version: row.decision_version };
 }
@@ -262,9 +264,13 @@ onMounted(async () => {
       @sorter="handleSorterChange"
     >
       <template #suffix>
+        <NButton size="small" secondary type="primary" @click="showOutcomes = true">
+          {{ t('page.forecast.explain.aheadHistory') }}
+        </NButton>
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>
+    <ScaleOutcomeModal v-model:show="showOutcomes" :module-id="search.moduleId" :module-name="moduleName" />
     <SnapshotHistoryModal
       :show="snapshotOf !== null"
       :module-id="snapshotOf?.moduleId ?? null"

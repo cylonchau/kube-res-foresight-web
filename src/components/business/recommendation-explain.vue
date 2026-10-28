@@ -2,6 +2,7 @@
 import { computed, h } from 'vue';
 import { NDataTable, NEmpty, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import AheadExplain from '@/components/business/ahead-explain.vue';
 import ReplicaExplain from '@/components/business/replica-explain.vue';
 import { formatCpuMilli, formatMemoryBytes, formatPercent } from '@/utils/format';
 
@@ -31,6 +32,7 @@ interface Detail {
   multi?: Api.Forecast.CalcResult;
   borrowed?: Record<string, string>;
   expansion?: Api.Forecast.Expansion;
+  ahead?: Api.Forecast.Ahead;
   considered?: Array<{ metric: string; algorithm_id: string; eligible: boolean; reason: string; peak?: number }>;
   active_periods?: string[];
   periods?: Array<{
@@ -540,6 +542,8 @@ const sourceColumns = computed(() => [
       />
       <NEmpty v-else size="small" :description="t('page.forecast.explain.noConsidered')" />
     </div>
+
+    <AheadExplain v-if="parsed.ahead" :ahead="parsed.ahead" />
 
     <ReplicaExplain :detail="parsed" />
   </div>

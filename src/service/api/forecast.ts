@@ -274,6 +274,14 @@ export function fetchGetFallbacks(
   return request<Api.Forecast.Paged<Api.Forecast.FallbackRecord>>({ url: `${base}/fallbacks`, method: 'get', params });
 }
 
+export function fetchGetScaleOutcomes(params: ListWindow & { module_id?: number; verdict?: string }) {
+  return request<Api.Forecast.Paged<Api.Forecast.ScaleOutcome>>({
+    url: `${base}/scale-outcomes`,
+    method: 'get',
+    params
+  });
+}
+
 export function fetchGetExecutions(
   params: ListWindow & { module_id?: number; result?: string; action?: string; keyword?: string }
 ) {
