@@ -36,6 +36,7 @@ import { fetchRoleList, deleteRole, batchDeleteRole, updateRole, createRole, fet
 import { useBoolean, useLoading } from '@sa/hooks';
 import { onMounted } from 'vue';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { operateWidth } from '@/utils/operate-width';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -177,7 +178,12 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
     key: 'operate',
     title: t('common.operate'),
     align: 'center',
-    width: 200,
+    width: operateWidth([
+      t('common.edit'),
+      t('page.manage.role.setPermissions'),
+      t('common.disable'),
+      t('common.delete')
+    ]),
     fixed: 'right',
     resizable: true,
     render: row => {

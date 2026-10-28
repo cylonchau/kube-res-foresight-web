@@ -45,6 +45,7 @@ import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { copyCell } from '@/utils/copy-cell';
 import { formatResource } from '@/utils/format';
 import { helpTitle } from '@/utils/help-title';
+import { operateWidth } from '@/utils/operate-width';
 
 const PAGE_CODE = 'forecast_module_manage';
 const { t } = useI18n();
@@ -650,11 +651,16 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 168,
+    width: operateWidth([
+      t('common.edit'),
+      t('common.delete'),
+      t('page.forecast.modules.clone'),
+      t('page.forecast.modules.resume')
+    ]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Module) =>
-      h(NSpace, { justify: 'center', size: 4, wrap: false }, () => [
+      h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,

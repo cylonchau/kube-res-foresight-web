@@ -16,6 +16,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatMilli } from '@/utils/format';
 import { copyCell } from '@/utils/copy-cell';
 import { reasonText } from '@/utils/reason';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastActionsAdmissions' });
 
@@ -172,7 +173,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('common.detail')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Admission) =>

@@ -26,6 +26,7 @@ import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
+import { operateWidth } from '@/utils/operate-width';
 
 const message = useMessage();
 const { t } = useI18n();
@@ -219,7 +220,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.action'),
     key: 'operate',
-    width: 180,
+    width: operateWidth([t('common.edit'), t('common.disable')]),
     align: 'center',
     fixed: 'right',
     resizable: true,

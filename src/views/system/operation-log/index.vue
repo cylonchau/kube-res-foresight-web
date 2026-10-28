@@ -27,6 +27,7 @@ import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import { resolveRange } from '@/hooks/business/use-forecast-modules';
+import { operateWidth } from '@/utils/operate-width';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -226,7 +227,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.action'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('page.operationLog.detail')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.System.OperationLog) =>

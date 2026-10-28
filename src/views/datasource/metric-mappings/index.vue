@@ -15,6 +15,7 @@ import {
   fetchGetMetricMappings
 } from '@/service/api/datasource';
 import { formatDateTime } from '@/utils/date';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'DatasourceMetricMappings' });
 
@@ -181,7 +182,7 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 104,
+    width: operateWidth([t('common.edit'), t('common.delete')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Datasource.MetricMapping) =>

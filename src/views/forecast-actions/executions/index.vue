@@ -15,6 +15,7 @@ import { fetchGetExecutions, fetchBatchDeleteRecords } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { copyCell } from '@/utils/copy-cell';
 import { reasonText, scalingActionText } from '@/utils/reason';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastActionsExecutions' });
 
@@ -160,7 +161,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 140,
+    width: operateWidth([t('page.forecast.executions.openSnapshot', { version: 9999 })]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Execution) =>

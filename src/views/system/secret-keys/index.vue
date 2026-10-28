@@ -32,6 +32,7 @@ import { fetchAllPermissions } from '@/service/api/permission';
 import { copyText } from '@/utils/copy';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { operateWidth } from '@/utils/operate-width';
 
 const PAGE_CODE = 'system_secret_keys';
 const { t } = useI18n();
@@ -244,7 +245,7 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 156,
+    width: operateWidth([t('common.edit'), t('page.system.secretKeys.rotate'), t('common.delete')]),
     fixed: 'right',
     align: 'center',
     render: (row: any) =>

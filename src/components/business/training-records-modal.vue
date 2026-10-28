@@ -8,6 +8,7 @@ import { usePagedList } from '@/hooks/business/use-paged-list';
 import { fetchGetTrainingRuns } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { reasonText } from '@/utils/reason';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'TrainingRecordsModal' });
 
@@ -80,7 +81,7 @@ const columns = computed<DataTableColumns<Api.Forecast.TrainingRun>>(() => [
   {
     title: t('common.operate'),
     key: 'operate',
-    width: 80,
+    width: operateWidth([t('common.detail')]),
     align: 'center',
     render: row =>
       h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => (detail.value = row) }, () =>

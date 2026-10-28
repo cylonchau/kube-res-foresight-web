@@ -15,6 +15,7 @@ import { fetchGetRecommendations } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
 import { helpTitle } from '@/utils/help-title';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastActionsRecommendations' });
 
@@ -217,7 +218,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 150,
+    width: operateWidth([t('page.forecast.recommendations.explain'), t('page.forecast.recommendations.history')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Recommendation) =>

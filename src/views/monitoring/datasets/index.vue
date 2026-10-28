@@ -32,6 +32,7 @@ import {
   useForecastModules
 } from '@/hooks/business/use-forecast-modules';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
+import { operateWidth } from '@/utils/operate-width';
 import {
   fetchCreateModuleSource,
   fetchDeleteModuleSource,
@@ -400,7 +401,7 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 104,
+    width: operateWidth([t('common.edit'), t('common.delete')]),
     fixed: 'right',
     render: (row: Api.Forecast.DatasetSource) =>
       h(NSpace, { wrap: false }, () => [

@@ -16,6 +16,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatDecimal } from '@/utils/format';
 import { copyCell } from '@/utils/copy-cell';
 import { helpTitle } from '@/utils/help-title';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastResultsEvaluations' });
 
@@ -154,7 +155,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('common.detail')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Evaluation) =>

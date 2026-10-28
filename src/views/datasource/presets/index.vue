@@ -26,6 +26,7 @@ import {
 } from '@/service/api';
 import { AUX_METRICS } from '@/hooks/business/use-forecast-modules';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'DatasourcePresets' });
 
@@ -168,7 +169,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 80,
+    width: operateWidth([t('page.datasource.presets.detail')]),
     fixed: 'right',
     align: 'center',
     // a template is used from the dataset form (pick it there); here it is read

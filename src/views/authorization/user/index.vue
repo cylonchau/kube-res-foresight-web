@@ -47,6 +47,7 @@ import { useBoolean, useLoading } from '@sa/hooks';
 import { onMounted } from 'vue';
 import { useAuthStore } from '@/store/modules/auth';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { operateWidth } from '@/utils/operate-width';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -338,7 +339,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     title: t('common.operate'),
     key: 'operate',
     align: 'center',
-    width: 190,
+    width: operateWidth([t('common.edit'), t('page.manage.user.resetOtp'), t('common.disable'), t('common.delete')]),
     fixed: 'right',
     resizable: true,
     render: row => {

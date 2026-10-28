@@ -26,6 +26,7 @@ import TableHeaderOperation from '@/components/advanced/table-header-operation.v
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
+import { operateWidth } from '@/utils/operate-width';
 
 const { t } = useI18n();
 const { loading, startLoading, endLoading } = useLoading(false);
@@ -237,7 +238,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('page.job.reset')]),
     align: 'center',
     fixed: 'right',
     render(row: Api.System.Job) {

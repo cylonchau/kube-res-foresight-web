@@ -25,6 +25,7 @@ import SvgIcon from '@/components/custom/svg-icon.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchGetMenus, fetchCreateMenu, fetchUpdateMenu, fetchDeleteMenu } from '@/service/api/menu';
+import { operateWidth } from '@/utils/operate-width';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -338,7 +339,11 @@ const columns = computed(() => [
   {
     title: t('page.authorization.actions'),
     key: 'actions',
-    width: 280,
+    width: operateWidth([
+      t('page.authorization.addChild'),
+      t('page.authorization.edit'),
+      t('page.authorization.delete')
+    ]),
     align: 'center' as const,
     fixed: 'right' as const,
     render(row: any) {

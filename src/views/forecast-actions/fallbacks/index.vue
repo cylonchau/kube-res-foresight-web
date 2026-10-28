@@ -14,6 +14,7 @@ import { fetchGetFallbacks, fetchGetSnapshot } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatResource } from '@/utils/format';
 import { helpTitle } from '@/utils/help-title';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastActionsFallbacks' });
 
@@ -238,7 +239,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('page.forecast.recommendations.explain')]),
     fixed: 'right',
     align: 'center',
     render: (row: FallbackRow) =>

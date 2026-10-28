@@ -26,6 +26,7 @@ import { useLoading } from '@sa/hooks';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { refreshDefaultVisibleColumnCount, useTableColumnConfig } from '@/hooks/business/use-table-column-config';
+import { operateWidth } from '@/utils/operate-width';
 
 const message = useMessage();
 const { t, locale } = useI18n();
@@ -222,7 +223,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate', '操作'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('common.edit')]),
     resizable: true,
     align: 'center',
     fixed: 'right',

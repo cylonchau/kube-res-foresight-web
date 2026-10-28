@@ -43,6 +43,7 @@ import { helpTitle } from '@/utils/help-title';
 import MetricLabel from '@/components/business/metric-label.vue';
 import { formatDecimal, formatPercent } from '@/utils/format';
 import { copyCell } from '@/utils/copy-cell';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastAlgorithms' });
 
@@ -258,7 +259,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 148,
+    width: operateWidth([t('common.edit'), t('page.forecast.algorithms.detail'), t('common.delete')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Algorithm) =>

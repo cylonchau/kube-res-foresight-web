@@ -12,6 +12,7 @@ import { fetchGetLatestScores } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { copyCell } from '@/utils/copy-cell';
 import { helpTitle } from '@/utils/help-title';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastScoreRecords' });
 
@@ -119,7 +120,7 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: 100,
+    width: operateWidth([t('common.detail')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.ScoreRow) =>

@@ -12,6 +12,7 @@ import { fetchGetAlgorithms, fetchGetTrainingSummary } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatPercent } from '@/utils/format';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'ForecastAlgorithmRuns' });
 
@@ -164,7 +165,7 @@ const cfg = useTableColumnConfig({
     operate: {
       title: t('common.operate'),
       key: 'operate',
-      width: 130,
+      width: operateWidth([t('page.forecast.algorithmRuns.records')]),
       fixed: 'right',
       align: 'center',
       render: (row: Row) =>
