@@ -160,7 +160,12 @@ const consideredColumns = computed(() => [
 ]);
 
 const selectionColumns = computed(() => [
-  { title: '#', key: 'rank', width: 50, render: (row: Api.Forecast.SelectionRow) => row.rank || '-' },
+  {
+    title: t('page.forecast.evaluation.rank'),
+    key: 'rank',
+    width: 64,
+    render: (row: Api.Forecast.SelectionRow) => row.rank || '-'
+  },
   { title: t('page.forecast.modules.algorithm'), key: 'algorithm', width: 150 },
   { title: t('page.forecast.modules.algorithm'), key: 'catalog', width: 130 },
   {

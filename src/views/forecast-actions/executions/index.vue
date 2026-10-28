@@ -145,12 +145,7 @@ const columnMap: Record<string, any> = {
     width: 120,
     align: 'center',
     sorter: true,
-    render: (row: Api.Forecast.Execution) =>
-      row.decision_version
-        ? h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openSnapshot(row) }, () =>
-            t('page.forecast.snapshots.versionShort', { version: row.decision_version })
-          )
-        : '-'
+    render: (row: Api.Forecast.Execution) => (row.decision_version ? String(row.decision_version) : '-')
   },
   reason: {
     title: t('page.forecast.evaluation.reason'),
@@ -162,13 +157,13 @@ const columnMap: Record<string, any> = {
   operate: {
     title: t('common.operate'),
     key: 'operate',
-    width: operateWidth([t('page.forecast.executions.openSnapshot', { version: 9999 })]),
+    width: operateWidth([t('page.forecast.recommendations.explain')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Execution) =>
       row.decision_version
         ? h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openSnapshot(row) }, () =>
-            t('page.forecast.executions.openSnapshot', { version: row.decision_version })
+            t('page.forecast.recommendations.explain')
           )
         : '-'
   }

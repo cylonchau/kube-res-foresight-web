@@ -25,6 +25,7 @@ const { moduleOptions, moduleName, loadModules } = useForecastModules();
 const search = reactive({
   moduleId: null as number | null,
   applied: null as 'true' | 'false' | null,
+  origin: null as string | null,
   keyword: '',
   range: lastHours(24 * 7) as [number, number] | null
 });
@@ -34,6 +35,10 @@ const appliedOptions = computed(() => [
   { label: t('page.forecast.admissions.refused'), value: 'false' }
 ]);
 
+const originOptions = computed(() =>
+  ['deploy', 'rollout', 'scale'].map(value => ({ label: t(`page.forecast.admissions.origin_${value}`), value }))
+);
+
 // the list below reads the sort parameters, and a change of the sort searches it again
 let searchList: () => void = () => {};
 const { handleSorterChange, sortParams } = useTableSort(() => searchList());
@@ -41,6 +46,7 @@ const list = usePagedList<Api.Forecast.Admission>(async (page, pageSize) => {
   const { data } = await fetchGetAdmissions({
     module_id: search.moduleId ?? undefined,
     applied: search.applied === null ? undefined : search.applied === 'true',
+    origin: search.origin ?? undefined,
     keyword: search.keyword.trim() || undefined,
     ...rangeParams(search.range),
     page,
@@ -65,7 +71,7 @@ async function runBatch() {
 }
 
 function resetSearch() {
-  Object.assign(search, { moduleId: null, applied: null, keyword: '', range: lastHours(24 * 7) });
+  Object.assign(search, { moduleId: null, applied: null, origin: null, keyword: '', range: lastHours(24 * 7) });
 }
 
 const cpu = (value: number) => (value ? formatMilli(value) : '-');
@@ -97,6 +103,14 @@ const columnMap: Record<string, any> = {
     minWidth: 240,
     render: (row: Api.Forecast.Admission) =>
       copyCell(`${row.namespace}/${row.workload}${row.container ? `/${row.container}` : ''}`)
+  },
+  origin: {
+    title: t('page.forecast.admissions.origin'),
+    key: 'origin',
+    width: 110,
+    align: 'center',
+    render: (row: Api.Forecast.Admission) =>
+      row.origin ? t(`page.forecast.admissions.origin_${row.origin}`, row.origin) : '-'
   },
   applied: {
     title: t('page.forecast.admissions.result'),
@@ -189,6 +203,7 @@ const cfg = useTableColumnConfig({
     '__selection__',
     'created_at',
     'target',
+    'origin',
     'applied',
     'cpu',
     'memory',
@@ -233,6 +248,18 @@ onMounted(async () => {
           clearable
           :options="appliedOptions"
           :placeholder="t('page.forecast.admissions.result')"
+        />
+      </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="4"
+        :label="t('page.forecast.admissions.origin')"
+      >
+        <NSelect
+          v-model:value="search.origin"
+          clearable
+          :options="originOptions"
+          :placeholder="t('page.forecast.admissions.origin')"
         />
       </NFormItemGi>
       <NFormItemGi :span="4" :label="t('common.keyword')">

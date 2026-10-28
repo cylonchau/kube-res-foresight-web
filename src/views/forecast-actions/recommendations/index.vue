@@ -223,10 +223,10 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.Forecast.Recommendation) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () =>
+        h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () =>
           t('page.forecast.recommendations.explain')
         ),
-        h(NButton, { size: 'tiny', type: 'info', onClick: () => openSnapshots(row) }, () =>
+        h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openSnapshots(row) }, () =>
           t('page.forecast.recommendations.history')
         )
       ])

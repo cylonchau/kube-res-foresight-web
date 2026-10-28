@@ -1172,6 +1172,9 @@ declare namespace Api {
       workload_kind: string;
       mode: string;
       algorithm: string;
+      /** rollout, scale, deploy, or empty when the caller did not say */
+      origin?: string;
+      revision?: string;
     }
 
     /** one source's line of the multi-metric calculation, see multimetric.Row */

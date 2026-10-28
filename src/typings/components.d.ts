@@ -12,6 +12,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AheadExplain: typeof import('./../components/business/ahead-explain.vue')['default']
     AlgorithmParamsEditor: typeof import('./../components/advanced/algorithm-params-editor.vue')['default']
     AppProvider: typeof import('./../components/common/app-provider.vue')['default']
     BacktestMetrics: typeof import('./../components/business/backtest-metrics.vue')['default']
@@ -106,6 +107,7 @@ declare module 'vue' {
     ReplicaExplain: typeof import('./../components/business/replica-explain.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    ScaleOutcomeModal: typeof import('./../components/business/scale-outcome-modal.vue')['default']
     ScoreBasis: typeof import('./../components/business/score-basis.vue')['default']
     ScoreBreakdown: typeof import('./../components/business/score-breakdown.vue')['default']
     SnapshotHistoryModal: typeof import('./../components/business/snapshot-history-modal.vue')['default']
@@ -126,6 +128,7 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
+  const AheadExplain: typeof import('./../components/business/ahead-explain.vue')['default']
   const AlgorithmParamsEditor: typeof import('./../components/advanced/algorithm-params-editor.vue')['default']
   const AppProvider: typeof import('./../components/common/app-provider.vue')['default']
   const BacktestMetrics: typeof import('./../components/business/backtest-metrics.vue')['default']
@@ -220,6 +223,7 @@ declare global {
   const ReplicaExplain: typeof import('./../components/business/replica-explain.vue')['default']
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
+  const ScaleOutcomeModal: typeof import('./../components/business/scale-outcome-modal.vue')['default']
   const ScoreBasis: typeof import('./../components/business/score-basis.vue')['default']
   const ScoreBreakdown: typeof import('./../components/business/score-breakdown.vue')['default']
   const SnapshotHistoryModal: typeof import('./../components/business/snapshot-history-modal.vue')['default']

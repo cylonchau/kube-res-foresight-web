@@ -117,27 +117,27 @@ function exportChecked() {
   URL.revokeObjectURL(link.href);
 }
 
-const centered = { width: 84, align: 'center' };
+const centered = { width: 76, align: 'center' };
 const columnMap: Record<string, any> = {
   __selection__: { type: 'selection', width: 42, minWidth: 42 },
   rank: {
-    title: () => helpTitle('#', t('page.forecast.metricHelp.rank')),
+    title: () => helpTitle(t('page.forecast.evaluation.rank'), t('page.forecast.metricHelp.rank')),
     key: 'rank',
-    width: 56,
+    width: 76,
     align: 'center',
     render: (row: Api.Forecast.LeaderboardEntry) => (ranked(row) ? row.rank : '-')
   },
   algorithm_id: {
     title: t('page.forecast.modules.algorithm'),
     key: 'algorithm_id',
-    width: 130,
+    width: 150,
     resizable: true,
     render: (row: Api.Forecast.LeaderboardEntry) => copyCell(row.algorithm_id)
   },
   status: {
     title: () => helpTitle(t('page.forecast.evaluation.status'), t('page.forecast.metricHelp.status')),
     key: 'status',
-    width: 96,
+    width: 84,
     align: 'center',
     render: (row: Api.Forecast.LeaderboardEntry) =>
       h(
@@ -175,7 +175,7 @@ const columnMap: Record<string, any> = {
   risk_wape: {
     title: () => helpTitle(t('page.forecast.evaluation.riskWape'), t('page.forecast.metricHelp.riskWape')),
     key: 'risk_wape',
-    width: 104,
+    width: 96,
     align: 'center',
     render: (row: Api.Forecast.LeaderboardEntry) => figure(row, percent, row.risk_wape)
   },
@@ -194,7 +194,7 @@ const columnMap: Record<string, any> = {
   peak_under: {
     title: () => helpTitle(t('page.forecast.evaluation.peakUnder'), t('page.forecast.metricHelp.peakUnder')),
     key: 'peak_under',
-    width: 96,
+    width: 88,
     align: 'center',
     render: (row: Api.Forecast.LeaderboardEntry) => figure(row, percent, row.peak_under)
   },
@@ -207,7 +207,7 @@ const columnMap: Record<string, any> = {
   runs: {
     title: () => helpTitle(t('page.forecast.evaluation.runs'), t('page.forecast.metricHelp.runs')),
     key: 'runs',
-    width: 72,
+    width: 64,
     align: 'center'
   },
   points: {
@@ -218,7 +218,7 @@ const columnMap: Record<string, any> = {
   beats_baseline: {
     title: () => helpTitle(t('page.forecast.evaluation.beatsBaseline'), t('page.forecast.metricHelp.beatsBaseline')),
     key: 'beats_baseline',
-    width: 104,
+    width: 96,
     align: 'center',
     render: (row: Api.Forecast.LeaderboardEntry) => yesNo(row.beats_baseline)
   },

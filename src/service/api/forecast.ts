@@ -369,7 +369,9 @@ export function fetchGetLatestScores(params: {
   });
 }
 
-export function fetchGetAdmissions(params: ListWindow & { module_id?: number; applied?: boolean; keyword?: string }) {
+export function fetchGetAdmissions(
+  params: ListWindow & { module_id?: number; applied?: boolean; origin?: string; keyword?: string }
+) {
   return request<Api.Forecast.Paged<Api.Forecast.Admission>>({ url: `${base}/admissions`, method: 'get', params });
 }
 

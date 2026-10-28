@@ -144,9 +144,9 @@ function resultText(row: Api.Forecast.FallbackRecord) {
 }
 
 const columnMap: Record<string, any> = {
-  at: {
+  created_at: {
     title: t('page.forecast.fallbacks.at'),
-    key: 'at',
+    key: 'created_at',
     width: 170,
     sorter: true,
     render: (row: FallbackRow) => formatDateTime(row.record.at)
@@ -251,7 +251,7 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_fallback',
   columnMap,
-  defaultKeys: ['at', 'module', 'kind', 'resource', 'trigger', 'original', 'target', 'result', 'operate']
+  defaultKeys: ['created_at', 'module', 'kind', 'resource', 'trigger', 'original', 'target', 'result', 'operate']
 });
 
 onMounted(async () => {
