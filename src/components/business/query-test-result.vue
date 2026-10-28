@@ -7,6 +7,7 @@ import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { fetchTestMetricQuery } from '@/service/api';
 import { formatDecimal, formatMetric } from '@/utils/format';
+import { gapPairs, withBreaks } from '@/utils/series-gaps';
 
 defineOptions({ name: 'QueryTestResult' });
 
@@ -58,6 +59,7 @@ const { domRef, updateOptions } = useEcharts(
 
 async function draw() {
   const points = result.value?.points || [];
+  const step = props.config.step_seconds || 60;
   await updateOptions(opts => ({
     ...opts,
     tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => formatMetric(Number(value), unit.value) },
@@ -68,7 +70,40 @@ async function draw() {
       axisLabel: { formatter: (value: number) => formatDecimal(value, 3) }
     },
     series: [
-      { type: 'line', showSymbol: points.length < 60, data: points.map(p => [new Date(p.time).getTime(), p.value]) }
+      {
+        type: 'line',
+        // small points where the line is sparse; the nearest one grows under the pointer
+        showSymbol: points.length < 60,
+        symbolSize: 3,
+        // a curve through the points that never overshoots them, with a break where the query returned nothing
+        smooth: true,
+        smoothMonotone: 'x',
+        lineStyle: { width: 1.5 },
+        emphasis: { scale: 2.4 },
+        data: withBreaks(
+          points,
+          step,
+          p => new Date(p.time).getTime(),
+          p => [new Date(p.time).getTime(), p.value],
+          at => [at, null]
+        )
+      },
+      // the stretch with no data: a dashed amber line joins its two sides. It is no value and is not in the tooltip.
+      {
+        type: 'line',
+        silent: true,
+        showSymbol: false,
+        tooltip: { show: false },
+        z: 1,
+        lineStyle: { width: 1.5, type: [5, 4], color: '#e6a23c' },
+        itemStyle: { color: '#e6a23c' },
+        data: gapPairs(
+          points,
+          step,
+          p => new Date(p.time).getTime(),
+          p => p.value
+        ).flatMap(pair => [pair.from, pair.to, [pair.to[0], null]])
+      }
     ] as never
   }));
 }

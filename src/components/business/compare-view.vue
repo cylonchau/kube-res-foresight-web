@@ -1,25 +1,34 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { NButton, NCard, NFormItemGi, NSelect, useMessage } from 'naive-ui';
+import {
+  NCard,
+  NDataTable,
+  NDescriptions,
+  NDescriptionsItem,
+  NFormItemGi,
+  NModal,
+  NSelect,
+  NTag,
+  useMessage
+} from 'naive-ui';
+import type { DataTableColumns } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import CompareChart, { type LineType } from '@/components/business/compare-chart.vue';
+import CompareChart, { type LineType, type PickedPoint } from '@/components/business/compare-chart.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
-import ListTablePanel from '@/components/business/list-table-panel.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
-import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchCompareModule, fetchGetAlgorithms } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
-import { formatDecimal, formatMetric, formatPercent } from '@/utils/format';
-import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { formatMetric, formatPercent } from '@/utils/format';
 import { reasonText } from '@/utils/reason';
 
 defineOptions({ name: 'CompareView' });
 
 /**
  * One page, no tabs: the actual values of a module metric from Prometheus next to the forecasts of every enabled algorithm,
- * as one chart, with the state and the error (WAPE) of each algorithm on tags above it, and the prediction records point by
- * point (predicted value, actual value, error) in one list below. The window reaches one forecast horizon ahead so the newest
+ * as one chart that is the whole page: the lines are chosen in a list of curves that never moves the plot, the chart goes
+ * full screen, and a click on a point opens what that moment holds (the forecast, the actual value, the error, and every
+ * algorithm at that time). The window reaches one forecast horizon ahead so the newest
  * forecasts, which have not come true yet, are visible. An algorithm without a forecast in the range says why.
  */
 const { t } = useI18n();
@@ -48,25 +57,12 @@ function defaultRange(): [number, number] {
 const loading = ref(false);
 const compare = ref<Api.Forecast.Compare | null>(null);
 const algorithmIds = ref<string[]>([]);
-const checkedRowKeys = ref<string[]>([]);
 
 const metricOptions = computed(() =>
   (selected.value?.sources || [])
     .filter(source => source.enabled)
     .map(source => ({ label: source.name, value: source.key }))
 );
-
-const pagination = reactive({
-  page: 1,
-  pageSize: getAdaptivePageSize(),
-  showSizePicker: true,
-  pageSizes: getAdaptivePageSizes(),
-  onChange: (page: number) => (pagination.page = page),
-  onUpdatePageSize: (size: number) => {
-    pagination.pageSize = size;
-    pagination.page = 1;
-  }
-});
 
 async function load() {
   if (!search.moduleId || !search.metric || !search.range) {
@@ -81,8 +77,6 @@ async function load() {
       algorithms: search.algorithms.join(',') || undefined
     });
     compare.value = error ? null : data;
-    checkedRowKeys.value = [];
-    pagination.page = 1;
   } finally {
     loading.value = false;
   }
@@ -171,79 +165,6 @@ const emptyReason = computed(() => {
 });
 
 const unit = computed(() => compare.value?.unit || '');
-const columnMap: Record<string, any> = {
-  __selection__: { type: 'selection', width: 42, minWidth: 42 },
-  time: {
-    title: t('page.forecast.compare.time'),
-    key: 'time',
-    width: 170,
-    render: (row: Row) => formatDateTime(row.time)
-  },
-  algorithm: { title: t('page.forecast.modules.algorithm'), key: 'algorithm', width: 150, resizable: true },
-  predicted: {
-    title: t('page.forecast.compare.predicted'),
-    key: 'predicted',
-    width: 140,
-    align: 'right',
-    render: (row: Row) => formatMetric(row.predicted, unit.value)
-  },
-  predictedReplicas: {
-    title: t('page.forecast.compare.predictedReplicas'),
-    key: 'predictedReplicas',
-    width: 120,
-    align: 'right',
-    render: (row: Row) => row.predictedReplicas ?? '-'
-  },
-  actual: {
-    title: t('page.forecast.compare.actualValue'),
-    key: 'actual',
-    width: 140,
-    align: 'right',
-    render: (row: Row) => formatMetric(row.actual, unit.value)
-  },
-  actualReplicas: {
-    title: t('page.forecast.compare.replicasNow'),
-    key: 'actualReplicas',
-    width: 120,
-    align: 'right',
-    render: (row: Row) => row.actualReplicas ?? '-'
-  },
-  error: {
-    title: t('page.forecast.compare.error'),
-    key: 'error',
-    width: 130,
-    align: 'right',
-    render: (row: Row) => (row.error === null ? '-' : formatMetric(row.error, unit.value))
-  },
-  errorRate: {
-    title: t('page.forecast.compare.errorRate'),
-    key: 'errorRate',
-    width: 110,
-    align: 'right',
-    render: (row: Row) => (row.errorRate === null ? '-' : formatPercent(row.errorRate, 1))
-  },
-  predictedAt: {
-    title: t('page.forecast.compare.predictedAt'),
-    key: 'predictedAt',
-    width: 170,
-    render: (row: Row) => formatDateTime(row.predictedAt)
-  }
-};
-const cfg = useTableColumnConfig({
-  pageCode: 'forecast_history_points',
-  columnMap,
-  defaultKeys: [
-    '__selection__',
-    'time',
-    'algorithm',
-    'predicted',
-    'predictedReplicas',
-    'actual',
-    'actualReplicas',
-    'error',
-    'errorRate'
-  ]
-});
 
 // ---- every enabled algorithm with its state: the ones without a forecast in the range say why
 const pointsOf = computed(() => new Map((compare.value?.algorithms || []).map(a => [a.algorithm_id, a.points.length])));
@@ -335,34 +256,57 @@ const legendLabels = computed(() => {
   return out;
 });
 
-/** The checked rows as a CSV: the exact values of the chart. */
-function exportChecked() {
-  const keys = new Set(checkedRowKeys.value);
-  const picked = rows.value.filter(row => keys.has(row.key));
-  const lines = ['time,algorithm,predicted,predicted_replicas,actual,actual_replicas,error,predicted_at'];
-  for (const r of picked) {
-    lines.push(
-      [
-        r.time,
-        r.algorithm,
-        formatDecimal(r.predicted),
-        r.predictedReplicas ?? '',
-        formatDecimal(r.actual, 3) === '-' ? '' : formatDecimal(r.actual),
-        r.actualReplicas ?? '',
-        r.error === null ? '' : formatDecimal(r.error),
-        r.predictedAt
-      ].join(',')
-    );
+// ---- what a click on the chart opens: the data of that moment
+const picked = ref<PickedPoint | null>(null);
+const at = computed(() => picked.value?.time ?? 0);
+/** every algorithm's forecast at the clicked time, next to the actual value of that time */
+const atRows = computed(() => rows.value.filter(row => new Date(row.time).getTime() === at.value));
+const actualAt = computed(() => {
+  const candle = (compare.value?.actual?.candles || []).find(item => new Date(item.time).getTime() === at.value);
+  return candle ? candle.mean : null;
+});
+const pickedRow = computed(() => atRows.value.find(row => row.algorithm === picked.value?.series) ?? null);
+const pickedStatus = computed(() => statuses.value.find(item => item.algorithm_id === picked.value?.series));
+const pickedWape = computed(() => (picked.value ? (wapeOf.value.get(picked.value.series) ?? null) : null));
+const atColumns = computed<DataTableColumns<Row>>(() => [
+  { title: t('page.forecast.modules.algorithm'), key: 'algorithm', width: 150 },
+  {
+    title: t('page.forecast.compare.predicted'),
+    key: 'predicted',
+    width: 130,
+    align: 'right',
+    render: row => formatMetric(row.predicted, unit.value)
+  },
+  {
+    title: t('page.forecast.compare.predictedReplicas'),
+    key: 'predictedReplicas',
+    width: 110,
+    align: 'right',
+    render: row => row.predictedReplicas ?? '-'
+  },
+  {
+    title: t('page.forecast.compare.error'),
+    key: 'error',
+    width: 120,
+    align: 'right',
+    render: row => (row.error === null ? '-' : formatMetric(row.error, unit.value))
+  },
+  {
+    title: t('page.forecast.compare.errorRate'),
+    key: 'errorRate',
+    width: 100,
+    align: 'right',
+    render: row => (row.errorRate === null ? '-' : formatPercent(row.errorRate, 1))
+  },
+  {
+    title: t('page.forecast.compare.predictedAt'),
+    key: 'predictedAt',
+    width: 170,
+    render: row => formatDateTime(row.predictedAt)
   }
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'kube-resource-fcst-history.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
+]);
 
 onMounted(async () => {
-  cfg.initColumnConfig();
   try {
     const [, algos] = await Promise.all([
       loadModules(),
@@ -380,7 +324,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full flex-col gap-12px overflow-auto">
+  <div class="h-full flex-col gap-12px overflow-hidden">
     <ListSearchCard :model="search" :action-span="6" @search="load" @reset="resetSearch">
       <NFormItemGi class="list-search-select-field" :span="6" :label="t('page.forecast.modules.name')">
         <NSelect
@@ -409,8 +353,15 @@ onMounted(async () => {
       </NFormItemGi>
     </ListSearchCard>
 
-    <NCard :bordered="false" size="small" class="flex-shrink-0 rounded-16px shadow-sm">
+    <!-- the chart is the page: it takes all the height that is left -->
+    <NCard
+      :bordered="false"
+      size="small"
+      class="min-h-0 flex-1 rounded-16px shadow-sm"
+      :content-style="{ height: '100%', minHeight: 0 }"
+    >
       <CompareChart
+        fill
         :legend="legendLabels"
         :actual="compare?.actual ?? null"
         :actual-replicas="compare?.actual_replicas ?? null"
@@ -420,31 +371,76 @@ onMounted(async () => {
         :bucket-seconds="compare?.bucket_seconds || 60"
         :loading="loading"
         :empty-reason="emptyReason"
-        :height="420"
         @refresh="load"
+        @pick="point => (picked = point)"
       />
     </NCard>
 
-    <div class="h-520px flex-shrink-0 flex flex-col">
-      <ListTablePanel
-        v-model:checked-row-keys="checkedRowKeys"
-        :title="t('page.forecast.history.recordsTitle')"
-        :help="t('page.forecast.history.pointsHelp')"
-        :cfg="cfg"
-        :loading="loading"
-        :data="rows"
-        :pagination="pagination"
-        :remote="false"
-        :row-key="(row: any) => row.key"
-        :empty-hint="t('page.forecast.compare.empty')"
-        @refresh="load"
-      >
-        <template #suffix>
-          <NButton size="small" :disabled="!checkedRowKeys.length" @click="exportChecked">
-            {{ t('page.forecast.metrics.exportCsv') }}
-          </NButton>
-        </template>
-      </ListTablePanel>
-    </div>
+    <NModal
+      :show="Boolean(picked)"
+      preset="card"
+      :title="
+        picked
+          ? t('page.forecast.compare.pointTitle', {
+              series: picked.series,
+              time: formatDateTime(new Date(picked.time).toISOString())
+            })
+          : ''
+      "
+      class="w-860px max-w-95vw"
+      @update:show="value => !value && (picked = null)"
+    >
+      <div v-if="picked" class="max-h-70vh flex flex-col gap-14px overflow-y-auto pr-8px">
+        <NDescriptions :column="2" size="small" label-placement="left" bordered>
+          <NDescriptionsItem :label="t('page.forecast.compare.time')">
+            {{ formatDateTime(new Date(picked.time).toISOString()) }}
+          </NDescriptionsItem>
+          <NDescriptionsItem :label="t('page.forecast.modules.algorithm')">{{ picked.series }}</NDescriptionsItem>
+          <template v-if="picked.kind === 'forecast'">
+            <NDescriptionsItem :label="t('page.forecast.compare.predicted')">
+              {{ formatMetric(picked.value, unit) }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.predictedReplicas')">
+              {{ picked.replicas ?? '-' }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.predictedAt')">
+              {{ picked.predictedAt ? formatDateTime(picked.predictedAt) : '-' }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.actualValue')">
+              {{ actualAt === null ? t('page.forecast.compare.pointNoActual') : formatMetric(actualAt, unit) }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.error')">
+              {{ pickedRow?.error == null ? '-' : formatMetric(pickedRow.error, unit) }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.errorRate')">
+              {{ pickedRow?.errorRate == null ? '-' : formatPercent(pickedRow.errorRate, 1) }}
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.pointState')">
+              <NTag v-if="pickedStatus" size="small" :bordered="false">
+                {{ t(`page.forecast.ranking.state_${pickedStatus.status}`) }}
+              </NTag>
+              <template v-else>-</template>
+            </NDescriptionsItem>
+            <NDescriptionsItem :label="t('page.forecast.compare.pointWape')">
+              {{ pickedWape === null ? '-' : formatPercent(pickedWape, 1) }}
+            </NDescriptionsItem>
+          </template>
+          <NDescriptionsItem v-else :label="t('page.forecast.compare.actualValue')">
+            {{ formatMetric(picked.value, unit) }}
+          </NDescriptionsItem>
+        </NDescriptions>
+        <section>
+          <div class="mb-6px font-medium">{{ t('page.forecast.compare.pointAt') }}</div>
+          <NDataTable
+            size="small"
+            :columns="atColumns"
+            :data="atRows"
+            :row-key="(row: Row) => row.key"
+            :scroll-x="780"
+            :max-height="260"
+          />
+        </section>
+      </div>
+    </NModal>
   </div>
 </template>

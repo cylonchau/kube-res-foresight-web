@@ -1583,7 +1583,17 @@ const local = {
         empty: 'No data in the range: Prometheus has no such metric for it and no algorithm made a forecast for it.',
         actualMissing: 'Prometheus has no data of this metric in the chosen range (history missing)',
         gapLegend:
-          'Dashed line and grey shade: there is no actual data in this stretch; the line only marks where data is missing, nothing is filled in',
+          'Orange dashed line and shade: there is no actual data in this stretch; the line only marks where data is missing, nothing is filled in',
+        curves: 'Curves',
+        firstOnly: 'First {n} only',
+        clickHint: 'Click a point for the data of that moment; wheel to zoom, double click to reset',
+        fullscreen: 'Full screen',
+        pointTitle: '{series} · {time}',
+        pointAt: 'Every algorithm at that moment',
+        pointNoActual: 'No actual data at that moment',
+        pointAlgorithm: 'Algorithm',
+        pointState: 'Algorithm state',
+        pointWape: 'WAPE in the range',
         refreshChart: 'Read the chart again with the current filters, without pressing search',
         gapNote:
           'The forecast of {algorithm} breaks off at {count} places: no run covered those times (the platform was not running, or there was no fresh data)',

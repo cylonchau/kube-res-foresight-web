@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { NButton, NEmpty } from 'naive-ui';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { NButton, NCheckbox, NEmpty, NPopover } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { formatDecimal, formatMetric } from '@/utils/format';
@@ -32,6 +32,19 @@ interface Props {
   loading?: boolean;
   /** why there is nothing to draw, when it is known (the actual values could not be read, or Prometheus returned none) */
   emptyReason?: string;
+  /** the plot takes the height the parent gives it, instead of `height` */
+  fill?: boolean;
+}
+
+/** The point a click landed on: the line it belongs to, its time and value, and for a forecast when it was made. */
+export interface PickedPoint {
+  series: string;
+  /** the actual values, or the forecast of an algorithm */
+  kind: 'actual' | 'forecast';
+  time: number;
+  value: number;
+  predictedAt?: string;
+  replicas?: number | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,14 +54,14 @@ const props = withDefaults(defineProps<Props>(), {
   legend: () => ({}),
   bucketSeconds: 60,
   loading: false,
-  emptyReason: ''
+  emptyReason: '',
+  fill: false
 });
-const emit = defineEmits<{ refresh: [] }>();
+const emit = defineEmits<{ refresh: []; pick: [point: PickedPoint] }>();
 const { t } = useI18n();
 
-/** the room kept at the right of the legend for the refresh button */
-const LEGEND_RIGHT = 92;
-const LEGEND_ROW = 22;
+/** the plot starts below a toolbar of a fixed height, so choosing lines never moves it */
+const PLOT_TOP = 16;
 /** how many forecast lines are drawn before the user picks more in the legend */
 const MAX_DEFAULT_LINES = 6;
 
@@ -66,20 +79,24 @@ const PALETTE = [
   '#e0752d'
 ];
 const ACTUAL = '#f2495c';
+/** the colour of a stretch with no data: the line over it only shows where the series is missing, it is not a value */
+const GAP = '#e6a23c';
+/** a click counts for the nearest point within this many pixels */
+const PICK_RADIUS = 28;
 
 const hasData = computed(() => Boolean(props.actual?.candles.length) || props.algorithms.some(a => a.points.length));
 const time = (iso: string) => new Date(iso).getTime();
 const stamp = (ms: number) => new Date(ms).toLocaleString();
 
-const { domRef, updateOptions } = useEcharts(
+const { domRef, chart, updateOptions } = useEcharts(
   () =>
     ({
       animation: false,
       tooltip: { trigger: 'axis', axisPointer: { type: 'line' } },
-      legend: { type: 'scroll', top: 0, left: 0, right: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 4 },
+      legend: { show: false },
       // no toolbox: the wheel and drag zoom the plot, and the slider below is a thin strip
       // the right axis (replicas) takes room only when there is one: the plot uses the whole width of the card
-      grid: [{ left: 56, right: props.actualReplicas?.candles.length ? 56 : 24, top: 40, bottom: 44 }],
+      grid: [{ left: 56, right: props.actualReplicas?.candles.length ? 56 : 24, top: PLOT_TOP, bottom: 44 }],
       xAxis: { type: 'time' },
       yAxis: [
         { type: 'value', scale: true },
@@ -94,96 +111,143 @@ const { domRef, updateOptions } = useEcharts(
   { onRender: () => {}, onUpdated: () => {} }
 );
 
-/** the order of the series as drawn and listed in the legend: the forecasts first, then what actually happened */
+/** the order of the series as drawn, and the lines the user switched off in the list of curves */
 const seriesOrder = ref('');
+const hidden = ref<string[]>([]);
+const isHidden = (name: string) => hidden.value.includes(name);
 
-/** how many rows the wrapped legend takes in the width the chart has: each entry is its text (capped) plus the marker */
-function legendRowCount(names: string[]): number {
-  const width = Math.max((domRef.value?.clientWidth || 800) - LEGEND_RIGHT, 240);
-  let rows = 1;
-  let used = 0;
-  for (const name of names) {
-    const entry = 12 + 5 + Math.min(name.length * 7 + 4, 110) + 14;
-    if (used + entry > width && used > 0) {
-      rows += 1;
-      used = 0;
+/** what the list of curves offers: every line of the chart, with the colour it is drawn in and what it last said */
+interface Entry {
+  name: string;
+  color: string;
+  tip?: string;
+  idle?: boolean;
+}
+const entries = computed<Entry[]>(() => {
+  const out: Entry[] = props.algorithms.map((alg, index) => ({
+    name: alg.algorithm_id,
+    color: PALETTE[index % PALETTE.length],
+    tip: props.legend[alg.algorithm_id]?.text
+  }));
+  for (const [id, info] of Object.entries(props.legend)) {
+    if (info.idle && !out.some(item => item.name === id)) {
+      out.push({ name: id, color: '#b8c0cc', tip: info.tip, idle: true });
     }
-    used += entry;
   }
-  return rows;
+  if (props.actual?.candles.length) out.push({ name: t('page.forecast.compare.actual'), color: ACTUAL });
+  if (props.actualReplicas?.candles.length) {
+    out.push({ name: t('page.forecast.compare.actualReplicas'), color: '#8a95a5' });
+  }
+  return out;
+});
+const shownCount = computed(() => entries.value.filter(item => !item.idle && !isHidden(item.name)).length);
+const drawable = computed(() => entries.value.filter(item => !item.idle).length);
+
+function toggle(name: string, on: boolean) {
+  hidden.value = on ? hidden.value.filter(item => item !== name) : [...hidden.value, name];
+  draw();
+}
+function showAll() {
+  hidden.value = [];
+  draw();
+}
+function showOnly(count: number) {
+  const names = entries.value.filter(item => !item.idle).map(item => item.name);
+  hidden.value = names.slice(count);
+  draw();
+}
+
+/** what is drawn, kept for the click: the nearest point of any visible line is the one picked */
+let picks: Array<{ name: string; kind: 'actual' | 'forecast'; axis: number; data: unknown[] }> = [];
+
+/** the value pair of a drawn point, which is a pair or an object holding one */
+function pairOf(point: unknown): unknown[] | undefined {
+  const value = Array.isArray(point) ? point : (point as { value?: unknown[] })?.value;
+  return Array.isArray(value) ? value : undefined;
 }
 
 async function draw() {
   const series: Record<string, unknown>[] = [];
+  picks = [];
   const names = {
     actual: t('page.forecast.compare.actual'),
     replicasActual: t('page.forecast.compare.actualReplicas')
   };
   const stepped = props.lineType === 'step' ? 'end' : false;
-  // the forecasts come first and the actual values after them, in the legend and in the tooltip: what was predicted is read
-  // against what happened
+  // A new set of lines starts with the first few forecasts drawn; the others are one tick away in the list of curves. The
+  // choice is made only when the set changes, so a line the user switched off stays off on refresh.
+  const allNames = entries.value.map(item => item.name).join('|');
+  if (allNames !== seriesOrder.value) {
+    seriesOrder.value = allNames;
+    hidden.value = props.algorithms.slice(MAX_DEFAULT_LINES).map(alg => alg.algorithm_id);
+  }
+  // the forecasts come first and the actual values after them: what was predicted is read against what happened
   props.algorithms.forEach((alg, index) => {
+    if (isHidden(alg.algorithm_id)) return;
+    const color = PALETTE[index % PALETTE.length];
+    const data = withBreaks(
+      alg.points,
+      props.bucketSeconds,
+      p => time(p.time),
+      p => ({ value: [time(p.time), p.value], predictedAt: p.predicted_at, replicas: p.replicas }),
+      at => ({ value: [at, null] })
+    );
+    picks.push({ name: alg.algorithm_id, kind: 'forecast', axis: 0, data });
     series.push({
       name: alg.algorithm_id,
       type: 'line',
       step: stepped,
-      // a short stretch (a forecast that exists for one run only) must stay visible: the symbols show where the points are sparse
-      showSymbol: true,
-      showAllSymbol: 'auto',
-      symbolSize: 5,
-      smooth: false,
+      // small points, and only where the line is sparse; hovering shows the nearest one larger
+      showSymbol: alg.points.length <= 60,
+      symbolSize: 3,
+      // a curve through the points that never overshoots them, not a stiff polyline
+      smooth: !stepped,
+      smoothMonotone: 'x',
       // the forecasts are drawn in front of the actual values, so a forecast is never hidden behind what happened
       z: 10,
-      lineStyle: { width: 1.5, color: PALETTE[index % PALETTE.length] },
-      itemStyle: { color: PALETTE[index % PALETTE.length] },
-      // value, time the forecast was made, replicas it needs; a stretch with no forecast is left open, not bridged by a line
-      data: withBreaks(
-        alg.points,
-        props.bucketSeconds,
-        p => time(p.time),
-        p => ({ value: [time(p.time), p.value], predictedAt: p.predicted_at, replicas: p.replicas }),
-        at => ({ value: [at, null] })
-      )
+      lineStyle: { width: 1.5, color },
+      itemStyle: { color },
+      emphasis: { scale: 2.4 },
+      data
     });
   });
-  // an algorithm that made no forecast still has its legend entry, greyed, with the reason as a tip
-  for (const [id, info] of Object.entries(props.legend)) {
-    if (!info.idle || series.some(item => item.name === id)) continue;
-    series.push({ name: id, type: 'line', data: [], lineStyle: { color: '#b8c0cc' }, itemStyle: { color: '#b8c0cc' } });
+  if (props.actual?.candles.length && !isHidden(names.actual)) {
+    if (props.lineType === 'candle') {
+      series.push({
+        name: names.actual,
+        type: 'candlestick',
+        // the candle is the summary of the bucket Prometheus returned: open, close, lowest and highest value
+        data: props.actual.candles.map(c => [time(c.time), c.open, c.close, c.low, c.high]),
+        encode: { x: 0, y: [1, 2, 3, 4] },
+        itemStyle: { color: ACTUAL, color0: '#2f9e6e', borderColor: ACTUAL, borderColor0: '#2f9e6e' }
+      });
+    } else {
+      const data = withBreaks(
+        props.actual.candles,
+        props.bucketSeconds,
+        c => time(c.time),
+        c => [time(c.time), c.mean],
+        at => [at, null]
+      );
+      picks.push({ name: names.actual, kind: 'actual', axis: 0, data });
+      series.push({
+        name: names.actual,
+        type: 'line',
+        step: stepped,
+        showSymbol: props.actual.candles.length <= 40,
+        symbolSize: 3,
+        smooth: !stepped,
+        smoothMonotone: 'x',
+        // the actual values are the line the forecasts are read against: thicker, behind the forecasts
+        z: 5,
+        lineStyle: { width: 2, color: ACTUAL },
+        itemStyle: { color: ACTUAL },
+        emphasis: { scale: 2.4 },
+        data
+      });
+    }
   }
-  if (props.actual?.candles.length) {
-    series.push(
-      props.lineType === 'candle'
-        ? {
-            name: names.actual,
-            type: 'candlestick',
-            // the candle is the summary of the bucket Prometheus returned: open, close, lowest and highest value
-            data: props.actual.candles.map(c => [time(c.time), c.open, c.close, c.low, c.high]),
-            encode: { x: 0, y: [1, 2, 3, 4] },
-            itemStyle: { color: ACTUAL, color0: '#2f9e6e', borderColor: ACTUAL, borderColor0: '#2f9e6e' }
-          }
-        : {
-            name: names.actual,
-            type: 'line',
-            step: stepped,
-            showSymbol: true,
-            showAllSymbol: 'auto',
-            symbolSize: 4,
-            // the actual values are the line the forecasts are read against: thicker, behind the forecasts
-            z: 5,
-            lineStyle: { width: 2.5, color: ACTUAL },
-            itemStyle: { color: ACTUAL },
-            data: withBreaks(
-              props.actual.candles,
-              props.bucketSeconds,
-              c => time(c.time),
-              c => [time(c.time), c.mean],
-              at => [at, null]
-            )
-          }
-    );
-  }
-  if (props.actualReplicas?.candles.length) {
+  if (props.actualReplicas?.candles.length && !isHidden(names.replicasActual)) {
     series.push({
       name: names.replicasActual,
       type: 'line',
@@ -195,12 +259,12 @@ async function draw() {
       data: props.actualReplicas.candles.map(c => [time(c.time), c.close])
     });
   }
-  // Where a series has no values for a stretch, a dashed line of its colour joins the two sides and the stretch of the actual
-  // values is shaded: it shows WHERE data is missing, it is not data and no value is filled in. The line has the name of its
-  // series, so hiding the series in the legend hides it too.
+  // Where a series has no values for a stretch, a dashed line in another colour (amber) joins the two sides and the stretch
+  // of the actual values is shaded: it shows WHERE data is missing, it is not data and no value is filled in. The line has
+  // the name of its series, so hiding the series hides it too.
   const gapSeries: Record<string, unknown>[] = [];
-  const addGaps = (name: string, color: string, pairs: ReturnType<typeof gapPairs>, shade: boolean) => {
-    if (!pairs.length) return;
+  const addGaps = (name: string, pairs: ReturnType<typeof gapPairs>, shade: boolean) => {
+    if (!pairs.length || isHidden(name)) return;
     gapSeries.push({
       id: `gap:${name}`,
       name,
@@ -208,24 +272,23 @@ async function draw() {
       silent: true,
       showSymbol: false,
       z: 4,
-      lineStyle: { width: 1.5, type: 'dashed', color, opacity: 0.85 },
-      itemStyle: { color },
+      lineStyle: { width: 1.5, type: [5, 4], color: GAP },
+      itemStyle: { color: GAP },
       data: pairs.flatMap(pair => [pair.from, pair.to, [pair.to[0], null]]),
       ...(shade
         ? {
             markArea: {
               silent: true,
-              itemStyle: { color: 'rgba(128, 128, 128, 0.10)' },
+              itemStyle: { color: 'rgba(230, 162, 60, 0.10)' },
               data: pairs.map(pair => [{ xAxis: pair.from[0] }, { xAxis: pair.to[0] }])
             }
           }
         : {})
     });
   };
-  props.algorithms.forEach((alg, index) =>
+  props.algorithms.forEach(alg =>
     addGaps(
       alg.algorithm_id,
-      PALETTE[index % PALETTE.length],
       gapPairs(
         alg.points,
         props.bucketSeconds,
@@ -238,7 +301,6 @@ async function draw() {
   if (props.actual?.candles.length && props.lineType !== 'candle') {
     addGaps(
       names.actual,
-      ACTUAL,
       gapPairs(
         props.actual.candles,
         props.bucketSeconds,
@@ -250,11 +312,7 @@ async function draw() {
   }
   // everything right of "now" is ahead of the actual values: the forecasts that have not come true yet, shaded
   const now = Date.now();
-  const end = Math.max(
-    0,
-    ...props.algorithms.flatMap(alg => alg.points.map(p => time(p.time))),
-    ...(props.actual?.candles.map(c => time(c.time)) ?? [])
-  );
+  const end = Math.max(0, ...picks.flatMap(item => item.data.map(point => Number(pairOf(point)?.[0] ?? 0))));
   const target = series.find(item => item.type === 'line' && item.yAxisIndex === undefined) ?? series[0];
   if (target && end > now) {
     target.markArea = {
@@ -276,50 +334,26 @@ async function draw() {
       data: [{ xAxis: now }]
     };
   }
-  // The legend is the algorithm names only, wrapped onto as many short rows as it needs: it never scrolls or pages and never
-  // pushes the chart sideways. What each one forecast last and its error is in the tip shown over the entry, and the plot is
-  // moved down by the rows the legend takes.
-  const seriesNames = series.map(item => String(item.name));
-  const legendRows = legendRowCount(seriesNames);
-  // With many algorithms the plot would be a tangle of lines: only the first few forecasts are drawn at first, the others
-  // are one click away in the legend. The choice is set when the set of lines changes, so a hidden line stays hidden on refresh.
-  const newSet = seriesNames.join('|') !== seriesOrder.value;
-  const selected: Record<string, boolean> = {};
-  props.algorithms.forEach((alg, index) => {
-    selected[alg.algorithm_id] = index < MAX_DEFAULT_LINES;
-  });
-  seriesOrder.value = seriesNames.join('|');
   await updateOptions(opts => ({
     ...opts,
-    grid: [{ left: 56, right: 56, top: 28 + legendRows * LEGEND_ROW, bottom: gapSeries.length ? 58 : 44 }],
+    grid: [
+      {
+        left: 56,
+        right: props.actualReplicas?.candles.length ? 56 : 24,
+        top: PLOT_TOP + 8,
+        bottom: gapSeries.length ? 58 : 44
+      }
+    ],
     title: gapSeries.length
       ? {
           show: true,
           text: t('page.forecast.compare.gapLegend'),
           left: 56,
           bottom: 24,
-          textStyle: { fontSize: 11, fontWeight: 'normal', color: '#8a95a5' }
+          textStyle: { fontSize: 11, fontWeight: 'normal', color: GAP }
         }
       : { show: false },
-    legend: {
-      ...(newSet ? { selected } : {}),
-      type: 'plain',
-      top: 0,
-      left: 0,
-      right: LEGEND_RIGHT,
-      icon: 'roundRect',
-      itemWidth: 12,
-      itemHeight: 4,
-      itemGap: 14,
-      textStyle: { fontSize: 12, width: 110, overflow: 'truncate' },
-      tooltip: { show: true, confine: true },
-      formatter: (name: string) => name,
-      data: seriesNames.map(name => {
-        const info = props.legend[name];
-        const tip = info?.idle ? info.tip : info?.text;
-        return tip ? { name, tooltip: { show: true, formatter: () => tip } } : { name };
-      })
-    },
+    legend: { show: false },
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'line' },
@@ -376,6 +410,53 @@ async function draw() {
   }));
 }
 
+/** A click picks the nearest point of the visible lines within a few pixels and tells the page which it was. */
+function pickAt(x: number, y: number) {
+  const c = chart.value;
+  if (!c) return;
+  let best: { dist: number; point: PickedPoint } | null = null;
+  for (const line of picks) {
+    for (const item of line.data) {
+      const value = pairOf(item);
+      if (!value || value[1] === null || value[1] === undefined) continue;
+      const px = c.convertToPixel({ xAxisIndex: 0, yAxisIndex: line.axis }, [Number(value[0]), Number(value[1])]);
+      if (!px) continue;
+      const dist = Math.hypot(px[0] - x, px[1] - y);
+      if (dist <= PICK_RADIUS && (!best || dist < best.dist)) {
+        const extra = (Array.isArray(item) ? {} : item) as { predictedAt?: string; replicas?: number | null };
+        best = {
+          dist,
+          point: {
+            series: line.name,
+            kind: line.kind,
+            time: Number(value[0]),
+            value: Number(value[1]),
+            predictedAt: extra.predictedAt,
+            replicas: extra.replicas
+          }
+        };
+      }
+    }
+  }
+  if (best) emit('pick', best.point);
+}
+watch(chart, c => {
+  c?.getZr().on('click', (e: { offsetX: number; offsetY: number }) => pickAt(e.offsetX, e.offsetY));
+});
+
+// ---- full screen: the chart takes the whole screen, the page behind it is untouched
+const rootRef = ref<HTMLElement | null>(null);
+const full = ref(false);
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else rootRef.value?.requestFullscreen?.().catch(() => {});
+}
+const onFull = () => {
+  full.value = document.fullscreenElement === rootRef.value;
+};
+onMounted(() => document.addEventListener('fullscreenchange', onFull));
+onBeforeUnmount(() => document.removeEventListener('fullscreenchange', onFull));
+
 watch(
   () => [
     props.actual,
@@ -394,7 +475,7 @@ watch(
 </script>
 
 <template>
-  <div>
+  <div ref="rootRef" class="chart-root" :class="{ 'chart-full': full, 'chart-fill': fill }">
     <NEmpty
       v-if="!hasData"
       :style="{ height: `${height}px` }"
@@ -402,21 +483,57 @@ watch(
       :description="emptyReason || t('page.forecast.compare.empty')"
     />
     <div v-show="hasData" class="chart-box">
-      <!-- the chart refreshes by itself: no need to press search again to read the newest data -->
-      <NButton
-        size="tiny"
-        class="chart-refresh"
-        :loading="loading"
-        :title="t('page.forecast.compare.refreshChart')"
-        data-chart-refresh
-        @click="emit('refresh')"
-      >
-        <template #icon><icon-ic-round-refresh /></template>
-        {{ t('common.refresh') }}
-      </NButton>
+      <!-- one row of a fixed height above the plot: choosing lines or going full screen never moves the plot -->
+      <div class="chart-bar">
+        <NPopover trigger="click" placement="bottom-start" :to="rootRef ?? undefined" :show-arrow="false">
+          <template #trigger>
+            <NButton size="tiny" data-chart-curves>
+              {{ t('page.forecast.compare.curves') }} {{ shownCount }} / {{ drawable }}
+            </NButton>
+          </template>
+          <div class="curve-list">
+            <div class="curve-tools">
+              <NButton size="tiny" quaternary @click="showAll">{{ t('common.selectAll') }}</NButton>
+              <NButton size="tiny" quaternary @click="showOnly(MAX_DEFAULT_LINES)">
+                {{ t('page.forecast.compare.firstOnly', { n: MAX_DEFAULT_LINES }) }}
+              </NButton>
+            </div>
+            <div v-for="item in entries" :key="item.name" class="curve-item" :title="item.tip">
+              <NCheckbox
+                :checked="!item.idle && !isHidden(item.name)"
+                :disabled="item.idle"
+                @update:checked="on => toggle(item.name, on)"
+              >
+                <span class="curve-dot" :style="{ background: item.color }"></span>
+                <span class="curve-name">{{ item.name }}</span>
+              </NCheckbox>
+              <span v-if="item.tip" class="curve-tip">{{ item.tip }}</span>
+            </div>
+          </div>
+        </NPopover>
+        <span class="chart-hint">{{ t('page.forecast.compare.clickHint') }}</span>
+        <span class="flex-1"></span>
+        <!-- the chart refreshes by itself: no need to press search again to read the newest data -->
+        <NButton
+          size="tiny"
+          :loading="loading"
+          :title="t('page.forecast.compare.refreshChart')"
+          data-chart-refresh
+          @click="emit('refresh')"
+        >
+          <template #icon><icon-ic-round-refresh /></template>
+          {{ t('common.refresh') }}
+        </NButton>
+        <NButton size="tiny" data-chart-full :title="t('page.forecast.compare.fullscreen')" @click="toggleFull">
+          <template #icon>
+            <icon-gridicons-fullscreen-exit v-if="full" />
+            <icon-gridicons-fullscreen v-else />
+          </template>
+        </NButton>
+      </div>
       <div
         ref="domRef"
-        :style="{ height: `${height}px` }"
+        :style="fill || full ? undefined : { height: `${height}px` }"
         :data-series="seriesOrder"
         class="chart-plot min-h-280px w-full"
       ></div>
@@ -425,13 +542,77 @@ watch(
 </template>
 
 <style scoped>
-.chart-box {
-  position: relative;
+.chart-root {
+  display: flex;
+  flex-direction: column;
 }
-.chart-refresh {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 2;
+.chart-fill,
+.chart-full {
+  height: 100%;
+}
+.chart-full {
+  padding: 12px 16px;
+  background: #fff;
+}
+:global(.dark) .chart-full {
+  background: #18181c;
+}
+.chart-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.chart-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.chart-hint {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.55;
+}
+.chart-plot {
+  flex: 1;
+}
+.curve-list {
+  max-width: 420px;
+  min-width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.curve-tools {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.curve-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.curve-dot {
+  display: inline-block;
+  width: 10px;
+  height: 4px;
+  margin: 0 6px 2px 0;
+  border-radius: 2px;
+}
+.curve-name {
+  font-size: 13px;
+}
+.curve-tip {
+  max-width: 200px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.6;
 }
 </style>
