@@ -231,7 +231,7 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.System.OperationLog) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => openDetail(row) }, () =>
+        h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () =>
           t('page.operationLog.detail')
         )
       ])

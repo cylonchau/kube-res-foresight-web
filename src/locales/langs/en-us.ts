@@ -636,6 +636,19 @@ const local = {
         runState: 'State',
         links: 'Connections',
         linksText: '{sources}/{total} metric sources enabled · latest recommendation {version}',
+        colReplicas: 'Replicas',
+        colCpu: 'CPU',
+        colMemory: 'Memory',
+        colGpu: 'GPU',
+        currentConfigHelp:
+          'The configuration the workload should run with now, from the newest recommendation snapshot; a resource the snapshot does not set is left empty. The replica count is the actual value the operator reported last, with the recommended value after it when they differ.',
+        toRecommended: 'recommended {n}',
+        stateHealthy: 'Healthy',
+        stateNoSnapshot: 'No recommendation yet',
+        stateDisabled: 'Disabled',
+        stateHealthyHelp: 'Latest recommendation V{version}, not degraded, no consecutive failures.',
+        stateNoSnapshotHelp:
+          'No recommendation has been made yet: the module is new, its history is too short, or the forecast task has not run.',
         sectionFallback: 'Fallback defaults and recovery',
         fallbackMinHistory: 'Minimum history coverage',
         fallbackMinHistoryHint:
@@ -810,7 +823,8 @@ const local = {
         effectiveMax: 'Effective maximum'
       },
       snapshots: {
-        name: '{module} snapshot V{version}',
+        name: '{module} recommendation no. {version}',
+        versionShort: 'No. {version}',
         history: 'Snapshot history',
         backToHistory: 'Back to the history',
         partVersion: 'Module and version',
@@ -1320,7 +1334,7 @@ const local = {
         action_ScaleUp: 'Scale up',
         action_ScaleDown: 'Scale down',
         action_None: 'None',
-        openSnapshot: 'Snapshot v{version}'
+        openSnapshot: 'Recommendation no. {version}'
       },
       fallbacks: {
         title: 'Fallback and degradation records',
@@ -1345,7 +1359,8 @@ const local = {
         original: 'Original configuration',
         target: 'Target configuration',
         result: 'Actual result',
-        at: 'Occurred',
+        at: 'Created',
+        resource: 'Resource',
         changes: 'Changes',
         change: 'Original -> target configuration',
         originalHelp: 'Degradation: what was in force before. Rollback: what was wanted.',
@@ -1471,6 +1486,7 @@ const local = {
         deleteConfirm: 'Deleting a source also deletes the history collected for it.'
       },
       scores: {
+        dimension: 'Dimension',
         metric_cpu: 'CPU',
         metric_memory: 'Memory',
         metric_gpu: 'GPU',
@@ -2139,6 +2155,16 @@ const local = {
     },
     userCenter: {
       title: 'User Center',
+      account: 'Account',
+      userName: 'Username',
+      nickName: 'Nickname',
+      roles: 'Roles',
+      otpStatus: 'OTP',
+      otpOn: 'Enabled',
+      otpOff: 'Not enabled',
+      language: 'Language',
+      lastLogin: 'Last sign-in',
+      noRoles: 'No role',
       updatePassword: 'Update Password',
       bindOtp: 'Bind OTP',
       contact: 'Contact Info',

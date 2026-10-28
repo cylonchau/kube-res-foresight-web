@@ -121,7 +121,7 @@ const cfg = useTableColumnConfig({
       key: 'hitRate',
       width: 100,
       align: 'center',
-      render: (row: Row) => (row.total ? formatPercent(row.ok / row.total, 1) : '-')
+      render: (row: Row) => (row.total ? formatPercent(row.ok / row.total) : '-')
     },
     avg: {
       title: t('page.forecast.runs.avgDuration'),
@@ -168,10 +168,8 @@ const cfg = useTableColumnConfig({
       fixed: 'right',
       align: 'center',
       render: (row: Row) =>
-        h(
-          NButton,
-          { size: 'tiny', type: 'primary', ghost: true, disabled: !row.total, onClick: () => openRecords(row) },
-          () => t('page.forecast.algorithmRuns.records')
+        h(NButton, { size: 'tiny', type: 'primary', disabled: !row.total, onClick: () => openRecords(row) }, () =>
+          t('page.forecast.algorithmRuns.records')
         )
     }
   },

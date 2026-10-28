@@ -63,10 +63,35 @@ export function formatMetric(value: number | null | undefined, unit?: string | n
   }
 }
 
-/** A ratio in 0..1 as a percentage with at most `digits` decimals. */
-export function formatPercent(ratio: number | null | undefined, digits = 1) {
+/** A ratio in 0..1 as a percentage with `digits` decimals, two unless a page says otherwise (56.20%). */
+export function formatPercent(ratio: number | null | undefined, digits = 2) {
   if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return '-';
-  return `${formatDecimal(ratio * 100, digits)}%`;
+  return `${(ratio * 100).toFixed(digits)}%`;
+}
+
+/** A score or an accuracy: two decimals, never a long fraction. */
+export function formatScore(value: number | null | undefined, digits = 2) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  return value.toFixed(digits);
+}
+
+/**
+ * The value of one field of a configuration, written the one way every list writes it: CPU as a manifest does ('500m', '1.5 核'),
+ * memory in Mi or Gi, a replica count and GPU count as whole numbers. A field that is not set is '' (empty), never 0 or '-'.
+ */
+export function formatResource(field: string, value: number | null | undefined, gpuWord = '卡') {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '';
+  switch (field) {
+    case 'cpu':
+      return formatCpuMilli(value);
+    case 'memory':
+    case 'memory_floor':
+      return formatMemoryBytes(value);
+    case 'gpu':
+      return `${formatDecimal(value, 0)} ${gpuWord}`;
+    default:
+      return formatDecimal(value, 0);
+  }
 }
 
 const MIB = 1024 * 1024;

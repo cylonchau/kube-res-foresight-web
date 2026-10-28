@@ -409,7 +409,7 @@ const columnMap: Record<string, any> = {
           NPopconfirm,
           { onPositiveClick: () => remove(row) },
           {
-            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error' }, () => t('common.delete')),
             default: () => t('page.forecast.sources.deleteConfirm')
           }
         )

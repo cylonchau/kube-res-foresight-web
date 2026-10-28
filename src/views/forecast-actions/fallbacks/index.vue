@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue';
-import { NButton, NFormItemGi, NModal, NSelect, NSpace, NTag } from 'naive-ui';
+import { NButton, NFormItemGi, NModal, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
@@ -12,7 +12,7 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
 import { fetchGetFallbacks, fetchGetSnapshot } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
-import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
+import { formatResource } from '@/utils/format';
 import { helpTitle } from '@/utils/help-title';
 
 defineOptions({ name: 'ForecastActionsFallbacks' });
@@ -48,6 +48,16 @@ const search = reactive({
 const detail = ref<Api.Forecast.FallbackRecord | null>(null);
 const snapshot = ref<Api.Forecast.Snapshot | null>(null);
 
+/**
+ * One row is one resource of one record: a module whose CPU and memory both changed has two rows, each with its own original and
+ * target configuration and its own trigger. What the record says as a whole (the result, when it recovered) is repeated on its rows.
+ */
+interface FallbackRow {
+  key: string;
+  record: Api.Forecast.FallbackRecord;
+  change: Api.Forecast.FallbackChange;
+}
+
 const kindOptions = computed(() =>
   (['degrade', 'rollback'] as const).map(value => ({ label: t(`page.forecast.fallbacks.kind_${value}`), value }))
 );
@@ -74,6 +84,12 @@ searchList = () => {
   list.search();
 };
 
+const rows = computed<FallbackRow[]>(() =>
+  list.rows.value.flatMap(record =>
+    record.changes.map(change => ({ key: `${record.id}/${change.field}`, record, change }))
+  )
+);
+
 function resetSearch() {
   Object.assign(search, { moduleId: null, kind: null, reason: null, range: lastHours(24 * 7) });
 }
@@ -90,23 +106,13 @@ async function openDetail(row: Api.Forecast.FallbackRecord) {
 function duration(seconds: number) {
   if (seconds < 60) return `${seconds} 秒`;
   if (seconds < 3600) return `${Math.round(seconds / 60)} 分钟`;
-  return `${(seconds / 3600).toFixed(1)} 小时`;
+  return `${(seconds / 3600).toFixed(2)} 小时`;
 }
 
-/** a configuration value in the unit it is set in */
+/** a configuration value in the unit it is set in; a field the record leaves as it was says so */
 function pointText(field: string, point: Api.Forecast.ConfigPoint) {
   if (!point.set) return t('page.forecast.fallbacks.keptOriginal');
-  switch (field) {
-    case 'cpu':
-      return formatCpuMilli(point.value);
-    case 'memory':
-    case 'memory_floor':
-      return formatMemoryBytes(point.value);
-    case 'gpu':
-      return `${point.value} GPU`;
-    default:
-      return String(point.value);
-  }
+  return formatResource(field, point.value);
 }
 const sourceText = (point: Api.Forecast.ConfigPoint) =>
   point.set && point.source ? t(`page.forecast.recommendations.source_${point.source}`, point.source) : '';
@@ -142,113 +148,75 @@ const columnMap: Record<string, any> = {
     key: 'at',
     width: 170,
     sorter: true,
-    render: (row: Api.Forecast.FallbackRecord) => formatDateTime(row.at)
-  },
-  kind: {
-    title: () => helpTitle(t('page.forecast.fallbacks.kind'), t('page.forecast.fallbacks.kindHelp')),
-    key: 'kind',
-    width: 90,
-    align: 'center',
-    render: (row: Api.Forecast.FallbackRecord) =>
-      h(NTag, { size: 'small', bordered: false, type: kindType(row.kind) }, () =>
-        t(`page.forecast.fallbacks.kind_${row.kind}`)
-      )
+    render: (row: FallbackRow) => formatDateTime(row.record.at)
   },
   module: {
     title: t('page.forecast.modules.name'),
     key: 'module',
     width: 130,
     resizable: true,
-    render: (row: Api.Forecast.FallbackRecord) => moduleName(row.module_id)
+    render: (row: FallbackRow) => moduleName(row.record.module_id)
+  },
+  kind: {
+    title: () => helpTitle(t('page.forecast.fallbacks.kind'), t('page.forecast.fallbacks.kindHelp')),
+    key: 'kind',
+    width: 90,
+    align: 'center',
+    render: (row: FallbackRow) =>
+      h(NTag, { size: 'small', bordered: false, type: kindType(row.record.kind) }, () =>
+        t(`page.forecast.fallbacks.kind_${row.record.kind}`)
+      )
+  },
+  resource: {
+    title: t('page.forecast.fallbacks.resource'),
+    key: 'resource',
+    width: 130,
+    render: (row: FallbackRow) => t(`page.forecast.fallbacks.field_${row.change.field}`)
   },
   trigger: {
     title: () => helpTitle(t('page.forecast.fallbacks.trigger'), t('page.forecast.fallbacks.kindHelp')),
     key: 'trigger',
-    minWidth: 260,
-    render: (row: Api.Forecast.FallbackRecord) =>
-      h(NSpace, { size: 4, wrap: true }, () => [
-        h(NTag, { size: 'small', bordered: false, type: kindType(row.kind), strong: true }, () =>
-          t(`page.forecast.fallbacks.kind_${row.kind}`)
-        ),
-        ...row.changes.map(change =>
-          h(
-            NTag,
-            {
-              size: 'small',
-              bordered: false,
-              type: change.trigger === 'oom_floor' ? 'error' : 'warning',
-              title: change.note || ''
-            },
-            () =>
-              `${t(`page.forecast.fallbacks.field_${change.field}`)}: ${t(`page.forecast.fallbacks.reason_${change.trigger}`, change.trigger)}`
-          )
-        )
-      ])
-  },
-  change: {
-    title: () =>
-      helpTitle(
-        t('page.forecast.fallbacks.change'),
-        `${t('page.forecast.fallbacks.originalHelp')} ${t('page.forecast.fallbacks.targetHelp')}`
-      ),
-    key: 'change',
-    minWidth: 260,
-    render: (row: Api.Forecast.FallbackRecord) =>
-      h(
-        'div',
-        { class: 'leading-20px' },
-        row.changes.map(change =>
-          h('div', [
-            `${t(`page.forecast.fallbacks.field_${change.field}`)} `,
-            pointText(change.field, change.original),
-            ' → ',
-            pointText(change.field, change.target),
-            sourceText(change.target) ? ` (${sourceText(change.target)})` : ''
-          ])
-        )
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+    render: (row: FallbackRow) =>
+      h(NTag, { size: 'small', bordered: false, type: row.change.trigger === 'oom_floor' ? 'error' : 'warning' }, () =>
+        t(`page.forecast.fallbacks.reason_${row.change.trigger}`, row.change.trigger)
       )
   },
   original: {
     title: () => helpTitle(t('page.forecast.fallbacks.original'), t('page.forecast.fallbacks.originalHelp')),
     key: 'original',
-    minWidth: 150,
-    render: (row: Api.Forecast.FallbackRecord) =>
-      h(
-        'div',
-        { class: 'leading-20px' },
-        row.changes.map(change => h('div', pointText(change.field, change.original)))
-      )
+    width: 130,
+    align: 'center',
+    render: (row: FallbackRow) => pointText(row.change.field, row.change.original)
   },
   target: {
     title: () => helpTitle(t('page.forecast.fallbacks.target'), t('page.forecast.fallbacks.targetHelp')),
     key: 'target',
-    minWidth: 190,
-    render: (row: Api.Forecast.FallbackRecord) =>
-      h(
-        'div',
-        { class: 'leading-20px' },
-        row.changes.map(change =>
-          h('div', [
-            pointText(change.field, change.target),
-            sourceText(change.target) ? ` (${sourceText(change.target)})` : ''
-          ])
-        )
-      )
+    width: 170,
+    align: 'center',
+    render: (row: FallbackRow) =>
+      h('span', [
+        pointText(row.change.field, row.change.target),
+        sourceText(row.change.target)
+          ? h('span', { class: 'ml-4px opacity-60' }, `(${sourceText(row.change.target)})`)
+          : ''
+      ])
   },
   result: {
     title: t('page.forecast.fallbacks.result'),
     key: 'result',
     minWidth: 260,
     ellipsis: { tooltip: true },
-    render: (row: Api.Forecast.FallbackRecord) =>
+    render: (row: FallbackRow) =>
       h('span', [
-        h(NTag, { size: 'small', bordered: false, type: resultType(row.result_state), class: 'mr-6px' }, () =>
+        h(NTag, { size: 'small', bordered: false, type: resultType(row.record.result_state), class: 'mr-6px' }, () =>
           t(
-            `page.forecast.snapshots.state_${row.result_state}`,
-            t(`page.forecast.fallbacks.state_${row.result_state}`, row.result_state)
+            `page.forecast.snapshots.state_${row.record.result_state}`,
+            t(`page.forecast.fallbacks.state_${row.record.result_state}`, row.record.result_state)
           )
         ),
-        resultText(row)
+        resultText(row.record)
       ])
   },
   duration: {
@@ -256,15 +224,15 @@ const columnMap: Record<string, any> = {
     key: 'duration',
     width: 100,
     align: 'center',
-    render: (row: Api.Forecast.FallbackRecord) => duration(row.duration_seconds)
+    render: (row: FallbackRow) => duration(row.record.duration_seconds)
   },
   recovered_at: {
     title: () => helpTitle(t('page.forecast.fallbacks.recoveredAt'), t('page.forecast.fallbacks.recoveredHelp')),
     key: 'recovered_at',
     width: 170,
-    render: (row: Api.Forecast.FallbackRecord) =>
-      row.recovered_at
-        ? formatDateTime(row.recovered_at)
+    render: (row: FallbackRow) =>
+      row.record.recovered_at
+        ? formatDateTime(row.record.recovered_at)
         : h(NTag, { size: 'small', bordered: false, type: 'error' }, () => t('page.forecast.fallbacks.ongoing'))
   },
   operate: {
@@ -273,18 +241,16 @@ const columnMap: Record<string, any> = {
     width: 100,
     fixed: 'right',
     align: 'center',
-    render: (row: Api.Forecast.FallbackRecord) =>
-      h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () =>
-          t('page.forecast.recommendations.explain')
-        )
-      ])
+    render: (row: FallbackRow) =>
+      h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row.record) }, () =>
+        t('page.forecast.recommendations.explain')
+      )
   }
 };
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_fallback',
   columnMap,
-  defaultKeys: ['at', 'module', 'trigger', 'change', 'result', 'kind', 'original', 'target', 'recovered_at', 'operate']
+  defaultKeys: ['at', 'module', 'kind', 'resource', 'trigger', 'original', 'target', 'result', 'operate']
 });
 
 onMounted(async () => {
@@ -335,7 +301,8 @@ onMounted(async () => {
       :help="t('page.forecast.fallbacks.help')"
       :cfg="cfg"
       :loading="list.loading.value"
-      :data="list.rows.value"
+      :data="rows"
+      :row-key="(row: FallbackRow) => row.key"
       :pagination="list.pagination"
       :empty-hint="t('page.forecast.fallbacks.empty')"
       @refresh="list.reload"

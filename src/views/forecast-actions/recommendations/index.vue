@@ -193,7 +193,7 @@ const columnMap: Record<string, any> = {
     key: 'algorithm',
     width: 190,
     ellipsis: { tooltip: true },
-    render: (row: Api.Forecast.Recommendation) => (row.algorithm ? `${row.algorithm} (${row.score.toFixed(1)})` : '-')
+    render: (row: Api.Forecast.Recommendation) => (row.algorithm ? `${row.algorithm} (${row.score.toFixed(2)})` : '-')
   },
   effective_max: {
     title: t('page.forecast.recommendations.effectiveMax'),
@@ -225,7 +225,7 @@ const columnMap: Record<string, any> = {
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () =>
           t('page.forecast.recommendations.explain')
         ),
-        h(NButton, { size: 'tiny', onClick: () => openSnapshots(row) }, () =>
+        h(NButton, { size: 'tiny', type: 'info', onClick: () => openSnapshots(row) }, () =>
           t('page.forecast.recommendations.history')
         )
       ])

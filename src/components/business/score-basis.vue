@@ -17,7 +17,7 @@ defineOptions({ name: 'ScoreBasis' });
 const props = defineProps<{ row: Api.Forecast.ScoreRow }>();
 const { t } = useI18n();
 
-const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
+const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
 const isResource = computed(() => props.row.metric !== 'overall');
 const metric = computed(() => props.row.metric as 'cpu' | 'memory' | 'gpu');
 const result = computed(() => props.row.result);
@@ -115,7 +115,7 @@ const historyColumns = computed<DataTableColumns<(typeof history.value)[number]>
     key: 'score',
     width: 100,
     align: 'center',
-    render: item => (Number.isNaN(item.score) ? '-' : item.score.toFixed(1))
+    render: item => (Number.isNaN(item.score) ? '-' : item.score.toFixed(2))
   },
   {
     title: t('page.forecast.scores.rank'),
@@ -142,7 +142,10 @@ const historyColumns = computed<DataTableColumns<(typeof history.value)[number]>
     <section>
       <div class="mb-6px font-medium">{{ t('page.forecast.scores.partResult') }}</div>
       <NDescriptions :column="3" size="small" label-placement="left" bordered>
-        <NDescriptionsItem :label="t('page.forecast.scores.score')">{{ row.score.toFixed(1) }}</NDescriptionsItem>
+        <NDescriptionsItem :label="t('page.forecast.scores.dimension')">
+          {{ t(`page.forecast.scores.metric_${row.metric}`) }}
+        </NDescriptionsItem>
+        <NDescriptionsItem :label="t('page.forecast.scores.score')">{{ row.score.toFixed(2) }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('page.forecast.scores.accuracy')">{{ percent(row.accuracy) }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('page.forecast.scores.rank')">{{ row.rank }} / {{ row.ranked }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('page.forecast.scores.windows')">{{ row.windows }}</NDescriptionsItem>
@@ -170,7 +173,7 @@ const historyColumns = computed<DataTableColumns<(typeof history.value)[number]>
                 under: result?.under_weight ?? 2,
                 holes: holes.toFixed(2),
                 oom: oomFactor.toFixed(2),
-                score: row.score.toFixed(1)
+                score: row.score.toFixed(2)
               })
             }}
           </NDescriptionsItem>

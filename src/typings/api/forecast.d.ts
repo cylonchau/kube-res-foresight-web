@@ -116,6 +116,14 @@ declare namespace Api {
       consecutive_failures: number;
       last_error: string;
       healthy_cycles: number;
+      /** the configuration the newest snapshot sets; null = that resource is not set (shown empty) */
+      cpu_milli: number | null;
+      memory_bytes: number | null;
+      replicas: number | null;
+      gpu: number | null;
+      /** the replica count the operator reported last */
+      actual_replicas: number | null;
+      ready_replicas: number | null;
     }
 
     /** the auxiliary metric kinds a source can take besides the forecast ones */

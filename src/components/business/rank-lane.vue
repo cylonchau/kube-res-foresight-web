@@ -56,7 +56,7 @@ const level = computed(() => {
   return 'poor';
 });
 const width = computed(() => `${Math.max(0, Math.min(100, props.score ?? 0))}%`);
-const percent = (value: number | null) => (value === null ? '-' : `${(value * 100).toFixed(1)}%`);
+const percent = (value: number | null) => (value === null ? '-' : `${(value * 100).toFixed(2)}%`);
 const partLevel = (value: number | null) => {
   if (value === null) return 'none';
   if (value >= 0.85) return 'good';
@@ -98,7 +98,7 @@ const partLevel = (value: number | null) => {
       </div>
       <div class="rank-lane__bar" :class="`is-${level}`">
         <div class="rank-lane__fill" :style="{ width }" />
-        <span class="rank-lane__score">{{ scoreText ?? (score === null ? '-' : score.toFixed(1)) }}</span>
+        <span class="rank-lane__score">{{ scoreText ?? (score === null ? '-' : score.toFixed(2)) }}</span>
       </div>
     </div>
 

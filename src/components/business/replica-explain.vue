@@ -51,7 +51,7 @@ const columns = computed(() => [
       <NTag size="small" :bordered="false" type="info">
         {{ t('page.forecast.replica.capacity') }}:
         {{ t(`page.forecast.replica.capacity_${replica.capacity.source}`) }}
-        <template v-if="replica.capacity.rps_per_pod">({{ replica.capacity.rps_per_pod.toFixed(1) }} rps)</template>
+        <template v-if="replica.capacity.rps_per_pod">({{ replica.capacity.rps_per_pod.toFixed(2) }} rps)</template>
       </NTag>
       <NTag v-if="replica.selected" size="small" :bordered="false" type="success">
         {{ t('page.forecast.replica.selected', { algorithm: replica.selected }) }}

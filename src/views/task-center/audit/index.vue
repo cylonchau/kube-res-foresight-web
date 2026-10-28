@@ -253,8 +253,7 @@ const columnMap: Record<string, any> = {
           }
         },
         {
-          trigger: () =>
-            h(NButton, { size: 'tiny', type: 'warning', ghost: true }, { default: () => t('page.job.reset') }),
+          trigger: () => h(NButton, { size: 'tiny', type: 'warning' }, { default: () => t('page.job.reset') }),
           default: () => t('page.job.resetConfirm')
         }
       );

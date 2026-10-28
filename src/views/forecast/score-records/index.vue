@@ -22,7 +22,7 @@ defineOptions({ name: 'ForecastScoreRecords' });
 const { t } = useI18n();
 const { moduleOptions, loadModules } = useForecastModules();
 const percent = (value: number | undefined) =>
-  value === undefined || value < 0 ? '-' : `${(value * 100).toFixed(1)}%`;
+  value === undefined || value < 0 ? '-' : `${(value * 100).toFixed(2)}%`;
 
 const search = reactive({
   moduleId: null as number | null,
@@ -65,20 +65,25 @@ const columnMap: Record<string, any> = {
     key: 'algorithm',
     width: 170,
     resizable: true,
-    // the algorithm and the resource it is graded on: "naive CPU", "naive memory"
+    // the name of the algorithm and nothing else: the dimension it is graded on is its own column and a filter
+    render: (row: Api.Forecast.ScoreRow) => copyCell(row.algorithm)
+  },
+  metric: {
+    title: t('page.datasource.mappings.metric'),
+    key: 'metric',
+    width: 100,
+    align: 'center',
     render: (row: Api.Forecast.ScoreRow) =>
-      h('span', [
-        copyCell(row.algorithm),
-        ' ',
-        h(NTag, { size: 'small', bordered: false, type: 'info' }, () => metricLabel(row.metric))
-      ])
+      h(NTag, { size: 'small', bordered: false, type: row.metric === 'overall' ? 'default' : 'info' }, () =>
+        metricLabel(row.metric)
+      )
   },
   score: {
     title: () => helpTitle(t('page.forecast.scores.score'), t('page.forecast.metricHelp.score')),
     key: 'score',
     width: 90,
     align: 'center',
-    render: (row: Api.Forecast.ScoreRow) => row.score.toFixed(1)
+    render: (row: Api.Forecast.ScoreRow) => row.score.toFixed(2)
   },
   accuracy: {
     title: () => helpTitle(t('page.forecast.scores.accuracy'), t('page.forecast.metricHelp.accuracy')),
@@ -118,7 +123,7 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.ScoreRow) =>
-      h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
+      h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => (detail.value = row) }, () =>
         t('common.detail')
       )
   }
@@ -126,7 +131,18 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_score_records',
   columnMap,
-  defaultKeys: ['module', 'algorithm', 'score', 'accuracy', 'rank', 'selected', 'windows', 'created_at', 'operate']
+  defaultKeys: [
+    'module',
+    'algorithm',
+    'metric',
+    'score',
+    'accuracy',
+    'rank',
+    'selected',
+    'windows',
+    'created_at',
+    'operate'
+  ]
 });
 
 function resetSearch() {
@@ -188,7 +204,7 @@ onMounted(async () => {
     <NModal
       :show="Boolean(detail)"
       preset="card"
-      :title="detail ? `${detail.algorithm} ${metricLabel(detail.metric)} · ${detail.module_name}` : ''"
+      :title="detail ? `${detail.algorithm} · ${detail.module_name}` : ''"
       class="w-900px max-w-95vw"
       @update:show="value => !value && (detail = null)"
     >

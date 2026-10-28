@@ -332,15 +332,17 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.Datasource.Datasource) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', loading: testingId.value === row.id, onClick: () => runTest(row) }, () =>
-          t('page.datasource.connections.test')
+        h(
+          NButton,
+          { size: 'tiny', type: 'info', loading: testingId.value === row.id, onClick: () => runTest(row) },
+          () => t('page.datasource.connections.test')
         ),
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error' }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         )

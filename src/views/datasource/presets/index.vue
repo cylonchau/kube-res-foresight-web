@@ -173,7 +173,9 @@ const columnMap: Record<string, any> = {
     align: 'center',
     // a template is used from the dataset form (pick it there); here it is read
     render: (row: Api.Datasource.Preset) =>
-      h(NButton, { size: 'tiny', onClick: () => (detail.value = row) }, () => t('page.datasource.presets.detail'))
+      h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => (detail.value = row) }, () =>
+        t('page.datasource.presets.detail')
+      )
   }
 };
 

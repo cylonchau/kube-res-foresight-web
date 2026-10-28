@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { NButton, NFormItemGi, NInput, NSelect, NTag } from 'naive-ui';
-import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import BatchActions from '@/components/business/batch-actions.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import SnapshotHistoryModal from '@/components/business/snapshot-history-modal.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import { useForecastModules, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { usePagedList } from '@/hooks/business/use-paged-list';
@@ -145,10 +145,8 @@ const columnMap: Record<string, any> = {
     sorter: true,
     render: (row: Api.Forecast.Execution) =>
       row.decision_version
-        ? h(
-            NButton,
-            { size: 'small', text: true, type: 'primary', onClick: () => openSnapshot(row) },
-            () => `v${row.decision_version}`
+        ? h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openSnapshot(row) }, () =>
+            t('page.forecast.snapshots.versionShort', { version: row.decision_version })
           )
         : '-'
   },
@@ -167,7 +165,7 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.Forecast.Execution) =>
       row.decision_version
-        ? h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => openSnapshot(row) }, () =>
+        ? h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openSnapshot(row) }, () =>
             t('page.forecast.executions.openSnapshot', { version: row.decision_version })
           )
         : '-'
@@ -190,13 +188,10 @@ const cfg = useTableColumnConfig({
   ]
 });
 
-const router = useRouter();
-/** The snapshot an execution acted on: the recommendations page filtered to that module. */
+/** The snapshot an execution acted on, opened over this page: no other page is opened. */
+const snapshotOf = ref<{ moduleId: number; version: number } | null>(null);
 function openSnapshot(row: Api.Forecast.Execution) {
-  router.push({
-    path: '/forecast-actions/recommendations',
-    query: { module_id: String(row.module_id), version: String(row.decision_version) }
-  });
+  snapshotOf.value = { moduleId: row.module_id, version: row.decision_version };
 }
 
 onMounted(async () => {
@@ -269,5 +264,12 @@ onMounted(async () => {
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>
+    <SnapshotHistoryModal
+      :show="snapshotOf !== null"
+      :module-id="snapshotOf?.moduleId ?? null"
+      :module-name="snapshotOf ? moduleName(snapshotOf.moduleId) : ''"
+      :focus-version="snapshotOf?.version ?? null"
+      @update:show="value => !value && (snapshotOf = null)"
+    />
   </div>
 </template>

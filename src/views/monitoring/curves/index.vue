@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { NButton, NCard, NFormItemGi, NSelect, NTag } from 'naive-ui';
+import { NButton, NCard, NCollapse, NCollapseItem, NFormItemGi, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import BatchActions from '@/components/business/batch-actions.vue';
@@ -226,40 +226,47 @@ onMounted(async () => {
       </NFormItemGi>
     </ListSearchCard>
 
-    <NCard :bordered="false" size="small" class="flex-shrink-0 rounded-16px shadow-sm">
-      <div class="mb-8px flex flex-wrap items-center gap-8px">
-        <span class="text-14px font-medium">{{ t('page.forecast.metrics.chart') }}</span>
-        <IconTooltip icon="mdi-help-circle" placement="top">
-          <div class="max-w-380px leading-22px">{{ t('page.forecast.metrics.curvesHelp') }}</div>
-        </IconTooltip>
-        <template v-if="actual">
-          <NTag size="small" :bordered="false" :type="actual.missing ? 'error' : 'success'">
-            {{ actual.missing ? t('page.forecast.history.missing') : t('page.forecast.metrics.fromPrometheus') }}
-          </NTag>
-          <NTag size="small" :bordered="false">
-            {{ t('page.forecast.history.present') }} {{ actual.quality.present }} / {{ actual.quality.expected }}
-          </NTag>
-          <NTag size="small" :bordered="false">
-            {{ t('page.forecast.compare.bucket', { seconds: actual.bucket_seconds }) }}
-          </NTag>
-        </template>
-        <NTag v-if="compare?.actual_error" size="small" type="error" :bordered="false">
-          {{ t('page.forecast.compare.actualError', { error: compare.actual_error }) }}
-        </NTag>
-      </div>
-      <CompareChart
-        :actual="actual"
-        :algorithms="[]"
-        :unit="unit"
-        :line-type="search.lineType"
-        :bucket-seconds="compare?.bucket_seconds || 60"
-        :loading="loading"
-        :height="380"
-        @refresh="load"
-      />
+    <!-- the chart folds like the search box: folded, the list below takes its room -->
+    <NCard :bordered="false" size="small" class="list-search-card flex-shrink-0 rounded-16px shadow-sm">
+      <NCollapse class="list-search-collapse" :default-expanded-names="['chart']">
+        <NCollapseItem name="chart">
+          <template #header>
+            <span class="inline-flex flex-wrap items-center gap-8px">
+              <span class="text-14px font-medium">{{ t('page.forecast.metrics.chart') }}</span>
+              <IconTooltip icon="mdi-help-circle" placement="top">
+                <div class="leading-22px">{{ t('page.forecast.metrics.curvesHelp') }}</div>
+              </IconTooltip>
+              <template v-if="actual">
+                <NTag size="small" :bordered="false" :type="actual.missing ? 'error' : 'success'">
+                  {{ actual.missing ? t('page.forecast.history.missing') : t('page.forecast.metrics.fromPrometheus') }}
+                </NTag>
+                <NTag size="small" :bordered="false">
+                  {{ t('page.forecast.history.present') }} {{ actual.quality.present }} / {{ actual.quality.expected }}
+                </NTag>
+                <NTag size="small" :bordered="false">
+                  {{ t('page.forecast.compare.bucket', { seconds: actual.bucket_seconds }) }}
+                </NTag>
+              </template>
+              <NTag v-if="compare?.actual_error" size="small" type="error" :bordered="false">
+                {{ t('page.forecast.compare.actualError', { error: compare.actual_error }) }}
+              </NTag>
+            </span>
+          </template>
+          <CompareChart
+            :actual="actual"
+            :algorithms="[]"
+            :unit="unit"
+            :line-type="search.lineType"
+            :bucket-seconds="compare?.bucket_seconds || 60"
+            :loading="loading"
+            :height="380"
+            @refresh="load"
+          />
+        </NCollapseItem>
+      </NCollapse>
     </NCard>
 
-    <div class="h-460px flex-shrink-0 flex flex-col">
+    <div class="min-h-460px flex-1 flex flex-col">
       <ListTablePanel
         v-model:checked-row-keys="checkedRowKeys"
         :title="t('page.forecast.metrics.pointsTitle')"

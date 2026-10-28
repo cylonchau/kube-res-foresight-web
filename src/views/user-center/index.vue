@@ -3,16 +3,20 @@ import { computed, ref, onMounted } from 'vue';
 import {
   NButton,
   NCard,
+  NDescriptions,
+  NDescriptionsItem,
   NDynamicInput,
   NForm,
   NFormItem,
   NInput,
   NSelect,
   NSpace,
+  NTag,
   useMessage,
   NPopconfirm
 } from 'naive-ui';
 import { $t } from '@/locales';
+import { formatDateTime } from '@/utils/date';
 import {
   fetchGetUserInfo,
   fetchUpdatePassword,
@@ -141,6 +145,36 @@ onMounted(() => {
 
 <template>
   <div class="p-24px">
+    <!-- who the account is: read only; the cards below change it -->
+    <NCard
+      v-if="userInfo"
+      :title="$t('page.userCenter.account')"
+      :bordered="false"
+      size="small"
+      class="mb-16px rounded-8px shadow-sm"
+    >
+      <NDescriptions :column="3" size="small" label-placement="left" bordered>
+        <NDescriptionsItem :label="$t('page.userCenter.userName')">{{ userInfo.userName }}</NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.userCenter.nickName')">{{ userInfo.nickName || '-' }}</NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.userCenter.roles')">
+          <NSpace v-if="userInfo.roles?.length" :size="4">
+            <NTag v-for="role in userInfo.roles" :key="role" size="small" :bordered="false" type="info">
+              {{ role }}
+            </NTag>
+          </NSpace>
+          <span v-else>{{ $t('page.userCenter.noRoles') }}</span>
+        </NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.userCenter.otpStatus')">
+          <NTag size="small" :bordered="false" :type="userInfo.otpEnabled ? 'success' : 'default'">
+            {{ userInfo.otpEnabled ? $t('page.userCenter.otpOn') : $t('page.userCenter.otpOff') }}
+          </NTag>
+        </NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.userCenter.language')">{{ userInfo.language || '-' }}</NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.userCenter.lastLogin')">
+          {{ userInfo.lastLoginAt ? `${formatDateTime(userInfo.lastLoginAt)} ${userInfo.lastLoginIp || ''}` : '-' }}
+        </NDescriptionsItem>
+      </NDescriptions>
+    </NCard>
     <div class="grid grid-cols-1 items-start gap-16px xl:grid-cols-3 lg:grid-cols-2">
       <!-- 修改密码 -->
       <NCard :title="$t('page.userCenter.updatePassword')" :bordered="false" size="small" class="rounded-8px shadow-sm">

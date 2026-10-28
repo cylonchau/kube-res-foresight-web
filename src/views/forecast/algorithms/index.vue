@@ -48,7 +48,7 @@ defineOptions({ name: 'ForecastAlgorithms' });
 
 const { t } = useI18n();
 const message = useMessage();
-const percent = (value: number) => formatPercent(value, 1);
+const percent = (value: number) => formatPercent(value);
 
 // ================= list =================
 const search = reactive({ keyword: '', category: null as string | null, enabled: null as 'true' | 'false' | null });
@@ -264,17 +264,17 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Algorithm) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => openEdit(row) }, () => t('common.edit')),
-        h(NButton, { size: 'tiny', onClick: () => openDetail(row) }, () => t('page.forecast.algorithms.detail')),
+        h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => openDetail(row) }, () =>
+          t('page.forecast.algorithms.detail')
+        ),
         // a built-in algorithm is disabled, never deleted; an enabled one has to be disabled first
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row), disabled: row.origin === 'builtin' || row.enabled },
           {
             trigger: () =>
-              h(
-                NButton,
-                { size: 'tiny', type: 'error', ghost: true, disabled: row.origin === 'builtin' || row.enabled },
-                () => t('common.delete')
+              h(NButton, { size: 'tiny', type: 'error', disabled: row.origin === 'builtin' || row.enabled }, () =>
+                t('common.delete')
               ),
             default: () => t('page.forecast.algorithms.deleteConfirm')
           }
@@ -777,7 +777,7 @@ onMounted(() => {
           :title="t('page.forecast.algorithms.traceScore')"
           :content="
             trace.score
-              ? `${formatDateTime(trace.score.at)} · ${trace.score.score.toFixed(1)} · #${trace.score.rank} · ${trace.score.windows} ${t('page.forecast.scores.windows')}${trace.score.selected ? ' · ' + t('page.forecast.scores.inUse') : ''}`
+              ? `${formatDateTime(trace.score.at)} · ${trace.score.score.toFixed(2)} · #${trace.score.rank} · ${trace.score.windows} ${t('page.forecast.scores.windows')}${trace.score.selected ? ' · ' + t('page.forecast.scores.inUse') : ''}`
               : t('page.forecast.algorithms.traceNoScore')
           "
         />

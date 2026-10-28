@@ -250,12 +250,14 @@ const columnMap: Record<string, any> = {
     render: (row: any) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
-        h(NButton, { size: 'tiny', onClick: () => rotate(row) }, () => t('page.system.secretKeys.rotate')),
+        h(NButton, { size: 'tiny', type: 'warning', onClick: () => rotate(row) }, () =>
+          t('page.system.secretKeys.rotate')
+        ),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error' }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         )

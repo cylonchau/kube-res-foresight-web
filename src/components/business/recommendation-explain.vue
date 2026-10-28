@@ -165,14 +165,14 @@ const selectionColumns = computed(() => [
     title: t('page.forecast.scores.score'),
     key: 'score',
     width: 80,
-    render: (row: Api.Forecast.SelectionRow) => (row.scored ? row.score.toFixed(1) : '-')
+    render: (row: Api.Forecast.SelectionRow) => (row.scored ? row.score.toFixed(2) : '-')
   },
   { title: t('page.forecast.algorithms.columns.weight'), key: 'weight', width: 70 },
   {
     title: t('page.forecast.scores.weighted'),
     key: 'value',
     width: 90,
-    render: (row: Api.Forecast.SelectionRow) => (row.scored ? row.value.toFixed(1) : '-')
+    render: (row: Api.Forecast.SelectionRow) => (row.scored ? row.value.toFixed(2) : '-')
   },
   {
     title: t('page.forecast.explain.eligible'),
@@ -369,7 +369,7 @@ const sourceColumns = computed(() => [
     <div v-if="parsed.algorithm" class="flex flex-wrap items-center gap-8px text-13px">
       <span class="font-medium">{{ t('page.forecast.explain.decidedBy') }}</span>
       <NTag size="small" :bordered="false" type="success">{{ parsed.algorithm }}</NTag>
-      <span v-if="parsed.score !== undefined">{{ t('page.forecast.scores.score') }} {{ parsed.score.toFixed(1) }}</span>
+      <span v-if="parsed.score !== undefined">{{ t('page.forecast.scores.score') }} {{ parsed.score.toFixed(2) }}</span>
     </div>
 
     <div v-if="parsed.resource_spec" class="flex flex-col gap-6px">

@@ -242,7 +242,7 @@ const legendLabels = computed(() => {
       if (latest) parts.push(formatMetric(latest.value, unit.value));
       if (wape !== null && wape !== undefined)
         parts.push(
-          `WAPE ${formatPercent(wape, 1)} (Σ|${t('page.forecast.compare.predicted')}-${t('page.forecast.compare.actualValue')}| ÷ Σ${t('page.forecast.compare.actualValue')})`
+          `WAPE ${formatPercent(wape)} (Σ|${t('page.forecast.compare.predicted')}-${t('page.forecast.compare.actualValue')}| ÷ Σ${t('page.forecast.compare.actualValue')})`
         );
       out[item.algorithm_id] = { text: parts.join(' · ') };
     } else {
@@ -296,7 +296,7 @@ const atColumns = computed<DataTableColumns<Row>>(() => [
     key: 'errorRate',
     width: 100,
     align: 'right',
-    render: row => (row.errorRate === null ? '-' : formatPercent(row.errorRate, 1))
+    render: row => (row.errorRate === null ? '-' : formatPercent(row.errorRate))
   },
   {
     title: t('page.forecast.compare.predictedAt'),
@@ -413,7 +413,7 @@ onMounted(async () => {
               {{ pickedRow?.error == null ? '-' : formatMetric(pickedRow.error, unit) }}
             </NDescriptionsItem>
             <NDescriptionsItem :label="t('page.forecast.compare.errorRate')">
-              {{ pickedRow?.errorRate == null ? '-' : formatPercent(pickedRow.errorRate, 1) }}
+              {{ pickedRow?.errorRate == null ? '-' : formatPercent(pickedRow.errorRate) }}
             </NDescriptionsItem>
             <NDescriptionsItem :label="t('page.forecast.compare.pointState')">
               <NTag v-if="pickedStatus" size="small" :bordered="false">
@@ -422,7 +422,7 @@ onMounted(async () => {
               <template v-else>-</template>
             </NDescriptionsItem>
             <NDescriptionsItem :label="t('page.forecast.compare.pointWape')">
-              {{ pickedWape === null ? '-' : formatPercent(pickedWape, 1) }}
+              {{ pickedWape === null ? '-' : formatPercent(pickedWape) }}
             </NDescriptionsItem>
           </template>
           <NDescriptionsItem v-else :label="t('page.forecast.compare.actualValue')">

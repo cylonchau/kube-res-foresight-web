@@ -17,7 +17,13 @@ defineOptions({ name: 'SnapshotHistoryModal' });
  * version, in separate parts, which module and version it is, what it recommended, why the version exists, and the configuration
  * and calculation it was made with. There is no page of snapshots of its own.
  */
-const props = defineProps<{ show: boolean; moduleId: number | null; moduleName: string }>();
+const props = defineProps<{
+  show: boolean;
+  moduleId: number | null;
+  moduleName: string;
+  /** open on the snapshot that covers this recommendation version (an execution names the version it acted on) */
+  focusVersion?: number | null;
+}>();
 const emit = defineEmits<{ 'update:show': [value: boolean] }>();
 const { t } = useI18n();
 
@@ -32,13 +38,25 @@ list.pagination.showSizePicker = false;
 
 watch(
   () => props.show,
-  open => {
+  async open => {
     detail.value = null;
-    if (open) list.search();
+    if (!open) return;
+    list.search();
+    if (props.focusVersion && props.moduleId) {
+      // a version that repeats an unchanged recommendation belongs to the snapshot before it
+      const { data } = await fetchGetSnapshots({
+        module_id: props.moduleId,
+        covers_version: props.focusVersion,
+        page: 1,
+        page_size: 1
+      });
+      const found = data?.list?.[0];
+      if (found) await openDetail(found);
+    }
   }
 );
 
-/** "load-web snapshot V300": the module and the version, never the bare version */
+/** "load-web 第 300 版推荐": the module and the number of the version in that module, never a bare "V300" */
 const snapshotName = (version: number) => t('page.forecast.snapshots.name', { module: props.moduleName, version });
 
 const stateType = (state: Api.Forecast.SnapshotState) =>
@@ -171,7 +189,7 @@ const columns = computed<DataTableColumns<Api.Forecast.Snapshot>>(() => [
             {{ resultText(detail) }}
           </NDescriptionsItem>
           <NDescriptionsItem :label="t('page.forecast.recommendations.algorithm')">
-            {{ detail.algorithm ? `${detail.algorithm} (${detail.score.toFixed(1)})` : '-' }}
+            {{ detail.algorithm ? `${detail.algorithm} (${detail.score.toFixed(2)})` : '-' }}
           </NDescriptionsItem>
           <NDescriptionsItem :label="t('page.forecast.recommendations.specVersion')">
             {{ t('page.forecast.recommendations.specVersionTag', { version: detail.resource_version || 1 }) }}

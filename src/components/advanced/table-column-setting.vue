@@ -31,19 +31,6 @@ const columns = defineModel<NaiveUI.TableColumnCheck[]>('columns', {
   required: true
 });
 
-const tooltipRecord: Record<NaiveUI.TableColumnFixed, App.I18n.I18nKey> = {
-  left: 'datatable.fixed.right',
-  right: 'datatable.fixed.unFixed',
-  unFixed: 'datatable.fixed.left'
-};
-
-function handleFixed(column: NaiveUI.TableColumnCheck) {
-  const fixedOptions: NaiveUI.TableColumnFixed[] = ['left', 'right', 'unFixed'];
-  const index = fixedOptions.findIndex(item => item === column.fixed);
-  const nextIndex = index === fixedOptions.length - 1 ? 0 : index + 1;
-  column.fixed = fixedOptions[nextIndex];
-}
-
 const visibleStats = computed(() => {
   let total = 0;
   let checked = 0;
@@ -207,16 +194,6 @@ function toggleSelectAll(checked: boolean) {
               {{ $t('common.columnSettingLimitReached', { max: businessBudget ?? 0 }) }}
             </NTooltip>
           </div>
-          <ButtonIcon
-            :disabled="!item.checked"
-            :focusable="false"
-            :tooltip-content="$t(tooltipRecord[item.fixed!])"
-            @click="handleFixed(item)"
-          >
-            <icon-octicon-pin-16 v-if="item.fixed === 'unFixed'" />
-            <icon-octicon-pin-16 v-else-if="item.fixed === 'left'" class="rotate-270" />
-            <icon-octicon-pin-slash-16 v-else />
-          </ButtonIcon>
         </div>
       </VueDraggable>
     </div>

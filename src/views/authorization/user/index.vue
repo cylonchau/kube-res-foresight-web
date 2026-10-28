@@ -368,11 +368,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
               {
                 default: () => t('page.manage.user.resetOtpConfirm'),
                 trigger: () =>
-                  h(
-                    NButton,
-                    { size: 'tiny', type: 'warning', ghost: true },
-                    { default: () => t('page.manage.user.resetOtp') }
-                  )
+                  h(NButton, { size: 'tiny', type: 'warning' }, { default: () => t('page.manage.user.resetOtp') })
               }
             )
           );
@@ -391,8 +387,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
               },
               {
                 default: () => t('common.confirmDelete'),
-                trigger: () =>
-                  h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => t('common.delete') })
+                trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => t('common.delete') })
               }
             )
           );
@@ -408,7 +403,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
             trigger: () =>
               h(
                 NButton,
-                { size: 'tiny', type: row.status ? 'warning' : 'success', ghost: true, disabled: isSelf },
+                { size: 'tiny', type: row.status ? 'warning' : 'success', disabled: isSelf },
                 { default: () => (row.status ? t('common.disable') : t('common.enable')) }
               ),
             default: () => (row.status ? t('common.confirmDisable') : t('common.confirmEnable'))

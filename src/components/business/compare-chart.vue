@@ -198,8 +198,8 @@ async function draw() {
       type: 'line',
       step: stepped,
       // small points, and only where the line is sparse; hovering shows the nearest one larger
-      showSymbol: alg.points.length <= 60,
-      symbolSize: 3,
+      showSymbol: alg.points.length <= 30,
+      symbolSize: 2,
       // a curve through the points that never overshoots them, not a stiff polyline
       smooth: !stepped,
       smoothMonotone: 'x',
@@ -207,7 +207,7 @@ async function draw() {
       z: 10,
       lineStyle: { width: 1.5, color },
       itemStyle: { color },
-      emphasis: { scale: 2.4 },
+      emphasis: { scale: 3 },
       data
     });
   });
@@ -234,8 +234,8 @@ async function draw() {
         name: names.actual,
         type: 'line',
         step: stepped,
-        showSymbol: props.actual.candles.length <= 40,
-        symbolSize: 3,
+        showSymbol: props.actual.candles.length <= 30,
+        symbolSize: 2,
         smooth: !stepped,
         smoothMonotone: 'x',
         // the actual values are the line the forecasts are read against: thicker, behind the forecasts
@@ -340,7 +340,7 @@ async function draw() {
       {
         left: 56,
         right: props.actualReplicas?.candles.length ? 56 : 24,
-        top: PLOT_TOP + 8,
+        top: PLOT_TOP + 22,
         bottom: gapSeries.length ? 58 : 44
       }
     ],
@@ -566,8 +566,9 @@ watch(
 .chart-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 28px;
+  gap: 10px;
+  height: 32px;
+  margin-bottom: 8px;
   flex-shrink: 0;
 }
 .chart-hint {

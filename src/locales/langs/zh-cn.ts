@@ -618,6 +618,18 @@ const local = {
         degraded: '降级中',
         failing: '连续失败 {count} 次',
         runState: '运行状态',
+        colReplicas: '副本数',
+        colCpu: 'CPU',
+        colMemory: '内存',
+        colGpu: 'GPU',
+        currentConfigHelp:
+          '该工作负载现在应运行的配置，取自最新一次推荐快照；快照没有设置的资源留空。副本数显示 operator 最近一次上报的实际值，与快照的推荐值不同时在后面标出推荐值。',
+        toRecommended: '推荐 {n}',
+        stateHealthy: '运行正常',
+        stateNoSnapshot: '尚无推荐',
+        stateDisabled: '已停用',
+        stateHealthyHelp: '最新推荐 V{version}，没有降级、没有连续失败。',
+        stateNoSnapshotHelp: '还没有产生过推荐：模块刚创建、历史数据不足，或预测任务还没有运行。',
         links: '关联摘要',
         linksText: '指标来源 {sources}/{total} 个启用 · 最新推荐 {version}',
         sectionFallback: '兜底默认值与恢复',
@@ -790,7 +802,8 @@ const local = {
         specHint: 'Pod 规格（准入）'
       },
       snapshots: {
-        name: '{module} 快照 V{version}',
+        name: '{module} 第 {version} 版推荐',
+        versionShort: '第 {version} 版',
         history: '快照历史',
         backToHistory: '返回快照历史',
         partVersion: '模块与版本',
@@ -1276,7 +1289,7 @@ const local = {
         action_ScaleUp: '扩容',
         action_ScaleDown: '缩容',
         action_None: '无动作',
-        openSnapshot: '推荐快照 v{version}'
+        openSnapshot: '第 {version} 版推荐'
       },
       fallbacks: {
         title: '降级与回退记录',
@@ -1314,6 +1327,7 @@ const local = {
         target: '目标配置',
         result: '实际执行结果',
         at: '创建时间',
+        resource: '资源',
         changes: '配置变化',
         change: '原配置 → 目标配置',
         originalHelp: '降级：降级之前正在生效的配置。回退：本来想改成的配置。',
@@ -1423,6 +1437,7 @@ const local = {
         addTitle: '新增指标来源'
       },
       scores: {
+        dimension: '评估维度',
         metric_cpu: 'CPU',
         metric_memory: '内存',
         metric_gpu: 'GPU',
@@ -2068,6 +2083,16 @@ const local = {
     },
     userCenter: {
       title: '个人中心',
+      account: '账户信息',
+      userName: '用户名',
+      nickName: '昵称',
+      roles: '角色',
+      otpStatus: 'OTP 状态',
+      otpOn: '已启用',
+      otpOff: '未启用',
+      language: '界面语言',
+      lastLogin: '最近一次登录',
+      noRoles: '无角色',
       updatePassword: '修改密码',
       bindOtp: '绑定 OTP',
       contact: '联系方式',

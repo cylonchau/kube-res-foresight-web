@@ -122,17 +122,20 @@ export function useTableColumnConfig(
       title: baseCol.title || check.title || keyStr,
       checked: check.checked,
       visible: check.visible,
-      width: getSafeWidth(keyStr, check.width || baseCol.width),
+      width:
+        keyStr === 'operate' || keyStr === 'action' || keyStr === 'actions'
+          ? baseCol.width || 120
+          : getSafeWidth(keyStr, check.width || baseCol.width),
       minWidth: columnMinWidths[keyStr] || baseCol.minWidth,
       resizable: keyStr !== 'operate' && keyStr !== 'action' && keyStr !== 'actions',
+      // Only the operate column stays in view when the table scrolls sideways (and the row selection, which is no field). Every
+      // other column scrolls, whatever a pin saved in an earlier version of the page or the user's column settings says.
       fixed:
-        check.fixed === 'unFixed'
-          ? keyStr === 'operate' || keyStr === 'action' || keyStr === 'actions'
-            ? 'right'
-            : keyStr === '__selection__'
-              ? 'left'
-              : undefined
-          : check.fixed
+        keyStr === 'operate' || keyStr === 'action' || keyStr === 'actions'
+          ? 'right'
+          : keyStr === '__selection__'
+            ? 'left'
+            : undefined
     };
   }
 

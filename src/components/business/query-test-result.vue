@@ -73,8 +73,8 @@ async function draw() {
       {
         type: 'line',
         // small points where the line is sparse; the nearest one grows under the pointer
-        showSymbol: points.length < 60,
-        symbolSize: 3,
+        showSymbol: points.length <= 30,
+        symbolSize: 2,
         // a curve through the points that never overshoots them, with a break where the query returned nothing
         smooth: true,
         smoothMonotone: 'x',

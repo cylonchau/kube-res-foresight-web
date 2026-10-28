@@ -49,7 +49,7 @@ const metricOptions = computed(() => {
 });
 
 const ranked = (row: Api.Forecast.LeaderboardEntry) => row.status === 'ready';
-const percent = (value: number) => formatPercent(value, 1);
+const percent = (value: number) => formatPercent(value);
 const number = (value: number) => formatDecimal(value);
 /** an enabled algorithm without a measured result has no figures; its status and reason are shown instead */
 const figure = (row: Api.Forecast.LeaderboardEntry, text: (value: number) => string, value: number) =>

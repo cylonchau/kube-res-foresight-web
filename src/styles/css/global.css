@@ -466,3 +466,14 @@ html {
   --n-th-padding: 8px 10px;
   --n-td-padding: 6px 10px;
 }
+
+/*
+ * A tooltip is a short block of text that wraps, never one long line: it is at most 360px wide (less on a narrow screen), breaks
+ * at words and inside a long identifier, and keeps the line breaks a text has.
+ */
+.n-tooltip {
+  max-width: min(360px, 90vw);
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

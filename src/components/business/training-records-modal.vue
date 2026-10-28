@@ -83,7 +83,7 @@ const columns = computed<DataTableColumns<Api.Forecast.TrainingRun>>(() => [
     width: 80,
     align: 'center',
     render: row =>
-      h(NButton, { size: 'tiny', type: 'primary', ghost: true, onClick: () => (detail.value = row) }, () =>
+      h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => (detail.value = row) }, () =>
         t('common.detail')
       )
   }

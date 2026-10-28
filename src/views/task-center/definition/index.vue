@@ -260,7 +260,7 @@ const columnMap: Record<string, any> = {
                 trigger: () =>
                   h(
                     NButton,
-                    { size: 'tiny', type: row.enabled ? 'warning' : 'success', ghost: true },
+                    { size: 'tiny', type: row.enabled ? 'warning' : 'success' },
                     { default: () => (row.enabled ? t('common.disable') : t('common.enable')) }
                   ),
                 default: () => (row.enabled ? t('common.confirmDisable') : t('common.confirmEnable'))

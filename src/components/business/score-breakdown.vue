@@ -13,7 +13,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), { result: null, score: null });
 const { t } = useI18n();
-const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
+const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
 const total = computed(() => props.rows.reduce((sum, row) => sum + row.contribution, 0));
 const level = (value: number) => (value >= 0.85 ? 'good' : value >= 0.6 ? 'fair' : 'poor');
 </script>

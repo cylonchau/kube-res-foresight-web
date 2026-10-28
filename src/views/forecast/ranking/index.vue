@@ -26,7 +26,7 @@ const message = useMessage();
 const route = useRoute();
 const { moduleOptions, modules, loadModules } = useForecastModules();
 
-const percent = (value: number) => (value < 0 ? '-' : formatPercent(value, 1));
+const percent = (value: number) => (value < 0 ? '-' : formatPercent(value));
 const search = reactive({
   moduleId: null as number | null,
   range: lastHours(24 * 7) as [number, number] | null,

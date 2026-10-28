@@ -226,7 +226,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
                 trigger: () =>
                   h(
                     NButton,
-                    { size: 'tiny', type: row.status ? 'warning' : 'success', ghost: true },
+                    { size: 'tiny', type: row.status ? 'warning' : 'success' },
                     { default: () => (row.status ? t('common.disable') : t('common.enable')) }
                   )
               }
@@ -247,8 +247,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
               },
               {
                 default: () => t('common.confirmDelete'),
-                trigger: () =>
-                  h(NButton, { size: 'tiny', type: 'error', ghost: true }, { default: () => t('common.delete') })
+                trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => t('common.delete') })
               }
             )
           );

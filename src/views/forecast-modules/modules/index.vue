@@ -43,6 +43,8 @@ import {
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { copyCell } from '@/utils/copy-cell';
+import { formatResource } from '@/utils/format';
+import { helpTitle } from '@/utils/help-title';
 
 const PAGE_CODE = 'forecast_module_manage';
 const { t } = useI18n();
@@ -555,8 +557,74 @@ const columnMap: Record<string, any> = {
             t('page.forecast.modules.failing', { count: row.summary!.consecutive_failures })
           )
         );
-      return tags.length ? h(NSpace, { size: 4, wrap: true }, () => tags) : '-';
+      // a module with nothing wrong says so: an empty cell reads as "no state"
+      if (!tags.length) {
+        if (!row.enabled) {
+          tags.push(h(NTag, { bordered: false, size: 'small' }, () => t('page.forecast.modules.stateDisabled')));
+        } else if (!row.summary?.latest_version) {
+          tags.push(
+            h(
+              NTag,
+              { type: 'info', bordered: false, size: 'small', title: t('page.forecast.modules.stateNoSnapshotHelp') },
+              () => t('page.forecast.modules.stateNoSnapshot')
+            )
+          );
+        } else {
+          tags.push(
+            h(
+              NTag,
+              {
+                type: 'success',
+                bordered: false,
+                size: 'small',
+                title: t('page.forecast.modules.stateHealthyHelp', { version: row.summary.latest_version })
+              },
+              () => t('page.forecast.modules.stateHealthy')
+            )
+          );
+        }
+      }
+      return h(NSpace, { size: 4, wrap: true }, () => tags);
     }
+  },
+  // the configuration the workload is meant to run with now: an empty cell is a resource nothing sets
+  replicas: {
+    title: () => helpTitle(t('page.forecast.modules.colReplicas'), t('page.forecast.modules.currentConfigHelp')),
+    key: 'replicas',
+    width: 120,
+    align: 'center',
+    render: (row: Api.Forecast.Module) => {
+      const actual = row.summary?.actual_replicas;
+      const wanted = row.summary?.replicas;
+      if (actual === null || actual === undefined) return formatResource('replicas', wanted);
+      return h('span', [
+        formatResource('replicas', actual),
+        wanted !== null && wanted !== undefined && wanted !== actual
+          ? h('span', { class: 'ml-4px opacity-60' }, t('page.forecast.modules.toRecommended', { n: wanted }))
+          : ''
+      ]);
+    }
+  },
+  cpu: {
+    title: () => helpTitle(t('page.forecast.modules.colCpu'), t('page.forecast.modules.currentConfigHelp')),
+    key: 'cpu',
+    width: 100,
+    align: 'center',
+    render: (row: Api.Forecast.Module) => formatResource('cpu', row.summary?.cpu_milli)
+  },
+  memory: {
+    title: () => helpTitle(t('page.forecast.modules.colMemory'), t('page.forecast.modules.currentConfigHelp')),
+    key: 'memory',
+    width: 100,
+    align: 'center',
+    render: (row: Api.Forecast.Module) => formatResource('memory', row.summary?.memory_bytes)
+  },
+  gpu: {
+    title: () => helpTitle(t('page.forecast.modules.colGpu'), t('page.forecast.modules.currentConfigHelp')),
+    key: 'gpu',
+    width: 80,
+    align: 'center',
+    render: (row: Api.Forecast.Module) => formatResource('gpu', row.summary?.gpu)
   },
   links: {
     title: t('page.forecast.modules.links'),
@@ -582,26 +650,26 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 180,
+    width: 168,
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Module) =>
-      h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
+      h(NSpace, { justify: 'center', size: 4, wrap: false }, () => [
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,
           { onPositiveClick: () => remove(row.id) },
           {
-            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+            trigger: () => h(NButton, { size: 'tiny', type: 'error' }, () => t('common.delete')),
             default: () => t('common.confirmDelete')
           }
         ),
-        h(NButton, { size: 'tiny', onClick: () => clone(row) }, () => t('page.forecast.modules.clone')),
+        h(NButton, { size: 'tiny', type: 'info', onClick: () => clone(row) }, () => t('page.forecast.modules.clone')),
         row.bypass
-          ? h(NButton, { size: 'tiny', type: 'warning', ghost: true, onClick: () => resume(row) }, () =>
+          ? h(NButton, { size: 'tiny', type: 'success', onClick: () => resume(row) }, () =>
               t('page.forecast.modules.resume')
             )
-          : h(NButton, { size: 'tiny', onClick: () => (bypassTarget.value = row) }, () =>
+          : h(NButton, { size: 'tiny', type: 'warning', onClick: () => (bypassTarget.value = row) }, () =>
               t('page.forecast.modules.bypass')
             )
       ])
@@ -615,6 +683,10 @@ const defaultColumnKeys = [
   'mode',
   'enabled',
   'status',
+  'replicas',
+  'cpu',
+  'memory',
+  'gpu',
   'actions'
 ];
 

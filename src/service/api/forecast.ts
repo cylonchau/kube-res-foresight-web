@@ -258,7 +258,9 @@ export function fetchGetRecommendations(
   });
 }
 
-export function fetchGetSnapshots(params: ListWindow & { module_id?: number; state?: string }) {
+export function fetchGetSnapshots(
+  params: ListWindow & { module_id?: number; state?: string; covers_version?: number }
+) {
   return request<Api.Forecast.Paged<Api.Forecast.Snapshot>>({ url: `${base}/snapshots`, method: 'get', params });
 }
 
