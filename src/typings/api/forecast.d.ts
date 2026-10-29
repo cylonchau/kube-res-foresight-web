@@ -24,6 +24,37 @@ declare namespace Api {
     type MaxReplicasMode = 'fixed' | 'dynamic';
     type ReplicaMode = 'fixed' | 'dynamic';
     type CapacityMode = 'manual' | 'estimate';
+    /** one acceptance figure of the prediction delay, with its target and whether it passes */
+    interface DelayIndicator {
+      key:
+        | 'timely_rate'
+        | 'late_p90_seconds'
+        | 'emergency_share'
+        | 'peak_under_p90'
+        | 'reach_over_lead'
+        | 'decision_wait_seconds';
+      unit: 'ratio' | 'seconds';
+      op: '>=' | '<=';
+      target: number;
+      value: number;
+      samples: number;
+      verdict: 'pass' | 'fail' | 'insufficient';
+      note: string;
+    }
+
+    interface DelayReport {
+      module_id: number;
+      since: string;
+      hours: number;
+      scaled: number;
+      judged: number;
+      algorithm?: string;
+      verdict: 'pass' | 'fail' | 'insufficient';
+      indicators: DelayIndicator[];
+    }
+
+    type PredictMode = 'none' | 'fixed' | 'dynamic';
+
     type Mode = 'observe' | 'recommend' | 'admission' | 'auto';
     type WorkloadKind = 'Deployment' | 'StatefulSet' | 'DaemonSet';
 
@@ -40,6 +71,10 @@ declare namespace Api {
       description: string;
       enabled: boolean;
       mode: Mode;
+      /** the prediction of the module: off until switched on; none runs on the fixed default configuration, fixed on one algorithm, dynamic on the scores */
+      predict_enabled: boolean;
+      predict_mode: PredictMode;
+      predict_algorithm: string;
       namespace: string;
       workload_kind: WorkloadKind;
       workload: string;
@@ -100,6 +135,9 @@ declare namespace Api {
       fallback_gpu: number;
       oom_lookback_days: number;
       oom_memory_uplift: number;
+      /** whether OOM kills lower the memory score of an algorithm (never the CPU score), and by how much of it per kill */
+      oom_weight_enabled: boolean;
+      oom_weight: number;
       jvm_heap_pressure: number;
       recover_cycles: number;
       /** what the module is connected to; only on the list */
@@ -1264,7 +1302,16 @@ declare namespace Api {
     }
 
     /** the forward-looking part of the replica decision */
+    /** how far ahead the forecasts reach, and whether the configured forecast period was too short for the lead */
+    interface AheadReach {
+      configured_minutes: number;
+      effective_minutes: number;
+      extended: boolean;
+      reason: string;
+    }
+
     interface Ahead {
+      reach?: AheadReach;
       lead: AheadLead;
       windows: AheadWindow[];
       up: AheadConsensus;

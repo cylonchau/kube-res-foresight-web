@@ -12,6 +12,7 @@ import {
   NPopconfirm,
   NSelect,
   NSpace,
+  NSwitch,
   NTag,
   useMessage
 } from 'naive-ui';
@@ -30,10 +31,14 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchBatchModules,
   fetchBypassModule,
+  fetchCreateForecastDemo,
   fetchCreateForecastModule,
   fetchCreateModuleSource,
   fetchCreatePeriod,
+  fetchDeleteForecastDemo,
   fetchDeleteForecastModule,
+  fetchGetAlgorithms,
+  fetchGetForecastDemo,
   fetchGetForecastModules,
   fetchGetModuleSources,
   fetchGetPeriods,
@@ -72,6 +77,45 @@ const modeOptions = computed(() =>
     value
   }))
 );
+const predictModeOptions = computed(() =>
+  (['dynamic', 'fixed', 'none'] as const).map(value => ({
+    label: t(`page.forecast.modules.predictMode_${value}`),
+    value
+  }))
+);
+/** the algorithms a module can be fixed to: every algorithm of the platform */
+const algorithmOptions = ref<Array<{ label: string; value: string }>>([]);
+async function loadAlgorithms() {
+  const { data } = await fetchGetAlgorithms({ page: 1, page_size: 200 });
+  algorithmOptions.value = (data?.list || []).map(item => ({ label: item.id, value: item.id }));
+}
+// ---- the demo: a synthetic workload that runs the whole pipeline, made and removed here because it is a module
+const demo = ref<{ exists: boolean; module_id?: number }>({ exists: false });
+const demoBusy = ref(false);
+async function loadDemo() {
+  const { data } = await fetchGetForecastDemo();
+  if (data) demo.value = data;
+}
+async function createDemo() {
+  demoBusy.value = true;
+  const { data, error } = await fetchCreateForecastDemo();
+  demoBusy.value = false;
+  if (!error && data) {
+    message.success(t('page.datasource.presets.demoReady'));
+    await loadDemo();
+    await load();
+  }
+}
+async function removeDemo() {
+  demoBusy.value = true;
+  const { error } = await fetchDeleteForecastDemo();
+  demoBusy.value = false;
+  if (!error) {
+    message.success(t('common.deleteSuccess'));
+    await loadDemo();
+    await load();
+  }
+}
 const replicaModeOptions = computed(() =>
   (['fixed', 'dynamic'] as const).map(value => ({ label: t(`page.forecast.modules.replicaMode_${value}`), value }))
 );
@@ -140,6 +184,9 @@ function emptyForm() {
     description: '',
     enabled: true,
     mode: 'observe' as Api.Forecast.Mode,
+    predict_enabled: false,
+    predict_mode: 'dynamic' as Api.Forecast.PredictMode,
+    predict_algorithm: '',
     namespace: '',
     workload_kind: 'Deployment' as Api.Forecast.WorkloadKind,
     workload: '',
@@ -177,7 +224,7 @@ function emptyForm() {
     scale_up_cooldown_seconds: 0,
     scale_down_cooldown_seconds: 0,
     pod_capacity_rps: 0,
-    timezone: 'UTC',
+    timezone: 'Asia/Shanghai',
     min_score: 0,
     max_replicas_mode: 'fixed' as Api.Forecast.MaxReplicasMode,
     hard_max_replicas: 0,
@@ -187,6 +234,8 @@ function emptyForm() {
     fallback_gpu: 0,
     oom_lookback_days: 14,
     oom_memory_uplift: 1.2,
+    oom_weight_enabled: false,
+    oom_weight: 0.2,
     jvm_heap_pressure: 0.85,
     recover_cycles: 2
   };
@@ -196,6 +245,7 @@ const form = reactive(emptyForm());
 const cloneSource = ref<Api.Forecast.Module>();
 const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
 const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
+const oomMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const bypassTarget = ref<Api.Forecast.Module>();
 const paceFields = ['scaleUpMaxStep', 'scaleDownMaxStep', 'scaleUpCooldown', 'scaleDownCooldown'] as const;
 const paceModel = {
@@ -283,6 +333,7 @@ function open(row?: Api.Forecast.Module) {
   nextTick(() => {
     periodEditor.value?.load(row?.id);
     metricsEditor.value?.load(row?.id);
+    oomMetricsEditor.value?.load(row?.id);
   });
 }
 
@@ -292,6 +343,9 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     description: form.description,
     enabled: form.enabled,
     mode: form.mode,
+    predict_enabled: form.predict_enabled,
+    predict_mode: form.predict_mode,
+    predict_algorithm: form.predict_mode === 'fixed' ? form.predict_algorithm : '',
     namespace: form.namespace.trim(),
     workload_kind: form.workload_kind,
     workload: form.workload.trim(),
@@ -329,7 +383,7 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     scale_up_cooldown_seconds: form.scale_up_cooldown_seconds,
     scale_down_cooldown_seconds: form.scale_down_cooldown_seconds,
     pod_capacity_rps: form.pod_capacity_rps,
-    timezone: form.timezone.trim() || 'UTC',
+    timezone: form.timezone.trim() || 'Asia/Shanghai',
     min_score: form.min_score,
     max_replicas_mode: form.max_replicas_mode,
     hard_max_replicas: form.hard_max_replicas,
@@ -339,6 +393,8 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     fallback_gpu: form.fallback_gpu,
     oom_lookback_days: form.oom_lookback_days,
     oom_memory_uplift: form.oom_memory_uplift,
+    oom_weight_enabled: form.oom_weight_enabled,
+    oom_weight: form.oom_weight,
     jvm_heap_pressure: form.jvm_heap_pressure,
     recover_cycles: form.recover_cycles
   };
@@ -353,6 +409,7 @@ function clone(row: Api.Forecast.Module) {
   nextTick(() => {
     periodEditor.value?.load();
     metricsEditor.value?.load();
+    oomMetricsEditor.value?.load();
   });
 }
 
@@ -386,7 +443,12 @@ async function save() {
     message.warning(t('page.forecast.modules.required'));
     return;
   }
-  const editorProblem = metricsEditor.value?.problem() || periodEditor.value?.problem();
+  if (form.predict_enabled && form.predict_mode === 'fixed' && !form.predict_algorithm) {
+    message.warning(t('page.forecast.modules.predictAlgorithmRequired'));
+    return;
+  }
+  const editorProblem =
+    metricsEditor.value?.problem() || oomMetricsEditor.value?.problem() || periodEditor.value?.problem();
   if (editorProblem) {
     message.warning(editorProblem);
     return;
@@ -404,6 +466,8 @@ async function save() {
       const savedId = id ?? data?.id;
       if (savedId && !(await periodEditor.value?.save(savedId))) message.warning(t('page.forecast.periods.saveFailed'));
       if (savedId && !(await metricsEditor.value?.save(savedId)))
+        message.warning(t('page.forecast.periods.saveFailed'));
+      if (savedId && !(await oomMetricsEditor.value?.save(savedId)))
         message.warning(t('page.forecast.periods.saveFailed'));
       visible.value = false;
       message.success(id ? t('common.modifySuccess') : t('common.addSuccess'));
@@ -590,20 +654,30 @@ const columnMap: Record<string, any> = {
   },
   // the configuration the workload is meant to run with now: an empty cell is a resource nothing sets
   replicas: {
-    title: () => helpTitle(t('page.forecast.modules.colReplicas'), t('page.forecast.modules.currentConfigHelp')),
+    title: () => helpTitle(t('page.forecast.modules.colReplicas'), t('page.forecast.modules.actualReplicasHelp')),
     key: 'replicas',
-    width: 120,
+    width: 100,
+    align: 'center',
+    // only the replicas that run now; what is recommended is on the recommendations page
+    render: (row: Api.Forecast.Module) => formatResource('replicas', row.summary?.actual_replicas)
+  },
+  predict: {
+    title: () => helpTitle(t('page.forecast.modules.colPredict'), t('page.forecast.modules.predictEnabledHint')),
+    key: 'predict',
+    width: 130,
     align: 'center',
     render: (row: Api.Forecast.Module) => {
-      const actual = row.summary?.actual_replicas;
-      const wanted = row.summary?.replicas;
-      if (actual === null || actual === undefined) return formatResource('replicas', wanted);
-      return h('span', [
-        formatResource('replicas', actual),
-        wanted !== null && wanted !== undefined && wanted !== actual
-          ? h('span', { class: 'ml-4px opacity-60' }, t('page.forecast.modules.toRecommended', { n: wanted }))
-          : ''
-      ]);
+      if (!row.predict_enabled)
+        return h(NTag, { bordered: false, size: 'small' }, () => t('page.forecast.modules.predictOff'));
+      if (row.predict_mode === 'none')
+        return h(NTag, { bordered: false, size: 'small' }, () => t('page.forecast.modules.predictMode_none_short'));
+      if (row.predict_mode === 'fixed')
+        return h(NTag, { type: 'info', bordered: false, size: 'small' }, () =>
+          t('page.forecast.modules.predictFixedTag', { algorithm: row.predict_algorithm })
+        );
+      return h(NTag, { type: 'success', bordered: false, size: 'small' }, () =>
+        t('page.forecast.modules.predictMode_dynamic_short')
+      );
     }
   },
   cpu: {
@@ -688,6 +762,7 @@ const defaultColumnKeys = [
   'workload',
   'mode',
   'enabled',
+  'predict',
   'status',
   'replicas',
   'cpu',
@@ -704,6 +779,8 @@ const modalTitle = computed(() =>
 
 onMounted(() => {
   cfg.initColumnConfig();
+  loadAlgorithms();
+  loadDemo();
   load();
 });
 </script>
@@ -760,6 +837,17 @@ onMounted(() => {
     >
       <template #suffix>
         <NButton size="small" @click="openPreview">{{ t('page.forecast.modules.previewMetric') }}</NButton>
+        <NButton size="small" type="primary" ghost :loading="demoBusy" @click="createDemo">
+          {{ t(demo.exists ? 'page.datasource.presets.demoRefresh' : 'page.datasource.presets.demoCreate') }}
+        </NButton>
+        <NPopconfirm v-if="demo.exists" @positive-click="removeDemo">
+          <template #trigger>
+            <NButton size="small" ghost type="error" :loading="demoBusy">
+              {{ t('page.datasource.presets.demoDelete') }}
+            </NButton>
+          </template>
+          {{ t('page.datasource.presets.demoDeleteConfirm') }}
+        </NPopconfirm>
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>
@@ -778,6 +866,41 @@ onMounted(() => {
           <NFormItem :label="t('page.forecast.modules.mode')">
             <NSelect v-model:value="form.mode" :options="modeOptions" />
           </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.predictEnabled') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictEnabledHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NSwitch v-model:value="form.predict_enabled" />
+          </NFormItem>
+          <template v-if="form.predict_enabled">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.predictMode') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictModeHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NSelect v-model:value="form.predict_mode" :options="predictModeOptions" />
+            </NFormItem>
+            <NFormItem v-if="form.predict_mode === 'fixed'">
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.predictAlgorithm') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictAlgorithmHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NSelect v-model:value="form.predict_algorithm" filterable :options="algorithmOptions" />
+            </NFormItem>
+          </template>
           <NFormItem :label="t('page.forecast.modules.namespace')">
             <NInput
               v-model:value="form.namespace"
@@ -1133,7 +1256,11 @@ onMounted(() => {
             <div class="max-w-420px leading-22px">{{ t('page.forecast.moduleMetrics.rules') }}</div>
           </IconTooltip>
         </div>
-        <ModuleMetrics ref="metricsEditor" @preview="source => showPreview(editing?.id ?? null, source)" />
+        <ModuleMetrics
+          ref="metricsEditor"
+          scope="general"
+          @preview="source => showPreview(editing?.id ?? null, source)"
+        />
 
         <NDivider class="!my-18px" />
         <div class="mb-8px flex items-center gap-6px font-medium">
@@ -1164,7 +1291,8 @@ onMounted(() => {
           </NFormItem>
         </NForm>
 
-        <div class="mb-8px mt-12px flex items-center gap-6px font-medium">
+        <NDivider class="!my-18px" />
+        <div class="mb-8px flex items-center gap-6px font-medium">
           {{ t('page.forecast.modules.sectionProtection') }}
           <IconTooltip icon="mdi-help-circle" placement="top">
             <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.protectionHint') }}</div>
@@ -1204,7 +1332,40 @@ onMounted(() => {
             </template>
             <NInputNumber v-model:value="form.jvm_heap_pressure" :min="0" :max="1" :step="0.05" class="w-full" />
           </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.oomWeightEnabled') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomWeightEnabledHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NSwitch v-model:value="form.oom_weight_enabled" />
+          </NFormItem>
+          <NFormItem v-if="form.oom_weight_enabled">
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.oomWeight') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomWeightHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.oom_weight" :min="0.01" :max="1" :step="0.05" class="w-full" />
+          </NFormItem>
         </NForm>
+        <div class="mb-6px mt-8px flex items-center gap-6px text-13px opacity-80">
+          {{ t('page.forecast.modules.oomMetrics') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomMetricsHint') }}</div>
+          </IconTooltip>
+        </div>
+        <ModuleMetrics
+          ref="oomMetricsEditor"
+          scope="oom"
+          @preview="source => showPreview(editing?.id ?? null, source)"
+        />
 
         <div class="mb-8px mt-12px font-medium">{{ t('page.forecast.modules.sectionSafety') }}</div>
         <NForm :model="form" label-placement="top">

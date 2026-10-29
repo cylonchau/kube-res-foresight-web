@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { NButton, NCheckbox, NEmpty, NPopover } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
+import { axisTimeLabel, formatDateTime } from '@/utils/date';
 import { formatDecimal, formatMetric } from '@/utils/format';
 import { gapPairs, withBreaks } from '@/utils/series-gaps';
 
@@ -85,8 +87,10 @@ const GAP = '#e6a23c';
 const PICK_RADIUS = 28;
 
 const hasData = computed(() => Boolean(props.actual?.candles.length) || props.algorithms.some(a => a.points.length));
+/** whether the plot has a stretch with no actual data (drawn as a dashed line): the tip in the toolbar explains it */
+const hasGaps = ref(false);
 const time = (iso: string) => new Date(iso).getTime();
-const stamp = (ms: number) => new Date(ms).toLocaleString();
+const stamp = (ms: number) => formatDateTime(ms);
 
 const { domRef, chart, updateOptions } = useEcharts(
   () =>
@@ -97,7 +101,7 @@ const { domRef, chart, updateOptions } = useEcharts(
       // no toolbox: the wheel and drag zoom the plot, and the slider below is a thin strip
       // the right axis (replicas) takes room only when there is one: the plot uses the whole width of the card
       grid: [{ left: 56, right: props.actualReplicas?.candles.length ? 56 : 24, top: PLOT_TOP, bottom: 44 }],
-      xAxis: { type: 'time' },
+      xAxis: { type: 'time', axisLabel: { formatter: axisTimeLabel } },
       yAxis: [
         { type: 'value', scale: true },
         { type: 'value', scale: true, minInterval: 1, splitLine: { show: false } }
@@ -334,6 +338,7 @@ async function draw() {
       data: [{ xAxis: now }]
     };
   }
+  hasGaps.value = gapSeries.length > 0;
   await updateOptions(opts => ({
     ...opts,
     grid: [
@@ -341,18 +346,11 @@ async function draw() {
         left: 56,
         right: props.actualReplicas?.candles.length ? 56 : 24,
         top: PLOT_TOP + 22,
-        bottom: gapSeries.length ? 58 : 44
+        bottom: 44
       }
     ],
-    title: gapSeries.length
-      ? {
-          show: true,
-          text: t('page.forecast.compare.gapLegend'),
-          left: 56,
-          bottom: 24,
-          textStyle: { fontSize: 11, fontWeight: 'normal', color: GAP }
-        }
-      : { show: false },
+    // what the dashed line over a gap means is said in the tip of the toolbar, not in a line under the plot
+    title: { show: false },
     legend: { show: false },
     tooltip: {
       trigger: 'axis',
@@ -512,6 +510,9 @@ watch(
           </div>
         </NPopover>
         <span class="chart-hint">{{ t('page.forecast.compare.clickHint') }}</span>
+        <IconTooltip v-if="hasGaps" icon="mdi-help-circle" placement="bottom">
+          <div class="max-w-320px leading-22px">{{ t('page.forecast.compare.gapLegend') }}</div>
+        </IconTooltip>
         <span class="flex-1"></span>
         <!-- the chart refreshes by itself: no need to press search again to read the newest data -->
         <NButton

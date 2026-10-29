@@ -19,8 +19,18 @@ import {
  * Nothing is built into a module: a module has exactly the templates added here, the query of each is rendered with the
  * module's own parameters, and a metric that is not here (or is disabled) takes no part in its forecast, score or decision.
  * Rows are saved with the module: removed rows are deleted, changed rows updated, new rows created.
+ *
+ * The editor has a scope: the metrics of the OOM protection (OOM kills, the working set before a kill, the JVM heap, the memory limits)
+ * are edited apart from the metrics the forecast is made of, so the two kinds are not mixed in one list. A scope reads, shows and saves
+ * only its own kinds.
  */
 defineOptions({ name: 'ModuleMetrics' });
+
+/** the kinds of metric the OOM protection reads; every other kind belongs to the general scope */
+const OOM_KINDS = ['oom', 'oom_working_set', 'jvm_heap_used', 'jvm_heap_max', 'k8s_mem_limits'];
+
+const props = withDefaults(defineProps<{ scope?: 'general' | 'oom' }>(), { scope: 'general' });
+const inScope = (kind: string) => (props.scope === 'oom') === OOM_KINDS.includes(kind);
 
 interface Row {
   /** the id of the source this row is saved as; none for a row that was just added */
@@ -51,6 +61,8 @@ const rows = ref<Row[]>([]);
 const templates = ref<Api.Datasource.MetricMapping[]>([]);
 const catalog = ref<Api.Forecast.DatasetCatalog>();
 const sourceNames = ref<string[]>([]);
+/** the sources this editor loaded: only these can be removed by it, not a source made meanwhile by a copy of the module or the other scope */
+const loadedIds = ref<number[]>([]);
 
 const kindLabel = (kind: string) => $t(`page.datasource.mappings.metric_${kind}` as any, kind);
 const templateById = (id: number | null) => templates.value.find(item => item.id === id);
@@ -58,7 +70,7 @@ const templateById = (id: number | null) => templates.value.find(item => item.id
 /** the templates grouped by the kind of metric, so a CPU template is not looked for among the JVM ones */
 const templateOptions = computed(() => {
   const groups = new Map<string, Array<{ label: string; value: number }>>();
-  for (const item of templates.value.filter(entry => entry.enabled)) {
+  for (const item of templates.value.filter(entry => entry.enabled && inScope(entry.metric))) {
     const list = groups.get(item.metric) || [];
     list.push({ label: `${item.name} · ${item.datasource_name}`, value: item.id });
     groups.set(item.metric, list);
@@ -74,6 +86,7 @@ const templateOptions = computed(() => {
 async function load(moduleId?: number) {
   rows.value = [];
   sourceNames.value = [];
+  loadedIds.value = [];
   const [list, cat] = await Promise.all([
     fetchGetMetricMappings({ page: 1, page_size: 200 }),
     catalog.value ? Promise.resolve({ data: catalog.value }) : fetchGetDatasetCatalog()
@@ -82,8 +95,10 @@ async function load(moduleId?: number) {
   if (cat.data) catalog.value = cat.data;
   if (!moduleId) return;
   const { data } = await fetchGetModuleSources(moduleId);
-  const sources = data || [];
-  sourceNames.value = sources.map(item => item.name);
+  const all = data || [];
+  const sources = all.filter(item => inScope(item.kind));
+  sourceNames.value = all.map(item => item.name);
+  loadedIds.value = sources.map(item => item.id);
   rows.value = sources.map(item => ({
     id: item.id,
     savedKind: item.kind,
@@ -139,7 +154,7 @@ async function save(moduleId: number): Promise<boolean> {
   const kept = new Set(rows.value.filter(row => row.id).map(row => row.id as number));
   // a row whose template is of another kind is a different metric: the old one goes, a new one is made
   const replaced = rows.value.filter(row => row.id && templateById(row.mappingId)?.metric !== row.savedKind);
-  const gone = [...(await currentIds(moduleId))].filter(id => !kept.has(id) || replaced.some(row => row.id === id));
+  const gone = loadedIds.value.filter(id => !kept.has(id) || replaced.some(row => row.id === id));
   for (const id of gone) {
     const { error } = await fetchDeleteModuleSource(moduleId, id);
     if (error) ok = false;
@@ -181,11 +196,6 @@ async function save(moduleId: number): Promise<boolean> {
     }
   }
   return ok;
-}
-
-async function currentIds(moduleId: number) {
-  const { data } = await fetchGetModuleSources(moduleId);
-  return new Set((data || []).map(item => item.id));
 }
 
 function preview(row: Row) {

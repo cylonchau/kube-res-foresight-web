@@ -4,6 +4,7 @@ import { NEmpty, NSpin, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { fetchGetTrainingData } from '@/service/api';
+import { axisTimeLabel, axisTooltip } from '@/utils/date';
 import { formatMetric } from '@/utils/format';
 
 defineOptions({ name: 'TrainingDataChart' });
@@ -23,10 +24,10 @@ const { domRef, updateOptions } = useEcharts(
   () =>
     ({
       animation: false,
-      tooltip: { trigger: 'axis', confine: true },
+      tooltip: { trigger: 'axis', confine: true, formatter: axisTooltip() },
       legend: { top: 4, left: 8 },
       grid: { left: 72, right: 24, top: 56, bottom: 80 },
-      xAxis: { type: 'time' },
+      xAxis: { type: 'time', axisLabel: { formatter: axisTimeLabel } },
       yAxis: { type: 'value', scale: true },
       dataZoom: [{ type: 'inside' }, { type: 'slider', height: 28, bottom: 12 }],
       series: []
@@ -39,7 +40,11 @@ async function draw() {
   const pair = (list: Api.Forecast.TrainingPoint[]) => list.map(p => [new Date(p.time).getTime(), p.value]);
   await updateOptions(opts => ({
     ...opts,
-    tooltip: { trigger: 'axis', confine: true, valueFormatter: (value: unknown) => formatMetric(Number(value), unit) },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      formatter: axisTooltip((value: unknown) => formatMetric(Number(value), unit))
+    },
     yAxis: { type: 'value', scale: true, name: unit },
     series: [
       {

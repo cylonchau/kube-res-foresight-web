@@ -133,12 +133,12 @@ const partLevel = (value: number | null) => {
   --lane-poor: var(--error-color);
   --lane-none: var(--base-text-color);
   display: grid;
-  grid-template-columns: 56px minmax(220px, 1.4fr) minmax(0, 2fr) auto;
+  grid-template-columns: 44px minmax(200px, 1.4fr) minmax(0, 2fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 6px 12px;
   border: 1px solid rgb(var(--base-text-color) / 0.1);
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgb(var(--base-text-color) / 0.02);
 }
 
@@ -157,10 +157,10 @@ const partLevel = (value: number | null) => {
 .rank-lane__rank {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   background: rgb(var(--base-text-color) / 0.08);
 }
@@ -200,32 +200,32 @@ const partLevel = (value: number | null) => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 4px;
+  margin-bottom: 3px;
 }
 
 .rank-lane__name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 13px;
   word-break: break-all;
 }
 
 .rank-lane__caption {
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.6;
 }
 
 .rank-lane__bar {
   position: relative;
-  height: 22px;
-  border-radius: 11px;
+  height: 16px;
+  border-radius: 8px;
   overflow: hidden;
   background: rgb(var(--base-text-color) / 0.08);
 }
 
 .rank-lane__fill {
   height: 100%;
-  border-radius: 11px;
+  border-radius: 8px;
   transition: width 0.3s ease;
 }
 .rank-lane__bar.is-good .rank-lane__fill {
@@ -243,22 +243,22 @@ const partLevel = (value: number | null) => {
   inset: 0 10px 0 auto;
   display: flex;
   align-items: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .rank-lane__parts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 10px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 4px 12px;
   min-width: 0;
 }
 
 .rank-lane__part-head {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 11px;
   opacity: 0.8;
 }
 
@@ -267,16 +267,16 @@ const partLevel = (value: number | null) => {
 }
 
 .rank-lane__part-track {
-  height: 6px;
-  margin-top: 4px;
-  border-radius: 3px;
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 2px;
   overflow: hidden;
   background: rgb(var(--base-text-color) / 0.08);
 }
 
 .rank-lane__part-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 .rank-lane__part.is-good .rank-lane__part-fill {
   background: rgb(var(--lane-good) / 0.75);
@@ -295,12 +295,12 @@ const partLevel = (value: number | null) => {
 }
 
 .rank-lane--selectable {
-  grid-template-columns: 24px 56px minmax(220px, 1.4fr) minmax(0, 2fr) auto;
+  grid-template-columns: 24px 44px minmax(200px, 1.4fr) minmax(0, 2fr) auto;
 }
 
 @media (max-width: 1100px) {
   .rank-lane {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr);
   }
   .rank-lane__parts,
   .rank-lane__actions {

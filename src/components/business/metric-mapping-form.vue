@@ -26,7 +26,7 @@ const props = defineProps<{ editing: Api.Datasource.MetricMapping | null }>();
 const emit = defineEmits<{ saved: [] }>();
 const show = defineModel<boolean>('show', { required: true });
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const message = useMessage();
 const { moduleOptions, loadModules } = useForecastModules();
 
@@ -68,6 +68,7 @@ const kindUnit = computed(() => catalog.value.metrics.find(item => item.metric =
 const isCustom = computed(() => form.metric === 'custom');
 const presetOptions = computed(() => presets.value.map(item => ({ label: item.name.zh, value: item.id })));
 const pickedPreset = ref<Api.Datasource.Preset>();
+const pickedText = (value: Api.Datasource.PresetText) => (locale.value === 'en-US' ? value.en : value.zh);
 const variableList = computed(() => catalog.value.variables.map(name => '{{' + name + '}}').join(' '));
 
 const testConfig = computed<QueryConfig>(() => ({
@@ -228,8 +229,16 @@ watch(show, async visible => {
             :placeholder="t('page.monitoring.datasets.usePresetHint')"
             @update:value="applyPreset"
           />
-          <div v-if="pickedPreset" class="mt-4px text-12px opacity-70">
-            {{ pickedPreset.scenario.zh }}{{ pickedPreset.limitations.zh ? `；${pickedPreset.limitations.zh}` : '' }}
+          <div v-if="pickedPreset" class="mt-4px text-12px leading-20px opacity-70">
+            <div>{{ pickedText(pickedPreset.scenario) }}</div>
+            <div v-if="pickedText(pickedPreset.usage)">{{ pickedText(pickedPreset.usage) }}</div>
+            <div v-if="pickedText(pickedPreset.limitations)">{{ pickedText(pickedPreset.limitations) }}</div>
+            <div>
+              {{ t('page.datasource.presets.columns.source') }}: {{ pickedPreset.source.component }} ·
+              {{ t('page.datasource.presets.series') }}: {{ pickedPreset.source.metrics.join(', ') }} ·
+              {{ t('page.datasource.presets.labels') }}: {{ pickedPreset.source.labels.join(', ') }}
+            </div>
+            <div v-if="!pickedPreset.verified">{{ t('page.datasource.presets.unverifiedHint') }}</div>
           </div>
         </NFormItem>
         <NFormItem>

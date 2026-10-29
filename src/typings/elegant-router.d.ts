@@ -27,7 +27,6 @@ declare module "@elegant-router/types" {
     "datasource": "/datasource";
     "datasource_connections": "/datasource/connections";
     "datasource_metric-mappings": "/datasource/metric-mappings";
-    "datasource_presets": "/datasource/presets";
     "forecast": "/forecast";
     "forecast_algorithms": "/forecast/algorithms";
     "forecast_ranking": "/forecast/ranking";
@@ -130,7 +129,6 @@ declare module "@elegant-router/types" {
     | "authorization_user"
     | "datasource_connections"
     | "datasource_metric-mappings"
-    | "datasource_presets"
     | "forecast-actions_admissions"
     | "forecast-actions_executions"
     | "forecast-actions_fallbacks"

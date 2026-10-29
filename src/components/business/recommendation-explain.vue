@@ -4,6 +4,7 @@ import { NDataTable, NEmpty, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import AheadExplain from '@/components/business/ahead-explain.vue';
 import ReplicaExplain from '@/components/business/replica-explain.vue';
+import { formatDateTime } from '@/utils/date';
 import { formatCpuMilli, formatMemoryBytes, formatPercent } from '@/utils/format';
 
 defineOptions({ name: 'RecommendationExplain' });
@@ -293,7 +294,7 @@ const specColumns = computed(() => [
 ]);
 
 // ---- the fixed periods of the module and whether they decided, and the metrics the figures are calculated from
-const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '-');
+const when = (iso?: string) => formatDateTime(iso);
 const periodColumns = computed(() => [
   { title: t('page.forecast.periods.col_name'), key: 'name', width: 140, ellipsis: { tooltip: true } },
   {

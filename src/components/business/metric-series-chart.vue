@@ -3,6 +3,7 @@ import { computed, watch } from 'vue';
 import { NEmpty } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
+import { axisTimeLabel, axisTooltip } from '@/utils/date';
 import { type MetricResult, seriesName } from '@/utils/metric-series';
 
 defineOptions({ name: 'MetricSeriesChart' });
@@ -21,10 +22,10 @@ const hasData = computed(() => props.results.some(item => item.result.series.som
 const { domRef, updateOptions } = useEcharts(
   () =>
     ({
-      tooltip: { trigger: 'axis' },
+      tooltip: { trigger: 'axis', formatter: axisTooltip() },
       legend: { type: 'scroll', top: 0 },
       grid: { left: 64, right: 24, top: 40, bottom: 56 },
-      xAxis: { type: 'time' },
+      xAxis: { type: 'time', axisLabel: { formatter: axisTimeLabel } },
       yAxis: { type: 'value', scale: true },
       dataZoom: [{ type: 'inside' }, { type: 'slider', height: 18 }],
       series: []

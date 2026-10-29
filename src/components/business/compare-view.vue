@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
+  NButton,
   NCard,
   NDataTable,
   NDescriptions,
@@ -15,6 +16,7 @@ import type { DataTableColumns } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import CompareChart, { type LineType, type PickedPoint } from '@/components/business/compare-chart.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
+import IconTooltip from '@/components/common/icon-tooltip.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
 import { fetchCompareModule, fetchGetAlgorithms } from '@/service/api';
@@ -256,6 +258,61 @@ const legendLabels = computed(() => {
   return out;
 });
 
+// ---- the list under the chart: the same query, folded away until it is wanted so the chart takes the whole page
+const listOpen = ref(false);
+const listColumns = computed<DataTableColumns<Row>>(() => [
+  { title: t('page.forecast.compare.time'), key: 'time', width: 170, render: row => formatDateTime(row.time) },
+  { title: t('page.forecast.modules.algorithm'), key: 'algorithm', width: 150, ellipsis: { tooltip: true } },
+  {
+    title: t('page.forecast.compare.predicted'),
+    key: 'predicted',
+    width: 130,
+    align: 'right',
+    render: row => formatMetric(row.predicted, unit.value)
+  },
+  {
+    title: t('page.forecast.compare.actualValue'),
+    key: 'actual',
+    width: 130,
+    align: 'right',
+    render: row => (row.actual === null ? '-' : formatMetric(row.actual, unit.value))
+  },
+  {
+    title: t('page.forecast.compare.error'),
+    key: 'error',
+    width: 120,
+    align: 'right',
+    render: row => (row.error === null ? '-' : formatMetric(row.error, unit.value))
+  },
+  {
+    title: t('page.forecast.compare.errorRate'),
+    key: 'errorRate',
+    width: 100,
+    align: 'right',
+    render: row => (row.errorRate === null ? '-' : formatPercent(row.errorRate))
+  },
+  {
+    title: t('page.forecast.compare.predictedReplicas'),
+    key: 'predictedReplicas',
+    width: 110,
+    align: 'right',
+    render: row => row.predictedReplicas ?? '-'
+  },
+  {
+    title: t('page.forecast.compare.actualReplicas'),
+    key: 'actualReplicas',
+    width: 110,
+    align: 'right',
+    render: row => row.actualReplicas ?? '-'
+  },
+  {
+    title: t('page.forecast.compare.predictedAt'),
+    key: 'predictedAt',
+    width: 170,
+    render: row => formatDateTime(row.predictedAt)
+  }
+]);
+
 // ---- what a click on the chart opens: the data of that moment
 const picked = ref<PickedPoint | null>(null);
 const at = computed(() => picked.value?.time ?? 0);
@@ -357,7 +414,8 @@ onMounted(async () => {
     <NCard
       :bordered="false"
       size="small"
-      class="min-h-0 flex-1 rounded-16px shadow-sm"
+      class="min-h-0 rounded-16px shadow-sm"
+      :class="listOpen ? 'flex-[3]' : 'flex-1'"
       :content-style="{ height: '100%', minHeight: 0 }"
     >
       <CompareChart
@@ -373,6 +431,38 @@ onMounted(async () => {
         :empty-reason="emptyReason"
         @refresh="load"
         @pick="point => (picked = point)"
+      />
+    </NCard>
+
+    <!-- the list is the same query as the chart above it: same module, metric and time range, one row per algorithm per time -->
+    <NCard
+      :bordered="false"
+      size="small"
+      class="rounded-16px shadow-sm"
+      :class="listOpen ? 'min-h-0 flex-[2]' : ''"
+      :content-style="
+        listOpen ? { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '8px' } : undefined
+      "
+    >
+      <div class="flex items-center gap-6px">
+        <NButton size="small" quaternary @click="listOpen = !listOpen">
+          {{ listOpen ? '▾' : '▸' }} {{ t('page.forecast.compare.dataList') }} ({{ rows.length }})
+        </NButton>
+        <IconTooltip icon="mdi-help-circle" placement="top">
+          <div class="max-w-320px leading-22px">{{ t('page.forecast.compare.dataListHint') }}</div>
+        </IconTooltip>
+      </div>
+      <NDataTable
+        v-if="listOpen"
+        class="min-h-0 flex-1"
+        size="small"
+        flex-height
+        :loading="loading"
+        :columns="listColumns"
+        :data="rows"
+        :row-key="(row: Row) => row.key"
+        :pagination="{ pageSize: 50 }"
+        :scroll-x="1200"
       />
     </NCard>
 

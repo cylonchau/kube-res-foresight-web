@@ -360,7 +360,6 @@ const local = {
     system_job: 'Job History',
     'system_secret-keys': 'Cluster credentials',
     'datasource_metric-mappings': 'Metric templates',
-    datasource_presets: 'Built-in metric presets',
     forecast_algorithms: 'Algorithm management',
     'forecast_score-records': 'Algorithm scores',
     forecast_ranking: 'Current ranking',
@@ -656,16 +655,46 @@ const local = {
         recoverCycles: 'Cycles to re-enable',
         recoverCyclesHint:
           'After a degradation the forecast is used again only after this many healthy cycles in a row, so flaky data does not make the recommendation flap. Default 2.',
-        sectionProtection: 'OOM protection and JVM heap pressure',
+        sectionProtection: 'OOM protection',
         oomLookbackDays: 'OOM look-back days',
         oomLookbackDaysHint:
           'If an OOM kill happened within this many days the memory recommendation is never below the floor. Default 14.',
         oomMemoryUplift: 'OOM memory uplift',
         oomMemoryUpliftHint:
           'Floor = max(working set before OOM, memory limit) x this factor, capped by the module maximum and flagged when it is. Default 1.2.',
-        jvmHeapPressure: 'JVM heap pressure threshold',
+        jvmHeapPressure: 'OOM protection pressure (JVM heap usage)',
         jvmHeapPressureHint:
           'Above this heap used / heap maximum ratio the replica recommendation is raised in proportion; 0 turns the rule off. Default 0.85.',
+        oomWeightEnabled: 'Weigh OOM kills in the score',
+        oomWeightEnabledHint:
+          'Off by default: OOM kills enter no score. On, every OOM kill in a window in which an algorithm gave too little memory takes the weight below off its memory score; it lowers the memory score only, never the CPU or replica score.',
+        oomWeight: 'OOM score weight',
+        oomWeightHint:
+          'The share of the memory score one OOM kill takes away (0.01 to 1, default 0.2); kills add up to at most 60%.',
+        oomMetrics: 'OOM metrics',
+        oomMetricsHint:
+          'The metrics the OOM protection reads: OOM kills, the working set before a kill, memory limits, JVM heap used and maximum. They are kept apart from the metrics of the forecast; without them the rule does not apply and the recommendation says so.',
+        sectionPredict: 'Prediction',
+        predictEnabled: 'Prediction',
+        predictEnabledHint:
+          'Off by default. Off, the module only collects its history, runs no algorithm and the recommendation uses the fallback values; on, it predicts in the mode below.',
+        predictMode: 'Prediction mode',
+        predictModeHint:
+          'None: the fixed default configuration. Fixed: one named algorithm, no switching by score (it still has to be promoted by a backtest unless it is a baseline). Dynamic: every enabled algorithm forecasts and they are followed by their scores.',
+        predictMode_none: 'None (fixed default configuration)',
+        predictMode_fixed: 'Fixed algorithm',
+        predictMode_dynamic: 'Dynamic (by score)',
+        predictMode_none_short: 'None',
+        predictMode_dynamic_short: 'Dynamic',
+        predictFixedTag: 'Fixed: {algorithm}',
+        predictOff: 'Off',
+        colPredict: 'Prediction',
+        predictAlgorithm: 'Algorithm',
+        predictAlgorithmHint:
+          'The only algorithm that runs. It runs for this module even when the platform has it switched off; one that is not a baseline is followed only after a backtest promoted it.',
+        predictAlgorithmRequired: 'The fixed mode needs an algorithm',
+        actualReplicasHelp:
+          'The replicas the workload runs now (the last report of the operator); - before it has reported. The recommended count is on the recommendations page.',
         auxHint_oom: 'OOM kills per window; shows under-provisioned memory and triggers the OOM floor.',
         auxHint_oom_working_set: 'Working-set peak before an OOM; the basis of the OOM floor.',
         auxHint_latency: 'Request latency; for observation or as a covariate.',
@@ -707,7 +736,7 @@ const local = {
         fallbackHint:
           'Defaults used when no forecast is usable (no data, too little history, a failed forecast, a low score). Each field applies on its own and stays inside the bounds; 0 keeps the original value of that field while degraded. Recovery needs several healthy cycles in a row.',
         protectionHint:
-          'Add the OOM count / working set before OOM / memory limits and the JVM heap sources to the module first; a rule without its sources does not apply and the recommendation says so.',
+          'The OOM protection concerns memory only: the look-back, the memory uplift, the protection pressure and the score weight are set here, apart from everything else; the metrics it reads are added below. A rule without its metrics does not apply and the recommendation says so.',
         service: 'Service',
         container: 'Container',
         optional: 'Optional',
@@ -1428,6 +1457,11 @@ const local = {
         trackingSteps: ' steps',
         aheadTitle: 'Look-ahead decision',
         aheadLead: 'Lead',
+        aheadReach: 'Forecast reach',
+        aheadReachMinutes: '{n} min',
+        aheadReachExtended:
+          'The module is configured with a forecast period of {configured} min, shorter than the lead needs (look at the lead, then as much again): the forecasts reach {n} min ahead so the load a scale-up has to meet is in sight.',
+        aheadReachFine: 'The forecasts reach twice the lead, so the load after it is in sight as well.',
         aheadLeadParts:
           'Pod ready {ready}s ({source}) + node {node}s + decision wait {wait}s + lateness margin {margin}s',
         aheadLeadMeasured: 'measured P90 of {n} scale-ups',
@@ -1636,9 +1670,29 @@ const local = {
         coverage_how:
           'Coverage = forecast points with an actual value to compare / all forecast points; below 100% some target times have no actual sample yet.'
       },
+      delay: {
+        title: 'Prediction delay acceptance',
+        pickModule:
+          'Pick a module on the page before opening this window to see its prediction delay acceptance (scale-ups in time, lateness, whether the forecasts reach far enough ...).',
+        window: 'Last {hours} h: {scaled} scale-ups, {judged} judged',
+        target: 'target',
+        insufficient: 'Too few samples ({n}) to judge yet',
+        verdict_pass: 'Pass',
+        verdict_fail: 'Fail',
+        verdict_insufficient: 'Collecting',
+        indicator_timely_rate: 'Scale-ups in time',
+        indicator_late_p90_seconds: 'Lateness P90',
+        indicator_emergency_share: 'Share asked for by the live load',
+        indicator_peak_under_p90: 'Peak under-estimation P90',
+        indicator_reach_over_lead: 'Forecast reach / lead',
+        indicator_decision_wait_seconds: 'Decision wait'
+      },
       compare: {
         actual: 'Actual',
         actualReplicas: 'Actual replicas',
+        dataList: 'Data list',
+        dataListHint:
+          'The result of the same query as the chart above: the same module, metric and time range, one row per algorithm per time. Click the title to open or fold it.',
         predicted: 'Predicted',
         predictedAt: 'predicted at',
         predictedReplicas: 'predicted replicas',

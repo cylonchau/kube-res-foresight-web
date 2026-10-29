@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, h, watch } from 'vue';
+import { computed, h, ref, watch } from 'vue';
 import { NDataTable, NModal, NTag } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { usePagedList } from '@/hooks/business/use-paged-list';
-import { fetchGetScaleOutcomes } from '@/service/api';
+import { fetchGetModuleDelayReport, fetchGetScaleOutcomes } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 
 defineOptions({ name: 'ScaleOutcomeModal' });
@@ -24,10 +24,32 @@ const list = usePagedList<Api.Forecast.ScaleOutcome>(async (page, pageSize) => {
 list.pagination.pageSize = 8;
 list.pagination.showSizePicker = false;
 
+// ---- the acceptance of the prediction delay of the module, over the last day
+const report = ref<Api.Forecast.DelayReport | null>(null);
+async function loadReport() {
+  report.value = null;
+  if (props.moduleId === null) return;
+  const { data } = await fetchGetModuleDelayReport(props.moduleId);
+  report.value = data ?? null;
+}
+const verdictTag = { pass: 'success', fail: 'error', insufficient: 'default' } as const;
+function figure(item: Api.Forecast.DelayIndicator, value: number) {
+  // the forecast reach as a multiple of the lead (6.0×), the other ratios as shares
+  if (item.key === 'reach_over_lead') return `${value.toFixed(1)}×`;
+  return item.unit === 'ratio' ? `${(value * 100).toFixed(1)}%` : `${Math.round(value)} s`;
+}
+function indicatorLine(item: Api.Forecast.DelayIndicator) {
+  if (item.verdict === 'insufficient') return t('page.forecast.delay.insufficient', { n: item.samples });
+  return `${figure(item, item.value)} ${t('page.forecast.delay.target')} ${item.op} ${figure(item, item.target)}`;
+}
+
 watch(
   () => props.show,
   value => {
-    if (value) list.reload();
+    if (value) {
+      list.reload();
+      loadReport();
+    }
   }
 );
 
@@ -109,6 +131,29 @@ const columns = computed<DataTableColumns<Api.Forecast.ScaleOutcome>>(() => [
     class="w-960px max-w-95vw"
     @update:show="value => emit('update:show', value)"
   >
+    <div v-if="report" class="delay-report mb-12px">
+      <div class="mb-6px flex flex-wrap items-center gap-8px">
+        <span class="font-medium">{{ t('page.forecast.delay.title') }}</span>
+        <NTag size="small" :bordered="false" :type="verdictTag[report.verdict]">
+          {{ t(`page.forecast.delay.verdict_${report.verdict}`) }}
+        </NTag>
+        <span class="text-12px opacity-65">
+          {{ t('page.forecast.delay.window', { hours: report.hours, judged: report.judged, scaled: report.scaled }) }}
+        </span>
+      </div>
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-x-16px gap-y-6px">
+        <div v-for="item in report.indicators" :key="item.key" class="text-13px leading-20px" :title="item.note">
+          <NTag size="tiny" :bordered="false" :type="verdictTag[item.verdict]">
+            {{ t(`page.forecast.delay.verdict_${item.verdict}`) }}
+          </NTag>
+          <span class="ml-6px">{{ t(`page.forecast.delay.indicator_${item.key}`) }}</span>
+          <div class="pl-2px text-12px opacity-65">{{ indicatorLine(item) }}</div>
+        </div>
+      </div>
+    </div>
+    <div v-else-if="moduleId === null" class="mb-12px text-12px leading-20px opacity-70">
+      {{ t('page.forecast.delay.pickModule') }}
+    </div>
     <div class="mb-8px text-12px leading-20px opacity-70">{{ t('page.forecast.explain.aheadHistoryHelp') }}</div>
     <NDataTable
       remote

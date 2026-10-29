@@ -154,7 +154,7 @@ function toggle(key: string, on: boolean) {
 .rank-list__body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   height: 100%;
   overflow-y: auto;
   padding-right: 4px;

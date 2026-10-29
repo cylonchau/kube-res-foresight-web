@@ -274,6 +274,15 @@ export function fetchGetFallbacks(
   return request<Api.Forecast.Paged<Api.Forecast.FallbackRecord>>({ url: `${base}/fallbacks`, method: 'get', params });
 }
 
+/** the acceptance of the prediction delay of a module over the last hours (24 by default) */
+export function fetchGetModuleDelayReport(id: number, sinceHours?: number) {
+  return request<Api.Forecast.DelayReport>({
+    url: `${base}/modules/${id}/delay-report`,
+    method: 'get',
+    params: { since_hours: sinceHours }
+  });
+}
+
 export function fetchGetScaleOutcomes(params: ListWindow & { module_id?: number; verdict?: string }) {
   return request<Api.Forecast.Paged<Api.Forecast.ScaleOutcome>>({
     url: `${base}/scale-outcomes`,

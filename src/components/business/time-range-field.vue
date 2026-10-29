@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { NButton, NDatePicker, NInputNumber, NPopover, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { formatDateTime } from '@/utils/date';
+import { formatDateTime, fromPickerValue, toPickerValue } from '@/utils/date';
 import { type RangeValue, relativeRange } from '@/hooks/business/use-forecast-modules';
 
 defineOptions({ name: 'TimeRangeField' });
@@ -56,7 +56,8 @@ const label = computed(() => {
 
 watch(show, visible => {
   if (!visible) return;
-  fixed.value = model.value ? [model.value[0], model.value[1]] : null;
+  // the picker shows the wall clock of UTC+8, whatever zone the browser is in
+  fixed.value = model.value ? [toPickerValue(model.value[0]), toPickerValue(model.value[1])] : null;
 });
 
 function pickRelative(n: number, u: Unit) {
@@ -68,7 +69,7 @@ function applyRelative() {
 }
 function applyFixed() {
   if (fixed.value) {
-    model.value = [fixed.value[0], fixed.value[1]] as RangeValue;
+    model.value = [fromPickerValue(fixed.value[0]), fromPickerValue(fixed.value[1])] as RangeValue;
     show.value = false;
   }
 }

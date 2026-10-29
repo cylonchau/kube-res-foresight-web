@@ -74,10 +74,9 @@ const { handleSorterChange, sortParams, resetSort } = useTableSort(() => {
   load();
 });
 
+// the server reads a time without an offset as UTC+8, the zone every time is shown in
 function formatQueryTime(ms: number) {
-  const date = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatDateTime(ms);
 }
 
 async function load() {

@@ -103,15 +103,6 @@ export const generatedRoutes: GeneratedRoute[] = [
           title: 'datasource_metric-mappings',
           i18nKey: 'route.datasource_metric-mappings'
         }
-      },
-      {
-        name: 'datasource_presets',
-        path: '/datasource/presets',
-        component: 'view.datasource_presets',
-        meta: {
-          title: 'datasource_presets',
-          i18nKey: 'route.datasource_presets'
-        }
       }
     ]
   },

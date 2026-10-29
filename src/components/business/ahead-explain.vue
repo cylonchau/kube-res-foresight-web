@@ -141,6 +141,23 @@ const outcomesLine = computed(() => t('page.forecast.explain.aheadOutcomesLine',
       <span class="opacity-70">{{ leadParts }}</span>
     </div>
 
+    <div v-if="ahead.reach" class="flex flex-wrap items-center gap-8px">
+      <span class="font-medium">{{ t('page.forecast.explain.aheadReach') }}</span>
+      <NTag size="small" :bordered="false" :type="ahead.reach.extended ? 'warning' : 'default'">
+        {{ t('page.forecast.explain.aheadReachMinutes', { n: ahead.reach.effective_minutes }) }}
+      </NTag>
+      <span class="opacity-70">
+        {{
+          ahead.reach.extended
+            ? t('page.forecast.explain.aheadReachExtended', {
+                configured: ahead.reach.configured_minutes,
+                n: ahead.reach.effective_minutes
+              })
+            : t('page.forecast.explain.aheadReachFine')
+        }}
+      </span>
+    </div>
+
     <div>
       <div class="mb-4px">{{ t('page.forecast.explain.aheadWindows') }}</div>
       <NDataTable

@@ -5,6 +5,7 @@ import IconTooltip from '@/components/common/icon-tooltip.vue';
 import StatusSelect from '@/components/business/status-select.vue';
 import { $t } from '@/locales';
 import { fetchCreatePeriod, fetchDeletePeriod, fetchGetPeriods, fetchUpdatePeriod } from '@/service/api';
+import { fromPickerValue, toPickerValue } from '@/utils/date';
 
 /**
  * The fixed periods of one module, edited inside the module form: a row per period with its window, the values it pins
@@ -43,7 +44,11 @@ function fromPeriod(p: Api.Forecast.Period): Row {
     id: p.id,
     name: p.name,
     enabled: p.enabled,
-    range: p.abs_start && p.abs_end ? [new Date(p.abs_start).getTime(), new Date(p.abs_end).getTime()] : null,
+    // the picker holds the wall clock of UTC+8
+    range:
+      p.abs_start && p.abs_end
+        ? [toPickerValue(new Date(p.abs_start).getTime()), toPickerValue(new Date(p.abs_end).getTime())]
+        : null,
     replicas: p.replicas,
     cores: p.cpu_milli / 1000,
     memoryGib: p.memory_bytes / GIB,
@@ -65,12 +70,12 @@ async function load(moduleId?: number) {
 }
 
 function add() {
-  const start = new Date();
-  start.setMinutes(0, 0, 0);
+  const hour = 3600 * 1000;
+  const start = Math.floor(Date.now() / hour) * hour;
   rows.value.push({
     name: $t('page.forecast.periods.defaultName', { n: rows.value.length + 1 }),
     enabled: true,
-    range: [start.getTime(), start.getTime() + 24 * 3600 * 1000],
+    range: [toPickerValue(start), toPickerValue(start + 24 * hour)],
     replicas: 0,
     cores: 0,
     memoryGib: 0,
@@ -98,8 +103,8 @@ function payload(row: Row): Api.Forecast.PeriodPayload {
     name: row.name.trim(),
     enabled: row.enabled,
     priority: Math.round(row.priority || 0),
-    abs_start: new Date((row.range as [number, number])[0]).toISOString(),
-    abs_end: new Date((row.range as [number, number])[1]).toISOString(),
+    abs_start: new Date(fromPickerValue((row.range as [number, number])[0])).toISOString(),
+    abs_end: new Date(fromPickerValue((row.range as [number, number])[1])).toISOString(),
     replicas: Math.round(row.replicas || 0),
     cpu_milli: Math.round((row.cores || 0) * 1000),
     memory_bytes: Math.round((row.memoryGib || 0) * GIB)

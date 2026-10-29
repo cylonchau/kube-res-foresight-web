@@ -356,7 +356,6 @@ const local = {
     system_job: '执行记录',
     'system_secret-keys': '集群接入凭据',
     'datasource_metric-mappings': '指标模板',
-    datasource_presets: '内置指标预设库',
     forecast_algorithms: '算法管理',
     'forecast_score-records': '算法评分',
     forecast_ranking: '当前排名',
@@ -638,14 +637,43 @@ const local = {
         recoverCycles: '恢复启用所需周期数',
         recoverCyclesHint:
           '降级后预测恢复正常，需要连续这么多个健康周期才回到算法结果，避免数据时断时续造成震荡。默认 2。',
-        sectionProtection: 'OOM 保护与 JVM 堆压力',
+        sectionProtection: 'OOM 保护',
         oomLookbackDays: 'OOM 回溯天数',
         oomLookbackDaysHint: '这段时间内发生过 OOM，内存推荐就不会低于地板值。默认 14。',
         oomMemoryUplift: 'OOM 内存系数',
         oomMemoryUpliftHint:
           '地板值 = max(OOM 前工作集, 内存 Limits) × 此系数；受模块内存上限约束并如实标注。默认 1.2。',
-        jvmHeapPressure: 'JVM 堆压力阈值',
+        jvmHeapPressure: 'OOM 保护压力（JVM 堆使用率）',
         jvmHeapPressureHint: '堆已用 / 堆上限超过它时，副本推荐按比例上调；填 0 关闭该规则。默认 0.85。',
+        oomWeightEnabled: '启用 OOM 评分权重',
+        oomWeightEnabledHint:
+          '默认关闭：OOM 不参与任何评分。打开后，算法在内存给少了的窗口里每遇到一次 OOM，其内存得分就按下面的权重扣分；OOM 只影响内存得分，不影响 CPU 和副本得分。',
+        oomWeight: 'OOM 评分权重',
+        oomWeightHint: '每次 OOM 扣掉内存得分的比例（0.01～1，默认 0.2），多次 OOM 累计，最多扣 60%。',
+        oomMetrics: 'OOM 监控指标',
+        oomMetricsHint:
+          'OOM 保护读取的指标：OOM 次数、OOM 前工作集、内存 Limits、JVM 堆已用 / 堆上限。单独维护，不与 CPU、内存等预测指标混在一起；没有添加时对应规则不生效，并在推荐说明里写明。',
+        sectionPredict: '预测',
+        predictEnabled: '启用预测',
+        predictEnabledHint:
+          '默认关闭。关闭时模块只采集历史，推荐值使用「兜底默认值」，不运行任何算法；打开后按所选预测模式执行。',
+        predictMode: '预测模式',
+        predictModeHint:
+          '不预测：直接用固定默认配置。固定算法：只运行选定的一个算法，不参与评分切换（仍需通过回测晋升，基线算法除外）。动态算法：所有已启用的算法一起预测，按评分机制选择。',
+        predictMode_none: '不预测（固定默认配置）',
+        predictMode_fixed: '固定算法',
+        predictMode_dynamic: '动态算法（按评分选择）',
+        predictMode_none_short: '不预测',
+        predictMode_dynamic_short: '动态算法',
+        predictFixedTag: '固定：{algorithm}',
+        predictOff: '未启用',
+        colPredict: '预测',
+        predictAlgorithm: '预测算法',
+        predictAlgorithmHint:
+          '只运行这个算法。它被平台关闭时也照常为这个模块运行；非基线算法要先通过回测晋升才会被采用。',
+        predictAlgorithmRequired: '固定算法模式需要选择一个算法',
+        actualReplicasHelp:
+          '工作负载当前实际运行的副本数（operator 最近一次上报）；还没有上报时显示 -。推荐的副本数在「资源推荐」里看。',
         auxHint_oom: '窗口内 OOM 终止次数，用来判断内存是否被低估，并触发 OOM 地板。',
         auxHint_oom_working_set: 'OOM 前的内存工作集峰值，OOM 地板的依据。',
         auxHint_latency: '请求延迟，仅作观察或协变量。',
@@ -685,7 +713,7 @@ const local = {
         fallbackHint:
           '预测不可用时（没有数据、历史不足、预测失败、评分过低）使用的默认值，各字段独立生效并受上下界约束；留 0 表示该字段降级时保持原值。恢复时需要连续若干个健康周期。',
         protectionHint:
-          '需要先在模块的「指标来源」里添加 OOM 次数 / OOM 前工作集 / 内存 Limits 以及 JVM 堆指标；未配置时对应规则不生效并在推荐说明里写明。',
+          'OOM 保护只涉及内存：追溯天数、内存系数、保护压力和评分权重在这里独立设置，它读取的指标在下面单独添加；未添加时对应规则不生效并在推荐说明里写明。',
         service: '服务',
         container: '容器',
         optional: '可选',
@@ -1380,6 +1408,11 @@ const local = {
         trackingSteps: ' 步',
         aheadTitle: '前瞻决策',
         aheadLead: '提前量',
+        aheadReach: '预测期',
+        aheadReachMinutes: '{n} 分钟',
+        aheadReachExtended:
+          '模块配置的预测期 {configured} 分钟比提前量需要的短（看提前量，再多看同样长），预测实际延长到 {n} 分钟，才看得到扩容要应对的负载。',
+        aheadReachFine: '预测期覆盖了提前量的两倍，提前量之后的负载也看得到。',
         aheadLeadParts: 'Pod 就绪 {ready} 秒（{source}）+ 节点 {node} 秒 + 决策等待 {wait} 秒 + 延迟余量 {margin} 秒',
         aheadLeadMeasured: '实测 P90，{n} 次扩容',
         aheadLeadConfigured: '系统设置',
@@ -1579,9 +1612,29 @@ const local = {
           '峰值低估 = max(0, 实际峰值 − 预测峰值) ÷ 实际峰值：为 0 表示没有低估峰值。扩缩容最怕低估峰值。',
         coverage_how: '覆盖率 = 有实际值可对比的预测点 ÷ 全部预测点；低于 100% 说明有的目标时间还没有实际样本。'
       },
+      delay: {
+        title: '预测延迟验收',
+        pickModule:
+          '在页面上选择一个模块再打开本窗口，这里会显示它的预测延迟验收（扩容及时率、迟到时长、预测期是否够长等）。',
+        window: '最近 {hours} 小时：扩容 {scaled} 次，已评判 {judged} 次',
+        target: '目标',
+        insufficient: '样本不足（{n}），暂不评判',
+        verdict_pass: '达标',
+        verdict_fail: '未达标',
+        verdict_insufficient: '待积累',
+        indicator_timely_rate: '扩容及时率',
+        indicator_late_p90_seconds: '迟到时长 P90',
+        indicator_emergency_share: '实时兜底占比',
+        indicator_peak_under_p90: '峰值低估 P90',
+        indicator_reach_over_lead: '预测期 / 提前量',
+        indicator_decision_wait_seconds: '决策等待'
+      },
       compare: {
         actual: '实际值',
         actualReplicas: '实际副本数',
+        dataList: '数据列表',
+        dataListHint:
+          '和上方曲线是同一次查询的结果：同一个模块、指标和时间范围，每个算法每个时刻一行。点击标题展开或收起。',
         predicted: '预测值',
         predictedAt: '预测时间',
         predictedReplicas: '预测副本数',
