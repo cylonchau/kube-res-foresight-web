@@ -91,7 +91,7 @@ const enumOptions = computed(() =>
         :min="spec.min"
         :max="spec.max"
         :precision="spec.type === 'int' ? 0 : undefined"
-        :step="spec.type === 'int' ? 1 : 0.05"
+        :step="spec.type === 'int' ? 1 : Math.min(0.05, (spec.max ?? 1) / 20)"
         :placeholder="spec.required ? '*' : String(spec.default ?? '')"
         clearable
         @update:value="value => update(spec, value)"

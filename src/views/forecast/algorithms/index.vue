@@ -54,7 +54,7 @@ const percent = (value: number) => formatPercent(value);
 // ================= list =================
 const search = reactive({ keyword: '', category: null as string | null, enabled: null as 'true' | 'false' | null });
 const categoryOptions = computed(() =>
-  ['baseline', 'statistical', 'machine_learning', 'custom'].map(value => ({
+  ['baseline', 'statistical', 'machine_learning', 'model_service', 'custom'].map(value => ({
     label: t(`page.forecast.modules.category_${value}`),
     value
   }))
