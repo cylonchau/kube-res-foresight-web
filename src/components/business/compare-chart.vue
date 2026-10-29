@@ -80,7 +80,8 @@ const PALETTE = [
   '#cca300',
   '#e0752d'
 ];
-const ACTUAL = '#f2495c';
+const ACTUAL = '#5b6b82';
+const REPLICAS = '#7aa2d6';
 /** the colour of a stretch with no data: the line over it only shows where the series is missing, it is not a value */
 const GAP = '#e6a23c';
 /** a click counts for the nearest point within this many pixels */
@@ -140,7 +141,7 @@ const entries = computed<Entry[]>(() => {
   }
   if (props.actual?.candles.length) out.push({ name: t('page.forecast.compare.actual'), color: ACTUAL });
   if (props.actualReplicas?.candles.length) {
-    out.push({ name: t('page.forecast.compare.actualReplicas'), color: '#8a95a5' });
+    out.push({ name: t('page.forecast.compare.actualReplicas'), color: REPLICAS });
   }
   return out;
 });
@@ -211,7 +212,9 @@ async function draw() {
       z: 10,
       lineStyle: { width: 1.5, color },
       itemStyle: { color },
-      emphasis: { scale: 3 },
+      // pointing at one forecast (its row in the list of curves or the line itself) brings it forward and dims the others
+      emphasis: { focus: 'series', blurScope: 'coordinateSystem', scale: 3, lineStyle: { width: 2.5 } },
+      blur: { lineStyle: { opacity: 0.3 }, itemStyle: { opacity: 0.3 } },
       data
     });
   });
@@ -223,7 +226,7 @@ async function draw() {
         // the candle is the summary of the bucket Prometheus returned: open, close, lowest and highest value
         data: props.actual.candles.map(c => [time(c.time), c.open, c.close, c.low, c.high]),
         encode: { x: 0, y: [1, 2, 3, 4] },
-        itemStyle: { color: ACTUAL, color0: '#2f9e6e', borderColor: ACTUAL, borderColor0: '#2f9e6e' }
+        itemStyle: { color: ACTUAL, color0: '#2f9e6e', borderColor: ACTUAL, borderColor0: '#2f9e6e', borderWidth: 2 }
       });
     } else {
       const data = withBreaks(
@@ -242,9 +245,10 @@ async function draw() {
         symbolSize: 2,
         smooth: !stepped,
         smoothMonotone: 'x',
-        // the actual values are the line the forecasts are read against: thicker, behind the forecasts
-        z: 5,
-        lineStyle: { width: 2, color: ACTUAL },
+        // the actual values are the ground the forecasts are read against: a thick neutral line over a faint area, behind them
+        z: 3,
+        lineStyle: { width: 3, color: ACTUAL },
+        areaStyle: { color: ACTUAL, opacity: 0.12 },
         itemStyle: { color: ACTUAL },
         emphasis: { scale: 2.4 },
         data
@@ -258,8 +262,12 @@ async function draw() {
       step: 'end',
       yAxisIndex: 1,
       showSymbol: false,
-      lineStyle: { width: 1, color: '#8a95a5', type: 'dotted' },
-      itemStyle: { color: '#8a95a5' },
+      // context, further back than the actual values: a translucent stepped area on the right axis, not a line to compare
+      z: 1,
+      silent: true,
+      lineStyle: { width: 1, color: REPLICAS },
+      areaStyle: { color: REPLICAS, opacity: 0.15 },
+      itemStyle: { color: REPLICAS },
       data: props.actualReplicas.candles.map(c => [time(c.time), c.close])
     });
   }
