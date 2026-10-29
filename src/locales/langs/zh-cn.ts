@@ -1632,9 +1632,6 @@ const local = {
       compare: {
         actual: '实际值',
         actualReplicas: '实际副本数',
-        dataList: '数据列表',
-        dataListHint:
-          '和上方曲线是同一次查询的结果：同一个模块、指标和时间范围，每个算法每个时刻一行。点击标题展开或收起。',
         predicted: '预测值',
         predictedAt: '预测时间',
         predictedReplicas: '预测副本数',

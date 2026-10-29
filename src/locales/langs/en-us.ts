@@ -1690,9 +1690,6 @@ const local = {
       compare: {
         actual: 'Actual',
         actualReplicas: 'Actual replicas',
-        dataList: 'Data list',
-        dataListHint:
-          'The result of the same query as the chart above: the same module, metric and time range, one row per algorithm per time. Click the title to open or fold it.',
         predicted: 'Predicted',
         predictedAt: 'predicted at',
         predictedReplicas: 'predicted replicas',
