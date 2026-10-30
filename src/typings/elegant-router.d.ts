@@ -24,6 +24,7 @@ declare module "@elegant-router/types" {
     "authorization_menu": "/authorization/menu";
     "authorization_role": "/authorization/role";
     "authorization_user": "/authorization/user";
+    "dashboard": "/dashboard";
     "datasource": "/datasource";
     "datasource_connections": "/datasource/connections";
     "datasource_metric-mappings": "/datasource/metric-mappings";
@@ -94,6 +95,7 @@ declare module "@elegant-router/types" {
     | "404"
     | "500"
     | "authorization"
+    | "dashboard"
     | "datasource"
     | "forecast"
     | "forecast-actions"
@@ -129,6 +131,7 @@ declare module "@elegant-router/types" {
     | "authorization_menu"
     | "authorization_role"
     | "authorization_user"
+    | "dashboard"
     | "datasource_connections"
     | "datasource_metric-mappings"
     | "forecast-actions_admissions"

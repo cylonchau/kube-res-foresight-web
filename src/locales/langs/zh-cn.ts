@@ -338,6 +338,7 @@ const local = {
     login: '登录',
     'iframe-page': '外链页面',
     'user-center': '个人中心',
+    dashboard: '首页',
     authorization: '授权管理',
     authorization_menu: '菜单管理',
     authorization_role: '角色管理',
@@ -478,6 +479,36 @@ const local = {
         template: '指标模板',
         templatePlaceholder: '选择这条指标用的模板'
       }
+    },
+    dashboard: {
+      enabled: '已启用模块',
+      enabledHelp: '已启用的模块数 / 全部模块数。',
+      modeHelp: '已启用的模块里，处于这个运行模式的个数。',
+      attention: '需要关注',
+      attentionHelp: '已启用且至少有一项异常的模块数，明细在下方列表。',
+      scaleUps: '扩容次数',
+      scaleDowns: '缩容次数',
+      scaleHelp: '所选时间范围内，operator 实际执行的副本变更次数（只统计已执行，不含被拦截或仅推荐的）。',
+      failedRuns: '失败运行',
+      failedRunsHelp: '所选时间范围内，预测运行失败的次数。',
+      activity: '扩缩容执行',
+      activityHelp: 'operator 实际执行的扩容和缩容，按时间段累计；没有执行的时间段显示为 0。',
+      attentionList: '需要关注的模块',
+      attentionListHelp:
+        '已启用的模块里有异常的：连续失败、结果降级、推荐已过期、从未产生推荐、被切到默认配置（旁路）。最严重的排在前面。',
+      allGood: '没有需要关注的模块',
+      flags: '异常',
+      flag_failing: '连续失败',
+      flag_degraded: '结果降级',
+      flag_stale: '推荐已过期',
+      flag_no_recommendation: '尚无推荐',
+      flag_bypass: '已旁路',
+      recommended: '推荐副本',
+      recommendedAt: '推荐时间',
+      lastRunAt: '最近运行',
+      lastError: '最近失败',
+      failuresInRow: '连续 {n} 次',
+      openEffect: '效果报告'
     },
     forecast: {
       modules: {

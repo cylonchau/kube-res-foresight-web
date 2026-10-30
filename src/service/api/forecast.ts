@@ -297,6 +297,15 @@ export function fetchPreviewModuleChange(id: number, data: Api.Forecast.PreviewC
   return request<Api.Forecast.PreviewReport>({ url: `${base}/modules/${id}/change-preview`, method: 'post', data });
 }
 
+/** the home page over the last hours (24 by default, at most 720) */
+export function fetchGetDashboard(sinceHours?: number) {
+  return request<Api.Forecast.Dashboard>({
+    url: `${base}/dashboard`,
+    method: 'get',
+    params: { since_hours: sinceHours }
+  });
+}
+
 export function fetchGetScaleOutcomes(params: ListWindow & { module_id?: number; verdict?: string }) {
   return request<Api.Forecast.Paged<Api.Forecast.ScaleOutcome>>({
     url: `${base}/scale-outcomes`,

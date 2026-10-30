@@ -170,6 +170,7 @@ const routeMap: RouteMap = {
   "authorization_menu": "/authorization/menu",
   "authorization_role": "/authorization/role",
   "authorization_user": "/authorization/user",
+  "dashboard": "/dashboard",
   "datasource": "/datasource",
   "datasource_connections": "/datasource/connections",
   "datasource_metric-mappings": "/datasource/metric-mappings",

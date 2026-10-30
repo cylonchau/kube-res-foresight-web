@@ -342,6 +342,7 @@ const local = {
     login: 'Login',
     'iframe-page': 'Iframe Page',
     'user-center': 'User Center',
+    dashboard: 'Dashboard',
     authorization: 'Authorization',
     authorization_menu: 'Menu Management',
     authorization_role: 'Role Management',
@@ -483,6 +484,38 @@ const local = {
         template: 'Metric template',
         templatePlaceholder: 'Pick the template'
       }
+    },
+    dashboard: {
+      enabled: 'Enabled modules',
+      enabledHelp: 'Enabled modules / all modules.',
+      modeHelp: 'Enabled modules running in this mode.',
+      attention: 'Need a look',
+      attentionHelp: 'Enabled modules with at least one problem; the list below has the details.',
+      scaleUps: 'Scale-ups',
+      scaleDowns: 'Scale-downs',
+      scaleHelp:
+        'Replica changes the operator actually applied in the time range (held or recommend-only ones are not counted).',
+      failedRuns: 'Failed runs',
+      failedRunsHelp: 'Forecast runs that failed in the time range.',
+      activity: 'Scaling applied',
+      activityHelp:
+        'The scale-ups and scale-downs the operator applied, summed per stretch of time; a stretch with none shows 0.',
+      attentionList: 'Modules that need a look',
+      attentionListHelp:
+        'Enabled modules with a problem: failing in a row, degraded result, expired recommendation, no recommendation yet, or switched to the default configuration (bypass). The worst come first.',
+      allGood: 'No module needs a look',
+      flags: 'Problems',
+      flag_failing: 'Failing',
+      flag_degraded: 'Degraded',
+      flag_stale: 'Expired',
+      flag_no_recommendation: 'No recommendation',
+      flag_bypass: 'Bypass',
+      recommended: 'Recommended',
+      recommendedAt: 'Recommended at',
+      lastRunAt: 'Last run',
+      lastError: 'Last failure',
+      failuresInRow: '{n} in a row',
+      openEffect: 'Effect report'
     },
     forecast: {
       modules: {

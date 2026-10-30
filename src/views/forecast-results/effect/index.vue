@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { NButton, NCard, NEmpty, NFormItemGi, NSelect, NSpin, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import { useRoute } from 'vue-router';
 import ChangePreviewModal from '@/components/business/change-preview-modal.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
@@ -20,6 +21,7 @@ defineOptions({ name: 'ForecastEffect' });
  */
 const { t, locale } = useI18n();
 const { moduleOptions, modules, loadModules } = useForecastModules();
+const route = useRoute();
 
 const search = reactive({ moduleId: null as number | null, range: lastHours(24) as RangeValue | null });
 const report = ref<Api.Forecast.EffectReport | null>(null);
@@ -54,7 +56,9 @@ function resetSearch() {
 
 onMounted(async () => {
   await loadModules();
-  search.moduleId = modules.value[0]?.id ?? null;
+  // the home page links here with the module it flagged
+  const asked = Number(route.query.module);
+  search.moduleId = modules.value.find(item => item.id === asked)?.id ?? modules.value[0]?.id ?? null;
   // the search is submitted by the list-search plugin when the filters above change
 });
 

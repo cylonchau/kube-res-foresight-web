@@ -185,6 +185,49 @@ declare namespace Api {
       elapsed_ms: number;
     }
 
+    /** the home page: the modules by what they are, the ones that need a look, and what the operator applied */
+    type DashboardFlag = 'failing' | 'degraded' | 'stale' | 'no_recommendation' | 'bypass';
+
+    interface DashboardModule {
+      id: number;
+      name: string;
+      namespace: string;
+      workload: string;
+      mode: Mode;
+      algorithm?: string;
+      /** the newest recommendation: 0 and no time when there is none */
+      replicas: number;
+      recommended_at?: string;
+      valid_until?: string;
+      last_run_at?: string;
+      last_error?: string;
+      consecutive_failures: number;
+      degraded_fields: string[];
+      /** what makes the module need a look, worst first */
+      flags: DashboardFlag[];
+    }
+
+    interface Dashboard {
+      at: string;
+      hours: number;
+      /** the width of one bar of the activity chart, in hours */
+      bucket_hours: number;
+      modules: {
+        total: number;
+        enabled: number;
+        auto: number;
+        admission: number;
+        recommend: number;
+        observe: number;
+        predicting: number;
+        bypass: number;
+        attention: number;
+      };
+      totals: { scale_ups: number; scale_downs: number; failed_runs: number };
+      attention: DashboardModule[];
+      activity: Array<{ at: string; ups: number; downs: number }>;
+    }
+
     type PredictMode = 'none' | 'fixed' | 'dynamic';
 
     type Mode = 'observe' | 'recommend' | 'admission' | 'auto';
