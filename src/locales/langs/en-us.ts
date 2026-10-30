@@ -2540,7 +2540,8 @@ const local = {
         ui: 'Interface',
         notify: 'Notifications',
         ldap: 'LDAP sign-in',
-        forecast: 'Forecast and resources'
+        forecast: 'Forecast and resources',
+        operator: 'Operator settings'
       },
       readbackMismatch:
         "The value read back after writing doesn't match 鈥?check which database this server instance is using",

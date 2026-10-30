@@ -97,6 +97,7 @@ function getModuleTagType(key: string): 'default' | 'primary' | 'info' | 'succes
     auth: 'default',
     ldap: 'info',
     forecast: 'success',
+    operator: 'success',
     ui: 'primary',
     notify: 'warning'
   };

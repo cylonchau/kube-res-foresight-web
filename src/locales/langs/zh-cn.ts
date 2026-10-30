@@ -2447,7 +2447,8 @@ const local = {
         ui: '界面设置',
         notify: '通知推送',
         ldap: 'LDAP 认证',
-        forecast: '预测与资源'
+        forecast: '预测与资源',
+        operator: 'Operator 参数'
       },
       readbackMismatch: '配置写入后回读不一致，请检查当前服务实例使用的数据库',
       secretKeys: {
