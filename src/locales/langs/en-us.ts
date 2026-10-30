@@ -525,7 +525,7 @@ const local = {
         more: 'More',
         sectionPace: 'Replica change pace',
         paceHint:
-          'The operator reads this module directly to change the replicas of the workload; no PredictiveScaler is needed. Set how many replicas one action may add or remove per direction and how long to wait after the last action of that direction; 0 means no limit. Scale-up is usually left open; limit scale-down steps and add a cooldown to avoid flapping.',
+          'The operator reads this module directly to change the replicas of the workload. Set how many replicas one action may add or remove per direction and how long to wait after the last action of that direction; 0 means no limit. Scale-up is usually left open; limit scale-down steps and add a cooldown to avoid flapping.',
         scaleUpMaxStep: 'Scale-up step limit (replicas)',
         scaleUpMaxStepHint:
           'The most replicas one scale-up action adds. When the forecast asks for many at once, they arrive over several cycles. 0 = no limit.',
