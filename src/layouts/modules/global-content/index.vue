@@ -26,6 +26,7 @@ const tabStore = useTabStore();
 
 const transitionName = computed(() => (themeStore.page.animate ? themeStore.page.animateMode : ''));
 
+// the key of the login page does not follow its path (see the template): a change of login module changes the card, not the page
 function resetScroll() {
   const el = document.querySelector(`#${LAYOUT_SCROLL_EL_ID}`);
 
@@ -46,7 +47,7 @@ function resetScroll() {
         <component
           :is="Component"
           v-if="appStore.reloadFlag"
-          :key="tabStore.getTabIdByRoute(route)"
+          :key="route.name === 'login' ? 'login' : tabStore.getTabIdByRoute(route)"
           :class="{ 'p-10px': showPadding }"
           class="flex-grow bg-layout transition-300"
         />

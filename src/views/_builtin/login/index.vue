@@ -60,10 +60,6 @@ const bgColor = computed(() => {
     :style="{ '--login-bg': bgColor, '--login-accent': bgThemeColor }"
   >
     <div class="login-decoration" aria-hidden="true" />
-    <section class="login-brand-top relative z-2">
-      <SystemLogo small class="size-26px" />
-      <h1>{{ $t('system.title') }}</h1>
-    </section>
     <div class="login-actions relative z-2">
       <ThemeSchemaSwitch
         :theme-schema="themeStore.themeScheme"
@@ -80,21 +76,19 @@ const bgColor = computed(() => {
       />
     </div>
     <div class="login-panel relative z-4">
-      <section class="login-slogan">
-        <strong>{{ $t('page.login.brand.title') }}</strong>
-        <span class="mt-6px text-14px op-70">{{ $t('page.login.brand.subtitle') }}</span>
-      </section>
-      <NCard :bordered="false" class="w-auto rd-12px">
-        <div class="w-440px lt-sm:w-300px">
-          <main class="pt-12px">
-            <h3 class="text-18px text-primary font-medium">{{ $t(activeModule.label) }}</h3>
-            <div class="pt-16px">
-              <Transition :name="themeStore.page.animateMode" mode="out-in" appear>
-                <component :is="activeModule.component" />
-              </Transition>
-            </div>
+      <header class="login-brand">
+        <SystemLogo class="login-brand-logo" />
+        <h1>{{ $t('system.title') }}</h1>
+        <p>{{ $t('page.login.brand.title') }} · {{ $t('page.login.brand.subtitle') }}</p>
+      </header>
+      <NCard :bordered="false" class="login-card">
+        <!-- the heading and the form change together, in place: the card and the page around it stay where they are -->
+        <Transition name="login-swap" mode="out-in">
+          <main :key="props.module || 'pwd-login'" class="login-main">
+            <h2 class="login-heading">{{ $t(activeModule.label) }}</h2>
+            <component :is="activeModule.component" />
           </main>
-        </div>
+        </Transition>
       </NCard>
     </div>
     <footer class="login-footer">Copyright © {{ currentYear }} kube-resource-fcst</footer>
@@ -116,6 +110,7 @@ const bgColor = computed(() => {
 .login-shell {
   background: color-mix(in srgb, var(--login-bg) 88%, var(--login-accent));
   flex-direction: column;
+  justify-content: flex-start;
   gap: 0;
   padding: 32px 8vw;
 }
@@ -136,43 +131,70 @@ const bgColor = computed(() => {
     #f3f5f9;
 }
 
-.login-brand-top {
-  position: absolute;
-  top: 22px;
-  left: 30px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: color-mix(in srgb, var(--login-accent) 82%, #172033);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.login-slogan {
-  position: absolute;
-  bottom: calc(100% + 16px);
-  left: 50%;
-  width: max-content;
-  max-width: calc(100vw - 48px);
+.login-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  transform: translateX(-50%);
+  margin-bottom: 28px;
   text-align: center;
-  color: color-mix(in srgb, var(--login-accent) 72%, #172033);
-  line-height: 1.35;
+  color: color-mix(in srgb, var(--login-accent) 78%, #172033);
   user-select: none;
   -webkit-user-select: none;
 }
 
-.login-slogan strong {
-  font-size: 18px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+.login-brand-logo {
+  width: 56px;
+  height: 56px;
+}
+
+.login-brand h1 {
+  margin: 14px 0 0;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.login-brand p {
+  margin: 8px 0 0;
+  max-width: calc(100vw - 48px);
+  font-size: 14px;
+  line-height: 1.5;
+  opacity: 0.75;
 }
 
 .login-panel {
-  transform: translateY(20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* the block starts at a fixed height, so the brand does not move when the card grows or shrinks with the form (password, OTP, ...) */
+  margin-top: clamp(40px, 15vh, 150px);
+}
+
+.login-card {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  border-radius: 12px;
+}
+
+.login-main {
+  padding-top: 4px;
+}
+
+.login-heading {
+  margin: 0 0 20px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.login-swap-enter-active,
+.login-swap-leave-active {
+  transition: opacity 0.14s ease;
+}
+
+.login-swap-enter-from,
+.login-swap-leave-to {
+  opacity: 0;
 }
 
 .login-actions {
@@ -194,28 +216,25 @@ const bgColor = computed(() => {
   font-size: 16px;
 }
 
-.login-brand-top h1 {
-  margin: 0;
-  padding-top: 1px;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.login-brand-title {
-  flex: 1;
-  margin: 0;
-  font-size: 30px;
-  line-height: 56px;
-  text-align: center;
-}
-
 :deep(.n-card) {
   box-shadow: 0 22px 60px color-mix(in srgb, var(--login-accent) 16%, transparent);
 }
 
-:deep(.n-card__content) {
-  padding-top: 16px;
+.login-card :deep(.n-card-content) {
+  padding: 28px 32px 32px !important;
+}
+
+/* the rest of the app is dense (global.css sets 12px on controls); the login form is the one page that is read, not scanned: the fields and the checkbox 14px, the button 15px, the placeholders a readable grey */
+.login-main :deep(.n-input) {
+  font-size: 14px;
+}
+
+.login-main :deep(.n-checkbox) {
+  --n-font-size: 14px !important;
+}
+
+.login-main :deep(.n-button) {
+  font-size: 15px;
 }
 
 .login-shell.is-dark {
@@ -236,8 +255,7 @@ const bgColor = computed(() => {
     #111827;
 }
 
-.login-shell.is-dark .login-brand-top,
-.login-shell.is-dark .login-slogan,
+.login-shell.is-dark .login-brand,
 .login-shell.is-dark .login-actions,
 .login-shell.is-dark .login-actions :deep(.n-icon),
 .login-shell.is-dark .login-actions :deep(button),
@@ -261,9 +279,17 @@ const bgColor = computed(() => {
  */
 
 @media (max-width: 640px) {
-  .login-brand-title {
-    font-size: 22px;
-    line-height: 48px;
+  .login-shell {
+    padding: 24px 16px;
+  }
+
+  .login-brand h1 {
+    font-size: 24px;
+  }
+
+  .login-brand-logo {
+    width: 48px;
+    height: 48px;
   }
 }
 </style>
