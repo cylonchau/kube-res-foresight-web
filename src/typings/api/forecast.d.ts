@@ -53,6 +53,119 @@ declare namespace Api {
       indicators: DelayIndicator[];
     }
 
+    /** one metric of the algorithm in use, from its evaluated runs; the figures are 0 and meaningless while `enough` is false */
+    interface EffectAccuracy {
+      metric: string;
+      runs: number;
+      points: number;
+      enough: boolean;
+      wape: number;
+      peak_under: number;
+      bias: number;
+      coverage: number;
+    }
+
+    interface EffectWaste {
+      judged: number;
+      over: number;
+      under: number;
+      over_replicas: number;
+      under_replicas: number;
+      surplus_replica_hours: number;
+      enough: boolean;
+      over_share: number;
+      under_share: number;
+      note?: string;
+    }
+
+    interface EffectStability {
+      ups: number;
+      downs: number;
+      reversals: number;
+      recommendations: number;
+      degraded: number;
+      reasons: Record<string, number>;
+      enough: boolean;
+    }
+
+    interface EffectAdoption {
+      total: number;
+      rows: Array<{ algorithm: string; count: number; share: number }>;
+      enough: boolean;
+    }
+
+    interface EffectTuning {
+      algorithm: string;
+      tuned: number;
+      failed: number;
+      last_tuned_at?: string;
+      age_hours?: number;
+      last_failed_at?: string;
+      last_failure?: string;
+    }
+
+    /** what the forecasts of a module were worth over a window; every section says whether it has enough samples */
+    interface EffectReport {
+      module_id: number;
+      since: string;
+      hours: number;
+      algorithm?: string;
+      accuracy: EffectAccuracy[];
+      delay: DelayReport;
+      waste: EffectWaste;
+      stability: EffectStability;
+      adoption: EffectAdoption;
+      tuning?: EffectTuning;
+    }
+
+    /** the setting to try; a field that is left out keeps the saved value */
+    interface PreviewChange {
+      algorithm?: string;
+      params?: Record<string, unknown>;
+      headroom_ratio?: number;
+      pod_capacity_rps?: number;
+      min_replicas?: number;
+      max_replicas?: number;
+      short_term_recent_minutes?: number;
+      short_term_trigger?: number;
+      short_term_fade_minutes?: number;
+      short_term_down_share?: number;
+    }
+
+    interface PreviewPoint {
+      at: string;
+      current: number;
+      proposed: number;
+      need: number;
+    }
+
+    interface PreviewSide {
+      algorithm: string;
+      under: number;
+      over: number;
+      under_replicas: number;
+      over_replicas: number;
+      risk_error: number;
+      replica_hours: number;
+      changes: number;
+    }
+
+    interface PreviewReport {
+      module_id: number;
+      since: string;
+      until: string;
+      hours: number;
+      window_minutes: number;
+      windows: number;
+      skipped: number;
+      current: PreviewSide;
+      proposed: PreviewSide;
+      points: PreviewPoint[];
+      largest: PreviewPoint[];
+      notes: string[];
+      elapsed_ms: number;
+    }
+
     type PredictMode = 'none' | 'fixed' | 'dynamic';
 
     type Mode = 'observe' | 'recommend' | 'admission' | 'auto';

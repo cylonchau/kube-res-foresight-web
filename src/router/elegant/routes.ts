@@ -230,6 +230,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'forecast-results_effect',
+        path: '/forecast-results/effect',
+        component: 'view.forecast-results_effect',
+        meta: {
+          title: 'forecast-results_effect',
+          i18nKey: 'route.forecast-results_effect'
+        }
+      },
+      {
         name: 'forecast-results_evaluations',
         path: '/forecast-results/evaluations',
         component: 'view.forecast-results_evaluations',

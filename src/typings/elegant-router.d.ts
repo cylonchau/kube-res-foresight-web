@@ -40,6 +40,7 @@ declare module "@elegant-router/types" {
     "forecast-modules_modules": "/forecast-modules/modules";
     "forecast-results": "/forecast-results";
     "forecast-results_algorithm-runs": "/forecast-results/algorithm-runs";
+    "forecast-results_effect": "/forecast-results/effect";
     "forecast-results_evaluations": "/forecast-results/evaluations";
     "forecast-results_history": "/forecast-results/history";
     "forecast-results_leaderboard": "/forecast-results/leaderboard";
@@ -135,6 +136,7 @@ declare module "@elegant-router/types" {
     | "forecast-actions_recommendations"
     | "forecast-modules_modules"
     | "forecast-results_algorithm-runs"
+    | "forecast-results_effect"
     | "forecast-results_evaluations"
     | "forecast-results_history"
     | "forecast-results_leaderboard"

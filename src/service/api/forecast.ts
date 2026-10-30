@@ -283,6 +283,20 @@ export function fetchGetModuleDelayReport(id: number, sinceHours?: number) {
   });
 }
 
+/** what the forecasts of a module were worth over the last hours (24 by default, at most 720) */
+export function fetchGetModuleEffectReport(id: number, sinceHours?: number) {
+  return request<Api.Forecast.EffectReport>({
+    url: `${base}/modules/${id}/effect-report`,
+    method: 'get',
+    params: { since_hours: sinceHours }
+  });
+}
+
+/** replay the recent past with the saved setting and with a change; nothing is stored */
+export function fetchPreviewModuleChange(id: number, data: Api.Forecast.PreviewChange & { since_hours?: number }) {
+  return request<Api.Forecast.PreviewReport>({ url: `${base}/modules/${id}/change-preview`, method: 'post', data });
+}
+
 export function fetchGetScaleOutcomes(params: ListWindow & { module_id?: number; verdict?: string }) {
   return request<Api.Forecast.Paged<Api.Forecast.ScaleOutcome>>({
     url: `${base}/scale-outcomes`,

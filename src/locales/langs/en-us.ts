@@ -367,6 +367,7 @@ const local = {
     'forecast-results': 'Forecast results',
     'forecast-results_history': 'History data',
     'forecast-results_evaluations': 'Measured accuracy',
+    'forecast-results_effect': 'Effect report',
     'forecast-results_leaderboard': 'Measured leaderboard',
     'forecast-actions': 'Recommendations and execution',
     'forecast-actions_recommendations': 'Resource recommendations',
@@ -1687,6 +1688,151 @@ const local = {
         indicator_peak_under_p90: 'Peak under-estimation P90',
         indicator_reach_over_lead: 'Forecast reach / lead',
         indicator_decision_wait_seconds: 'Decision wait'
+      },
+      effect: {
+        title: 'Forecast effect report',
+        pickModule: 'Pick a module to see how its forecasts have done lately.',
+        range: 'Range',
+        testNote:
+          'The figures come from the forecasts, recommendations and scaling executions the platform recorded; a part with too few samples says so instead of giving a number. Data from a test environment is not a production conclusion.',
+        notEnough: 'Not enough samples ({n})',
+        algorithmInUse: 'Algorithm in use',
+        noAlgorithm: 'No algorithm in use yet',
+        preview: 'Change preview',
+        previewHelp:
+          'Replay this period to see what scaling would have done if a setting were different. Read-only, nothing is saved.',
+        refresh: 'Refresh',
+        empty: 'This module has nothing to summarise in the range.',
+        accuracy: 'Accuracy',
+        accuracyHelp:
+          'How far the forecasts of the algorithm in use were from the values measured afterwards, from the back-filled evaluations. Each metric is counted on its own, weighted by the forecast steps that had an actual. Fewer than 5 evaluations give no figure.',
+        accuracyRuns: '{runs} evaluations / {points} forecast steps',
+        wape: 'Weighted absolute percentage error',
+        wapeHelp: 'Sum of the absolute errors divided by the sum of the actual values. Smaller is better.',
+        peakUnder: 'Peak shortfall',
+        peakUnderHelp:
+          'How much lower the forecast peak was than the measured peak. Smaller is safer: a shortfall scales up late.',
+        bias: 'Mean bias',
+        biasHelp:
+          'Mean of forecast minus actual, in the unit of the metric. Positive is high (wasteful), negative is low (short).',
+        coverage: 'Coverage',
+        coverageHelp:
+          'Share of the actual values at or below the forecast. For a high-quantile forecast it should be near that quantile.',
+        delay: 'In time',
+        delayHelp:
+          'Whether scale-ups were Ready before the load needed them: the six indicators and targets of the delay acceptance, unchanged.',
+        waste: 'Waste',
+        wasteHelp:
+          'The replicas each recommendation asked for while it stood, against the most replicas the measured load needed in the same period: more is surplus, fewer is short. It needs a workload-level CPU, memory or request-rate series and a per-Pod request or capacity, and cannot be measured without them.',
+        wasteNone:
+          'Cannot be measured: no recommendation asked for replicas in this range, or there is no workload-level CPU, memory or request-rate series with a per-Pod request or capacity.',
+        wasteJudged: 'Recommendations compared',
+        overShare: 'Surplus share',
+        overShareHelp: 'Share of the compared recommendations that asked for more replicas than were needed.',
+        overReplicas: 'Mean surplus when over',
+        overReplicasHelp: 'How many replicas too many, on average, in the recommendations that were over.',
+        underShare: 'Shortfall share',
+        underShareHelp: 'Share of the compared recommendations that asked for fewer replicas than were needed.',
+        underReplicas: 'Mean shortfall when short',
+        underReplicasHelp: 'How many replicas too few, on average, in the recommendations that were short.',
+        surplusHours: 'Surplus replica-hours',
+        surplusHoursHelp: 'The surplus replicas times the hours each recommendation stood, added up.',
+        stability: 'Stability',
+        stabilityHelp: 'From the scaling the operator actually applied and from the recommendations.',
+        ups: 'Scale-ups',
+        downs: 'Scale-downs',
+        reversals: 'Reversals',
+        reversalsHelp:
+          'A scale-down within 30 minutes of a scale-up, or a scale-up within 30 minutes of a scale-down, is one reversal.',
+        degraded: 'Degraded recommendations',
+        degradedHelp:
+          'How many recommendations had a field fall back to the module fallback or the original value. Counted by reason below, once per recommendation.',
+        degradedOf: '{n} of {total}',
+        reasons: 'Reasons',
+        noReasons: 'Nothing degraded',
+        adoption: 'Who did the work',
+        adoptionHelp:
+          'The share of the recommendations each algorithm decided, from the algorithm in use of each recommendation.',
+        adoptionCount: '{n}',
+        tuning: 'Model service fine-tuning',
+        tuningHelp:
+          'The model service is fine-tuned regularly with the parameters saved on the platform. The tuned copy lives in the memory of the service and is submitted again after a restart; a failed fine-tune does not stop forecasts.',
+        tuned: 'Fine-tuned',
+        failed: 'Failed',
+        tunedAge: 'Latest fine-tune',
+        hoursAgo: '{n} h ago',
+        lastFailure: 'Latest failure'
+      },
+      preview: {
+        title: 'Change preview',
+        intro:
+          'Replays the recent past twice from the stored history: once with the saved setting and once with the change below, and shows the replicas each asked for in every window. Read-only: no prediction, recommendation or training record is written, and no module or algorithm is changed.',
+        window: 'Replay range',
+        windowHours: 'Last {hours} hours',
+        windowHelp:
+          'A longer range is slower; at most 400 windows are replayed, more is refused, so shorten the range.',
+        algorithm: 'Algorithm',
+        algorithmHelp:
+          'Leave empty to use the algorithm in use. Another algorithm runs with its saved parameters (override them below); trying it does not enable it.',
+        algorithmInUse: 'The algorithm in use',
+        params: 'Algorithm parameters',
+        headroom: 'Headroom ratio',
+        headroomHelp:
+          'The forecast is multiplied by this before it becomes replicas; the headroom_ratio of the module, at least 1.',
+        capacity: 'Capacity per Pod',
+        capacityHelp: 'Requests per second one Pod carries; the pod_capacity_rps of the module.',
+        minReplicas: 'Minimum replicas',
+        minReplicasHelp: 'The floor of the replica count; the min_replicas of the module.',
+        maxReplicas: 'Maximum replicas',
+        maxReplicasHelp: 'The ceiling of the replica count; the max_replicas of the module.',
+        shortRecent: 'Short-term correction: recent window (minutes)',
+        shortRecentHelp:
+          'Corrects the forecast of long-memory algorithms with the last minutes of measurements; 0 turns it off.',
+        shortTrigger: 'Short-term correction: trigger ratio',
+        shortTriggerHelp:
+          'The correction applies only when the measurements differ from the forecast by more than this.',
+        shortFade: 'Short-term correction: fade (minutes)',
+        shortFadeHelp: 'The correction fades away over this many minutes.',
+        shortDown: 'Short-term correction: downward share',
+        shortDownHelp: 'How much of a downward correction is applied when the measurements are below the forecast.',
+        run: 'Start preview',
+        running: 'Replaying...',
+        reset: 'Clear the change',
+        nothing: 'Fill in at least one change before starting.',
+        result: 'Result',
+        current: 'Saved setting',
+        proposed: 'With the change',
+        windows: 'Windows compared',
+        windowsValue: '{n}, {m} minutes each',
+        under: 'Windows short',
+        over: 'Windows over',
+        underReplicas: 'Mean shortfall when short',
+        overReplicas: 'Mean surplus when over',
+        riskError: 'Risk error',
+        riskErrorHelp:
+          '(3 x replicas short + replicas surplus) / replicas needed: a shortfall counts three times a surplus. Smaller is better.',
+        replicaHours: 'Replica-hours',
+        replicaHoursHelp:
+          'The replicas asked for in each window times its hours, added up: roughly the resources held.',
+        changes: 'Replica changes',
+        changesHelp: 'How many times the replica count differs from the window before. More is less stable.',
+        chart: 'Replicas asked for in each window',
+        seriesCurrent: 'Saved setting',
+        seriesProposed: 'With the change',
+        seriesNeed: 'Needed',
+        largest: 'Where they differ most',
+        largestRow: '{at}: saved {current} -> change {proposed} (needed {need})',
+        noDifference: 'Both settings asked for the same replicas in every window.',
+        noteNeed:
+          'Needed is the replicas the measured load asked for in each window, with no safety margin and the saved replica bounds. It is replayed history, not a promise about the future.',
+        noteDecision:
+          'Each window is forecast only from the data before it. What the platform decides after the forecast (cooldowns, steps, the look-ahead, protections) is not replayed.',
+        noteModelService:
+          'A model service answers from its pretrained model in a preview: it is not fine-tuned and no tuned copy is used.',
+        noteSkipped:
+          '{n} of {total} windows were left out: one of the settings could not forecast them, or their load is incomplete.',
+        elapsed: 'Took {ms} ms',
+        failed: 'The preview failed'
       },
       compare: {
         actual: 'Actual',
