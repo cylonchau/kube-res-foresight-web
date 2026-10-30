@@ -112,6 +112,12 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Admission) =>
       row.origin ? t(`page.forecast.admissions.origin_${row.origin}`, row.origin) : '-'
   },
+  request_uid: {
+    title: t('page.forecast.admissions.requestUid'),
+    key: 'request_uid',
+    width: 250,
+    render: (row: Api.Forecast.Admission) => copyCell(row.request_uid, true)
+  },
   applied: {
     title: t('page.forecast.admissions.result'),
     key: 'applied',

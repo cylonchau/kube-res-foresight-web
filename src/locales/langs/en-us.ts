@@ -579,7 +579,7 @@ const local = {
         limitCpuRatio: 'CPU limit ratio',
         limitMemoryRatio: 'Memory limit ratio',
         limitRatioHint:
-          'In admission or auto mode a new Pod gets limit = recommended request x this ratio (1-10); 0 leaves the limit as the workload declares it. A memory ratio of 1 makes the request the OOM line, so 1.2 or more is usual. Only new Pods are changed; running Pods wait until the workload rolls.',
+          'A module sets requests only; the limit follows from them: limit = final request x this ratio (1-10), for example a memory request of 10 GiB and a ratio of 1.2 give a 12 GiB memory limit. 0 leaves the limit as the workload declares it. It is computed and written at admission only (the Pods of a new or updated workload); scaling changes the replica count and never requests or limits. A memory ratio of 1 makes the request the OOM line, so 1.2 or more is usual. Running Pods wait until the workload rolls.',
         headroomHint:
           'The predicted peak is multiplied by this ratio; 1 leaves no headroom. It is a policy parameter: set it from your tolerance.',
         podCapacity: 'Safe capacity per pod (RPS)',
@@ -697,7 +697,7 @@ const local = {
           'If an OOM kill happened within this many days the memory recommendation is never below the floor. Default 14.',
         oomMemoryUplift: 'OOM memory uplift',
         oomMemoryUpliftHint:
-          'Floor = max(working set before OOM, memory limit) x this factor, capped by the module maximum and flagged when it is. Default 1.2.',
+          'Only raises the floor of the memory request: floor = max(working set before OOM, request in force) x this factor, capped by the module maximum and flagged when it is. The request in force is the limit seen on the workload, or that limit / the memory limit ratio when the module sets one, so the two factors never stack. Order: forecast -> raised to the OOM floor -> module bounds -> request -> limit = request x memory limit ratio (the OOM factor is not applied to the limit again). Default 1.2.',
         jvmHeapPressure: 'OOM protection pressure (JVM heap usage)',
         jvmHeapPressureHint:
           'Above this heap used / heap maximum ratio the replica recommendation is raised in proportion; 0 turns the rule off. Default 0.85.',
@@ -1401,6 +1401,19 @@ const local = {
       },
       executions: {
         decisionVersion: 'Snapshot',
+        recordId: 'Record ID',
+        state: 'Degrade state',
+        state_normal: 'Normal',
+        state_cached: 'Cached',
+        state_holding: 'Holding',
+        state_degraded: 'Degraded',
+        state_recovering: 'Recovering',
+        source: 'Replicas followed',
+        source_decision: 'Platform decision',
+        source_cache: 'Cached decision',
+        source_fallback: 'Fallback',
+        source_frozen: 'Held as is',
+        reportedAt: 'Received at',
         empty: 'No execution records yet: kube-resource-fcst-operator reports after each reconcile.',
         keywordPlaceholder: 'Target, namespace, reason',
         action_ScaleUp: 'Scale up',
@@ -2091,7 +2104,8 @@ const local = {
         limits: 'Limits (CPU / memory)',
         limitMemory: 'Memory limits',
         title: 'Admission decisions',
-        help: 'Only admissions are recorded: the question asked when a workload is created, and the first Pod of a new revision (a deployment or an update) that Kyverno asks the platform about: applied or not, the CPU/memory/GPU given, the original values and the reason. The other Pods of a revision are made by scaling up or by a replaced Pod; they are not admission operations, so they are answered the same but never recorded, and there is no switch for it. Forecasting, periodic calculation and replica decisions never write here. GPU applies to new Pods only.',
+        help: 'Only admissions are recorded: the question asked when a workload is created, and the first Pod of a new revision (a deployment or an update) that Kyverno asks the platform about: applied or not, the CPU/memory/GPU given, the original values and the reason. The other Pods of a revision are made by scaling up or by a replaced Pod; they are not admission operations, so they are answered the same but never recorded, and there is no switch for it. Each record carries the uid of the Kyverno admission request (request.uid): a question without one (a person, a script, the operator) is answered but not recorded, and one uid is recorded once. Forecasting, periodic calculation and replica decisions never write here. GPU applies to new Pods only.',
+        requestUid: 'Admission request UID',
         origin: 'Origin',
         origin_deploy: 'Creation',
         origin_rollout: 'Deploy / update',

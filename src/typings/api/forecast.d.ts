@@ -1096,6 +1096,15 @@ declare namespace Api {
       reason: string;
       /** the recommendation version the operator acted on */
       decision_version: number;
+      /** the operator's id of the action, unique: a report sent twice is stored once; empty for rows from before it existed */
+      record_id?: string | null;
+      /** when the platform heard of the action: later than created_at (when the operator acted) after an outage */
+      reported_at?: string | null;
+      /** what the replicas followed: decision, cache, fallback or frozen */
+      decision_source?: string;
+      /** the state of the module in an outage of the platform: normal, cached, holding, degraded or recovering */
+      degrade_state?: string;
+      operator?: string;
     }
 
     interface Paged<T> {
@@ -1390,6 +1399,9 @@ declare namespace Api {
       /** rollout, scale, deploy, or empty when the caller did not say */
       origin?: string;
       revision?: string;
+      /** the uid of the admission request (Kyverno's request.uid): what ties the record to a real admission event */
+      request_uid?: string | null;
+      operation?: string;
     }
 
     /** one source's line of the multi-metric calculation, see multimetric.Row */

@@ -147,6 +147,41 @@ const columnMap: Record<string, any> = {
     sorter: true,
     render: (row: Api.Forecast.Execution) => (row.decision_version ? String(row.decision_version) : '-')
   },
+  record_id: {
+    title: t('page.forecast.executions.recordId'),
+    key: 'record_id',
+    width: 190,
+    render: (row: Api.Forecast.Execution) => copyCell(row.record_id, true)
+  },
+  degrade_state: {
+    title: t('page.forecast.executions.state'),
+    key: 'degrade_state',
+    width: 110,
+    align: 'center',
+    render: (row: Api.Forecast.Execution) => {
+      const state = row.degrade_state;
+      if (!state) return '-';
+      return h(NTag, { size: 'small', bordered: false, type: state === 'normal' ? 'default' : 'warning' }, () =>
+        t(`page.forecast.executions.state_${state}`, state)
+      );
+    }
+  },
+  decision_source: {
+    title: t('page.forecast.executions.source'),
+    key: 'decision_source',
+    width: 110,
+    align: 'center',
+    render: (row: Api.Forecast.Execution) => {
+      const source = row.decision_source;
+      return source ? t(`page.forecast.executions.source_${source}`, source) : '-';
+    }
+  },
+  reported_at: {
+    title: t('page.forecast.executions.reportedAt'),
+    key: 'reported_at',
+    width: 170,
+    render: (row: Api.Forecast.Execution) => formatDateTime(row.reported_at)
+  },
   reason: {
     title: t('page.forecast.evaluation.reason'),
     key: 'reason',
