@@ -49,11 +49,6 @@ declare namespace Api {
       verified: boolean;
     }
 
-    interface DemoStatus {
-      exists: boolean;
-      module_id?: number;
-    }
-
     interface DatasourceOption {
       id: number;
       name: string;

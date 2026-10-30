@@ -31,14 +31,11 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchBatchModules,
   fetchBypassModule,
-  fetchCreateForecastDemo,
   fetchCreateForecastModule,
   fetchCreateModuleSource,
   fetchCreatePeriod,
-  fetchDeleteForecastDemo,
   fetchDeleteForecastModule,
   fetchGetAlgorithms,
-  fetchGetForecastDemo,
   fetchGetForecastModules,
   fetchGetModuleSources,
   fetchGetPeriods,
@@ -88,33 +85,6 @@ const algorithmOptions = ref<Array<{ label: string; value: string }>>([]);
 async function loadAlgorithms() {
   const { data } = await fetchGetAlgorithms({ page: 1, page_size: 200 });
   algorithmOptions.value = (data?.list || []).map(item => ({ label: item.id, value: item.id }));
-}
-// ---- the demo: a synthetic workload that runs the whole pipeline, made and removed here because it is a module
-const demo = ref<{ exists: boolean; module_id?: number }>({ exists: false });
-const demoBusy = ref(false);
-async function loadDemo() {
-  const { data } = await fetchGetForecastDemo();
-  if (data) demo.value = data;
-}
-async function createDemo() {
-  demoBusy.value = true;
-  const { data, error } = await fetchCreateForecastDemo();
-  demoBusy.value = false;
-  if (!error && data) {
-    message.success(t('page.datasource.presets.demoReady'));
-    await loadDemo();
-    await load();
-  }
-}
-async function removeDemo() {
-  demoBusy.value = true;
-  const { error } = await fetchDeleteForecastDemo();
-  demoBusy.value = false;
-  if (!error) {
-    message.success(t('common.deleteSuccess'));
-    await loadDemo();
-    await load();
-  }
 }
 const replicaModeOptions = computed(() =>
   (['fixed', 'dynamic'] as const).map(value => ({ label: t(`page.forecast.modules.replicaMode_${value}`), value }))
@@ -780,7 +750,6 @@ const modalTitle = computed(() =>
 onMounted(() => {
   cfg.initColumnConfig();
   loadAlgorithms();
-  loadDemo();
   load();
 });
 </script>
@@ -837,17 +806,6 @@ onMounted(() => {
     >
       <template #suffix>
         <NButton size="small" @click="openPreview">{{ t('page.forecast.modules.previewMetric') }}</NButton>
-        <NButton size="small" type="primary" ghost :loading="demoBusy" @click="createDemo">
-          {{ t(demo.exists ? 'page.datasource.presets.demoRefresh' : 'page.datasource.presets.demoCreate') }}
-        </NButton>
-        <NPopconfirm v-if="demo.exists" @positive-click="removeDemo">
-          <template #trigger>
-            <NButton size="small" ghost type="error" :loading="demoBusy">
-              {{ t('page.datasource.presets.demoDelete') }}
-            </NButton>
-          </template>
-          {{ t('page.datasource.presets.demoDeleteConfirm') }}
-        </NPopconfirm>
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>

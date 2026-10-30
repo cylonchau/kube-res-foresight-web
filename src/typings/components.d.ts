@@ -13,6 +13,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AheadExplain: typeof import('./../components/business/ahead-explain.vue')['default']
+    AlgorithmCenter: typeof import('./../components/business/algorithm-center.vue')['default']
     AlgorithmParamsEditor: typeof import('./../components/advanced/algorithm-params-editor.vue')['default']
     AppProvider: typeof import('./../components/common/app-provider.vue')['default']
     BacktestMetrics: typeof import('./../components/business/backtest-metrics.vue')['default']
@@ -130,6 +131,7 @@ declare module 'vue' {
 // For TSX support
 declare global {
   const AheadExplain: typeof import('./../components/business/ahead-explain.vue')['default']
+  const AlgorithmCenter: typeof import('./../components/business/algorithm-center.vue')['default']
   const AlgorithmParamsEditor: typeof import('./../components/advanced/algorithm-params-editor.vue')['default']
   const AppProvider: typeof import('./../components/common/app-provider.vue')['default']
   const BacktestMetrics: typeof import('./../components/business/backtest-metrics.vue')['default']

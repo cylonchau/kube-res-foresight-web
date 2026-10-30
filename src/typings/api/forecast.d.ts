@@ -643,6 +643,8 @@ declare namespace Api {
       keyword?: string;
       category?: string;
       enabled?: boolean | string;
+      /** the part of the catalog: the algorithms, the model services, or (left out) both */
+      scope?: 'algorithms' | 'models';
     }
 
     interface AlgorithmPayload {

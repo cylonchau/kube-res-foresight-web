@@ -36,6 +36,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "forecast-results_history": () => import("@/views/forecast-results/history/index.vue"),
   "forecast-results_leaderboard": () => import("@/views/forecast-results/leaderboard/index.vue"),
   forecast_algorithms: () => import("@/views/forecast/algorithms/index.vue"),
+  forecast_models: () => import("@/views/forecast/models/index.vue"),
   forecast_ranking: () => import("@/views/forecast/ranking/index.vue"),
   "forecast_score-records": () => import("@/views/forecast/score-records/index.vue"),
   monitoring_curves: () => import("@/views/monitoring/curves/index.vue"),

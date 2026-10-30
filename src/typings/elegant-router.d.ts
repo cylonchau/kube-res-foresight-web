@@ -29,6 +29,7 @@ declare module "@elegant-router/types" {
     "datasource_metric-mappings": "/datasource/metric-mappings";
     "forecast": "/forecast";
     "forecast_algorithms": "/forecast/algorithms";
+    "forecast_models": "/forecast/models";
     "forecast_ranking": "/forecast/ranking";
     "forecast_score-records": "/forecast/score-records";
     "forecast-actions": "/forecast-actions";
@@ -141,6 +142,7 @@ declare module "@elegant-router/types" {
     | "forecast-results_history"
     | "forecast-results_leaderboard"
     | "forecast_algorithms"
+    | "forecast_models"
     | "forecast_ranking"
     | "forecast_score-records"
     | "monitoring_curves"

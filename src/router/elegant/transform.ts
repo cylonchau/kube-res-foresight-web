@@ -175,6 +175,7 @@ const routeMap: RouteMap = {
   "datasource_metric-mappings": "/datasource/metric-mappings",
   "forecast": "/forecast",
   "forecast_algorithms": "/forecast/algorithms",
+  "forecast_models": "/forecast/models",
   "forecast_ranking": "/forecast/ranking",
   "forecast_score-records": "/forecast/score-records",
   "forecast-actions": "/forecast-actions",

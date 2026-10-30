@@ -66,19 +66,3 @@ export function fetchApplyMetricPreset(
 ) {
   return request<Api.Datasource.MetricMapping>({ url: `/api/v1/metric-presets/${id}/apply`, method: 'post', data });
 }
-
-export function fetchGetForecastDemo() {
-  return request<Api.Datasource.DemoStatus>({ url: '/api/v1/forecast-demo', method: 'get' });
-}
-
-export function fetchCreateForecastDemo() {
-  return request<{ module_id: number; datasource_id: number; created: boolean }>({
-    url: '/api/v1/forecast-demo',
-    method: 'post',
-    timeout: 10 * 60 * 1000
-  });
-}
-
-export function fetchDeleteForecastDemo() {
-  return request({ url: '/api/v1/forecast-demo', method: 'delete' });
-}

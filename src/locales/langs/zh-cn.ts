@@ -357,6 +357,7 @@ const local = {
     'system_secret-keys': '集群接入凭据',
     'datasource_metric-mappings': '指标模板',
     forecast_algorithms: '算法管理',
+    forecast_models: '模型管理',
     'forecast_score-records': '算法评分',
     forecast_ranking: '当前排名',
     monitoring_datasets: 'Metrics 数据集',
@@ -970,8 +971,16 @@ const local = {
           '模块数据集里一个指标的真实历史曲线：打开时直接向 Prometheus 查询所选区间（包括模块创建之前已有的数据），每根 K 线是一个时间桶的开、高、低、收。可缩放、拖动，悬停看数值；下方列表是同一份数据，可勾选导出。',
         keywordPlaceholder: '搜索指标名称、PromQL 或含义'
       },
+      models: {
+        title: '模型管理',
+        editTitle: '编辑模型服务',
+        keywordPlaceholder: '搜索模型服务名称或说明',
+        help: '模型服务是把历史数据通过 HTTP 发给外部时序基础模型（如 Chronos-2、TimesFM）取得预测的设置，模型本身不在平台里运行。这里管理服务的地址、协议、密钥环境变量和平台定义的微调参数；启用后它和其他算法一起参与预测、回测评分与动态选择，服务不可用时只有这一路预测失败。启用前必须填写端点。'
+      },
       algorithms: {
         title: '算法管理',
+        roleHelp:
+          '基线：作为对照的朴素算法，目前是持续值（naive，最后一个值）和季节持续（seasonal_naive，重复一个周期之前的值）。它们几乎不需要训练和参数，永远具备参与资格，不用回测晋升；回测和评分时每个候选算法都要和基线比，赢不过基线就不会被采用，即使没启用，回测也会隐式加入“最后一个值”和“前一天同一时刻”两个基线做对照。候选：除基线外的所有算法（统计、机器学习、公式、派生）。候选要在回测里按风险加权误差胜过基线才算晋升，之后才参与动态选择。基线和候选一样参与预测和评分，区别只在资格和被比较的位置；季节持续是基线，因为“一个周期之前的同一时刻”是周期性负载最常用的朴素对照，它是基线不代表它不准或不会被采用。',
         originBuiltin: '内置',
         method: '计算过程与依据',
         originCustom: '自定义',
@@ -2185,12 +2194,7 @@ const local = {
         series: '读取的指标',
         labels: '需要的标签',
         usage: '使用说明',
-        limitations: '已知限制',
-        demoCreate: '创建演示',
-        demoRefresh: '刷新演示',
-        demoDelete: '删除演示',
-        demoDeleteConfirm: '将删除演示数据源、映射、模块及其全部预测数据，不影响其他对象。',
-        demoReady: '演示已就绪：数据为程序生成的合成数据，并非真实测量。'
+        limitations: '已知限制'
       }
     },
     authorization: {

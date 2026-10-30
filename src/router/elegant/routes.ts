@@ -125,6 +125,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'forecast_models',
+        path: '/forecast/models',
+        component: 'view.forecast_models',
+        meta: {
+          title: 'forecast_models',
+          i18nKey: 'route.forecast_models'
+        }
+      },
+      {
         name: 'forecast_ranking',
         path: '/forecast/ranking',
         component: 'view.forecast_ranking',
