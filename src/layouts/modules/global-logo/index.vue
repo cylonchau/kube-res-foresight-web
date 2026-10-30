@@ -18,11 +18,11 @@ withDefaults(defineProps<Props>(), {
 <template>
   <RouterLink
     to="/"
-    class="w-full h-full flex items-center justify-start pl-12px pr-8px nowrap-hidden select-none transition-all duration-200"
+    class="w-full h-full flex items-center justify-center px-12px nowrap-hidden select-none transition-all duration-200"
     :class="{ '!justify-center !px-0': !showTitle }"
   >
     <!-- the artwork is centred in its own box (see the viewBox of the svg), so the logo needs no offset to sit on the middle of the header -->
-    <SystemLogo class="size-28px shrink-0" />
+    <SystemLogo class="size-28px shrink-0 -ml-1px" />
     <h2
       v-show="showTitle"
       class="m-0 pl-10px text-16px text-primary font-bold leading-none tracking-tight transition duration-300 ease-in-out"

@@ -17,6 +17,17 @@ declare namespace StorageType {
     /** Fixed sider with mix-menu */
     mixSiderFixed: CommonType.YesOrNo;
     tableDensity: NaiveUI.RowDensity;
+    /**
+     * What the history page remembers in this browser, so the choices are not made again at every visit: the module, the metric, the line
+     * type, the length of a relative time window and the curves switched off in the chart (null: none was chosen, the default applies).
+     */
+    compareView: {
+      moduleId: number | null;
+      metric: string | null;
+      lineType: 'line' | 'step' | 'candle';
+      relativeMs: number | null;
+      hidden: string[] | null;
+    };
     /** The refresh token */
     refreshToken: string;
     /** The theme color */

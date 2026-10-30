@@ -78,6 +78,24 @@ declare namespace Api {
       note?: string;
     }
 
+    /** what ran against what the measured load needed: Pod-hours and the capacity SLO */
+    interface EffectCapacity {
+      points: number;
+      covered_hours: number;
+      actual_pod_hours: number;
+      needed_pod_hours: number;
+      surplus_pod_hours: number;
+      shortfall_pod_hours: number;
+      short_minutes: number;
+      attainment: number;
+      coverage: number;
+      enough: boolean;
+      /** the capacity SLO, a share */
+      target: number;
+      verdict: 'pass' | 'fail' | 'insufficient';
+      note?: string;
+    }
+
     interface EffectStability {
       ups: number;
       downs: number;
@@ -113,6 +131,7 @@ declare namespace Api {
       accuracy: EffectAccuracy[];
       delay: DelayReport;
       waste: EffectWaste;
+      capacity: EffectCapacity;
       stability: EffectStability;
       adoption: EffectAdoption;
       tuning?: EffectTuning;

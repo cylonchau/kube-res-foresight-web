@@ -214,6 +214,64 @@ const sections = computed<Section[]>(() => {
     ]
   });
 
+  // Pod-hours and the capacity SLO: what ran against what the measured load needed
+  const p = r.capacity;
+  out.push({
+    key: 'capacity',
+    title: t(e('capacity')),
+    help: t(e('capacityHelp')),
+    tag: { text: t(`page.forecast.delay.verdict_${p.verdict}`), type: verdictType[p.verdict] },
+    groups: [
+      {
+        key: 'capacity',
+        note: p.enough
+          ? t(e('capacityCovered'), { hours: num(p.covered_hours, 1), share: formatPercent(p.coverage, 0) })
+          : undefined,
+        cells: p.enough
+          ? [
+              {
+                key: 'slo',
+                label: t(e('slo')),
+                help: t(e('sloHelp')),
+                value: formatPercent(p.attainment, 2),
+                sub: `${t('page.forecast.delay.target')} >= ${formatPercent(p.target, 0)}`
+              },
+              {
+                key: 'actual',
+                label: t(e('actualPodHours')),
+                help: t(e('actualPodHoursHelp')),
+                value: num(p.actual_pod_hours, 1)
+              },
+              {
+                key: 'needed',
+                label: t(e('neededPodHours')),
+                help: t(e('neededPodHoursHelp')),
+                value: num(p.needed_pod_hours, 1)
+              },
+              {
+                key: 'surplus',
+                label: t(e('surplusPodHours')),
+                help: t(e('surplusPodHoursHelp')),
+                value: num(p.surplus_pod_hours, 1)
+              },
+              {
+                key: 'shortfall',
+                label: t(e('shortfallPodHours')),
+                help: t(e('shortfallPodHoursHelp')),
+                value: num(p.shortfall_pod_hours, 1)
+              },
+              {
+                key: 'short',
+                label: t(e('shortMinutes')),
+                help: t(e('shortMinutesHelp')),
+                value: t(e('minutes'), { n: Math.round(p.short_minutes) })
+              }
+            ]
+          : [{ key: 'none', label: '', value: p.points ? notEnough(p.points) : t(e('capacityNone')), muted: true }]
+      }
+    ]
+  });
+
   // stability
   const s = r.stability;
   const reasons = Object.entries(s.reasons).sort((a, b) => b[1] - a[1]);

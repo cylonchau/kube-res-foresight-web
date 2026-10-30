@@ -16,9 +16,11 @@ import { useI18n } from 'vue-i18n';
 import CompareChart, { type LineType, type PickedPoint } from '@/components/business/compare-chart.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
-import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
+import { lastHours, rangeParams, relativeRange, useForecastModules } from '@/hooks/business/use-forecast-modules';
+import type { RangeValue } from '@/hooks/business/use-forecast-modules';
 import { fetchCompareModule, fetchGetAlgorithms } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { localStg } from '@/utils/storage';
 import { formatMetric, formatPercent } from '@/utils/format';
 import { reasonText } from '@/utils/reason';
 
@@ -56,6 +58,8 @@ function defaultRange(): [number, number] {
 
 const loading = ref(false);
 const compare = ref<Api.Forecast.Compare | null>(null);
+/** the curves switched off in the chart; kept in this browser with the filters, null while none was chosen */
+const chartHidden = ref<string[] | null>(null);
 const algorithmIds = ref<string[]>([]);
 
 const metricOptions = computed(() =>
@@ -95,6 +99,7 @@ watch(
 function resetSearch() {
   search.moduleId = modules.value[0]?.id ?? null;
   search.algorithms = [];
+  chartHidden.value = null;
   search.lineType = 'line';
   search.metric = metricOptions.value[0]?.value ?? null;
   search.range = defaultRange();
@@ -306,6 +311,31 @@ const atColumns = computed<DataTableColumns<Row>>(() => [
   }
 ]);
 
+// ---- what the page remembers in this browser: the module, the metric, the line type, a relative time window and the curves switched
+// off, so they are not chosen again at every visit. A fixed time range is not kept: a stale window would open the page on old data.
+let restored = false;
+function remember() {
+  if (!restored) return;
+  localStg.set('compareView', {
+    moduleId: search.moduleId,
+    metric: search.metric,
+    lineType: search.lineType,
+    relativeMs: (search.range as RangeValue | null)?.relativeMs ?? null,
+    hidden: chartHidden.value
+  });
+}
+watch(
+  () => [
+    search.moduleId,
+    search.metric,
+    search.lineType,
+    (search.range as RangeValue | null)?.relativeMs,
+    chartHidden.value
+  ],
+  remember,
+  { deep: true }
+);
+
 onMounted(async () => {
   try {
     const [, algos] = await Promise.all([
@@ -316,9 +346,17 @@ onMounted(async () => {
   } catch {
     message.error(t('page.forecast.evaluation.loadFailed'));
   }
-  search.moduleId = modules.value[0]?.id ?? null;
-  search.metric = metricOptions.value[0]?.value ?? null;
-  search.range = defaultRange();
+  const saved = localStg.get('compareView');
+  const savedModule = modules.value.find(item => item.id === saved?.moduleId);
+  search.moduleId = savedModule?.id ?? modules.value[0]?.id ?? null;
+  // the metric, the line type and the window come back only where they still apply to what is there now
+  search.metric = metricOptions.value.some(item => item.value === saved?.metric)
+    ? (saved?.metric ?? null)
+    : (metricOptions.value[0]?.value ?? null);
+  if (saved?.lineType && ['line', 'step', 'candle'].includes(saved.lineType)) search.lineType = saved.lineType;
+  search.range = saved?.relativeMs && saved.relativeMs > 0 ? relativeRange(saved.relativeMs) : defaultRange();
+  chartHidden.value = Array.isArray(saved?.hidden) ? saved.hidden : null;
+  restored = true;
   // the search is submitted by the list-search plugin when the filters above change
 });
 </script>
@@ -361,6 +399,7 @@ onMounted(async () => {
       :content-style="{ height: '100%', minHeight: 0 }"
     >
       <CompareChart
+        v-model:hidden="chartHidden"
         fill
         :legend="legendLabels"
         :actual="compare?.actual ?? null"

@@ -36,7 +36,7 @@ const appliedOptions = computed(() => [
 ]);
 
 const originOptions = computed(() =>
-  ['deploy', 'rollout', 'scale'].map(value => ({ label: t(`page.forecast.admissions.origin_${value}`), value }))
+  ['deploy', 'rollout'].map(value => ({ label: t(`page.forecast.admissions.origin_${value}`), value }))
 );
 
 // the list below reads the sort parameters, and a change of the sort searches it again

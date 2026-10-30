@@ -59,6 +59,11 @@ const props = withDefaults(defineProps<Props>(), {
   emptyReason: '',
   fill: false
 });
+/**
+ * The curves the user switched off. null means no choice was made: the first few forecasts are drawn. The page keeps the choice and gives
+ * it back at the next visit, so it is not made again.
+ */
+const chosenHidden = defineModel<string[] | null>('hidden', { default: null });
 const emit = defineEmits<{ refresh: []; pick: [point: PickedPoint] }>();
 const { t } = useI18n();
 
@@ -150,15 +155,18 @@ const drawable = computed(() => entries.value.filter(item => !item.idle).length)
 
 function toggle(name: string, on: boolean) {
   hidden.value = on ? hidden.value.filter(item => item !== name) : [...hidden.value, name];
+  chosenHidden.value = hidden.value;
   draw();
 }
 function showAll() {
   hidden.value = [];
+  chosenHidden.value = hidden.value;
   draw();
 }
 function showOnly(count: number) {
   const names = entries.value.filter(item => !item.idle).map(item => item.name);
   hidden.value = names.slice(count);
+  chosenHidden.value = hidden.value;
   draw();
 }
 
@@ -184,7 +192,12 @@ async function draw() {
   const allNames = entries.value.map(item => item.name).join('|');
   if (allNames !== seriesOrder.value) {
     seriesOrder.value = allNames;
-    hidden.value = props.algorithms.slice(MAX_DEFAULT_LINES).map(alg => alg.algorithm_id);
+    // the choice the user made before (kept by the page) comes back; without one, the first few forecasts are drawn. A saved choice
+    // names only curves that still exist: one that is gone is dropped, and a curve that is new is drawn.
+    const existing = new Set(entries.value.map(item => item.name));
+    hidden.value = chosenHidden.value
+      ? chosenHidden.value.filter(name => existing.has(name))
+      : props.algorithms.slice(MAX_DEFAULT_LINES).map(alg => alg.algorithm_id);
   }
   // the forecasts come first and the actual values after them: what was predicted is read against what happened
   props.algorithms.forEach((alg, index) => {

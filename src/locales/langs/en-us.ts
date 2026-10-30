@@ -1746,6 +1746,30 @@ const local = {
         underReplicasHelp: 'How many replicas too few, on average, in the recommendations that were short.',
         surplusHours: 'Surplus replica-hours',
         surplusHoursHelp: 'The surplus replicas times the hours each recommendation stood, added up.',
+        capacity: 'Execution and capacity',
+        capacityHelp:
+          'The replicas that really ran against the replicas the load needed, moment by moment: Ready replicas come from the replicas series, the need is what the measured load asks for at the target utilization, the largest of the resources, with no safety margin (the way scale-ups are judged). It measures the execution, not the recommendations: the surplus and shortfall of those are under Waste.',
+        capacityCovered: '{hours} hours compared, {share} of the range',
+        capacityNone:
+          'Cannot be measured: it needs a replicas series, a workload-level CPU, memory or request-rate series with a per-Pod request or capacity, and enough moments to compare.',
+        slo: 'Capacity SLO',
+        sloHelp:
+          'A capacity SLO: the share of the compared time in which at least as many replicas were Ready as the load needed. It is met when it reaches the system parameter forecast.slo_capacity_target_percent (99% by default). It is not a latency or error-rate SLO.',
+        actualPodHours: 'Pod-hours that ran',
+        actualPodHoursHelp:
+          'The Ready replicas at each moment times the hours the moment stands for, added up: the resource time actually held.',
+        neededPodHours: 'Pod-hours needed',
+        neededPodHoursHelp:
+          'The replicas the measured load needed at each moment times the hours the moment stands for, added up.',
+        surplusPodHours: 'Surplus Pod-hours',
+        surplusPodHoursHelp:
+          'The Ready replicas above the need times the hours, added up: resources held beyond what the load needed. It is not a saving.',
+        shortfallPodHours: 'Shortfall Pod-hours',
+        shortfallPodHoursHelp: 'The Ready replicas below the need times the hours, added up.',
+        shortMinutes: 'Time with fewer Ready than needed',
+        shortMinutesHelp:
+          'The total time fewer replicas were Ready than the load needed. Holes in the data are not counted.',
+        minutes: '{n} min',
         stability: 'Stability',
         stabilityHelp: 'From the scaling the operator actually applied and from the recommendations.',
         ups: 'Scale-ups',
@@ -2034,11 +2058,10 @@ const local = {
         limits: 'Limits (CPU / memory)',
         limitMemory: 'Memory limits',
         title: 'Admission decisions',
-        help: 'Only real admissions are recorded: the question asked when a workload is created, and the first Pod of a new revision (a deployment or an update) that Kyverno asks the platform about: applied or not, the CPU/memory/GPU given, the original values and the reason. The other Pods of a revision (made by scaling up or a replaced Pod) are answered the same but not recorded by default; the system parameter forecast.admission_record_scaling turns that on. Forecasting, periodic calculation and replica decisions never write here. GPU applies to new Pods only.',
+        help: 'Only admissions are recorded: the question asked when a workload is created, and the first Pod of a new revision (a deployment or an update) that Kyverno asks the platform about: applied or not, the CPU/memory/GPU given, the original values and the reason. The other Pods of a revision are made by scaling up or by a replaced Pod; they are not admission operations, so they are answered the same but never recorded, and there is no switch for it. Forecasting, periodic calculation and replica decisions never write here. GPU applies to new Pods only.',
         origin: 'Origin',
         origin_deploy: 'Creation',
         origin_rollout: 'Deploy / update',
-        origin_scale: 'Scale / replace',
         empty:
           'No admission records in the time range: a record is written only when the Kyverno policy asks the platform about a Pod whose namespace and workload match a module (refusals included, such as the switch Allow admission mode being off or the module not being in admission mode). No record means no such request has reached the platform yet: check that the Kyverno policy is deployed and can reach /api/v1/admission/recommendations, and the mode of the module.',
         target: 'Workload',
