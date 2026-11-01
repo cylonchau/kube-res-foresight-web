@@ -6,3 +6,4 @@ export * from './route';
 export * from './system';
 export * from './datasource';
 export * from './forecast';
+export * from './assistant';

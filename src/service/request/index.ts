@@ -15,6 +15,8 @@ import type { RequestInstanceState } from './type';
 
 const isHttpProxy = import.meta.env.DEV && import.meta.env.VITE_HTTP_PROXY === 'Y';
 const { baseURL, otherBaseURL } = getServiceBaseURL(import.meta.env, isHttpProxy);
+/** the base of the platform API, for the one request that is not made through axios (a file saved from the response) */
+export const serviceBaseURL = baseURL;
 const publicAuthUrls = new Set([
   '/api/v1/auth/login',
   '/api/v1/auth/login/captcha',
@@ -182,6 +184,9 @@ export const request = createFlatRequest(
         await authStore.resetStore();
         return;
       }
+
+      // a caller that shows the failure itself (the chat puts it in the conversation) asks for no pop-up; an expired session was handled above
+      if (String(error.config?.headers?.['X-Silent-Error'] ?? '') === '1') return;
 
       let message = error.message;
       let backendErrorCode = '';

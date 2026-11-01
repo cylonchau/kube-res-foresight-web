@@ -84,9 +84,13 @@ const editForm = reactive({
 });
 
 const rules = {
-  // most LDAP parameters may stay empty (bind account, phone attribute, group search ...): the server validates the whole
+  // most LDAP parameters may stay empty (bind account, phone attribute, group search ...): the server validates the whole; so may the
+  // model and the key of the assistant (clearing the key switches it off)
   config_value: {
-    validator: () => editForm.config_key.startsWith('ldap.') || editForm.config_value.trim() !== '',
+    validator: () =>
+      editForm.config_key.startsWith('ldap.') ||
+      ['assistant.model', 'assistant.api_key'].includes(editForm.config_key) ||
+      editForm.config_value.trim() !== '',
     message: t('form.required'),
     trigger: 'blur'
   }
@@ -98,6 +102,7 @@ function getModuleTagType(key: string): 'default' | 'primary' | 'info' | 'succes
     ldap: 'info',
     forecast: 'success',
     operator: 'success',
+    assistant: 'info',
     ui: 'primary',
     notify: 'warning'
   };
@@ -108,9 +113,9 @@ function getModuleLabel(key: string): string {
   return categoryLabel(categoryOf(key));
 }
 
+/** a parameter that holds a credential, by its name: "token" and "key" alone are not enough (a token lifetime, a reply length in tokens) */
 function isSecretKey(key: string): boolean {
-  const lower = key.toLowerCase();
-  return lower.includes('token') || lower.includes('secret') || lower.includes('password') || lower.includes('key');
+  return /(password|secret|api_key|private_key|access_key)$/i.test(key.trim());
 }
 
 function isMultilineKey(key: string): boolean {

@@ -15,6 +15,7 @@ import { localStg } from '@/utils/storage';
 import { SetupStoreId } from '@/enum';
 import { $t } from '@/locales';
 import { formatDateTime } from '@/utils/date';
+import { useAssistantStore } from '../assistant';
 import { useRouteStore } from '../route';
 import { useTabStore } from '../tab';
 import { useAppStore } from '../app';
@@ -80,6 +81,8 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     clearAuthStorage();
 
     authStore.$reset();
+    // the conversation with the assistant belongs to the person who logged in
+    useAssistantStore().reset();
 
     if (!route.meta.constant) {
       await toLogin();

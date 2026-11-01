@@ -339,6 +339,7 @@ const local = {
     'iframe-page': '外链页面',
     'user-center': '个人中心',
     dashboard: '首页',
+    assistant: 'AI 助手',
     authorization: '授权管理',
     authorization_menu: '菜单管理',
     authorization_role: '角色管理',
@@ -509,6 +510,36 @@ const local = {
       lastError: '最近失败',
       failuresInRow: '连续 {n} 次',
       openEffect: '效果报告'
+    },
+    assistant: {
+      title: 'AI 助手',
+      help: '用自然语言询问服务的运行情况：助手通过只读的查询读取平台已记录的数据（模块、扩缩容记录、准入记录、效果报告、后台任务），再用语言模型回答。它只能读，不能修改任何设置、模块或副本数。需要先在系统设置里填好语言模型的地址、模型名和密钥并启用。',
+      model: '模型',
+      exportMarkdown: '导出运行状态（文档）',
+      exportJson: '导出运行状态（JSON）',
+      notReady: 'AI 助手还不能使用',
+      statusUnknown: '读取不到助手的状态',
+      openSettings: '去系统设置',
+      failedUnknown: '没有得到回答，请稍后再试',
+      welcome: '问我服务运行得怎么样',
+      readOnly: '我只能读取平台已记录的数据，不会修改任何东西。',
+      example1: '服务现在运行得怎么样？',
+      example2: '哪些模块需要关注，为什么？',
+      example3: '导出服务运行状态',
+      placeholder: '输入问题，Enter 发送，Shift+Enter 换行',
+      send: '发送',
+      clear: '清空对话',
+      thinking: '正在查询并整理…',
+      readFrom: '依据：',
+      download: '下载',
+      downloadFailed: '下载失败，请重试',
+      openPage: '整页打开',
+      tool_get_service_status: '服务运行状态',
+      tool_list_modules: '模块列表',
+      tool_get_module_effect_report: '模块效果报告',
+      tool_list_scaling_actions: '扩缩容记录',
+      tool_list_admissions: '准入记录',
+      tool_export_status_report: '导出运行状态'
     },
     forecast: {
       modules: {
@@ -2512,7 +2543,8 @@ const local = {
         notify: '通知推送',
         ldap: 'LDAP 认证',
         forecast: '预测与资源',
-        operator: 'Operator 参数'
+        operator: 'Operator 参数',
+        assistant: 'AI 助手'
       },
       readbackMismatch: '配置写入后回读不一致，请检查当前服务实例使用的数据库',
       secretKeys: {

@@ -40,6 +40,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'assistant',
+    path: '/assistant',
+    component: 'layout.base$view.assistant',
+    meta: {
+      title: 'assistant',
+      i18nKey: 'route.assistant'
+    }
+  },
+  {
     name: 'authorization',
     path: '/authorization',
     component: 'layout.base',
