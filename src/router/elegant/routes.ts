@@ -65,6 +65,15 @@ export const generatedRoutes: GeneratedRoute[] = [
           title: 'ai-config_skill',
           i18nKey: 'route.ai-config_skill'
         }
+      },
+      {
+        name: 'ai-config_task',
+        path: '/ai-config/task',
+        component: 'view.ai-config_task',
+        meta: {
+          title: 'ai-config_task',
+          i18nKey: 'route.ai-config_task'
+        }
       }
     ]
   },

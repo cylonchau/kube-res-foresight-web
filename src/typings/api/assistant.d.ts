@@ -153,5 +153,66 @@ declare namespace Api {
       llm_id: number;
       enabled: boolean;
     }
+
+    /** an AI scheduled task: a prompt asked of the language model on a schedule, the answer mailed */
+    interface TaskRow {
+      id: number;
+      created_at: string;
+      name: string;
+      owner_name: string;
+      prompt: string;
+      schedule: string;
+      enabled: boolean;
+      /** the model it asks; 0 is the default one */
+      llm_id: number;
+      lang: 'zh' | 'en';
+      recipients: string[];
+      /** made in the chat or on the page */
+      source: 'chat' | 'page';
+      next_run_at: string | null;
+      last_run_at: string | null;
+      last_status: '' | 'running' | 'success' | 'failed';
+      last_error: string;
+    }
+
+    interface TaskList {
+      list: TaskRow[];
+      total: number;
+    }
+
+    interface TaskPayload {
+      name: string;
+      prompt: string;
+      schedule: string;
+      lang: 'zh' | 'en';
+      enabled: boolean;
+      llm_id: number;
+      recipients: string[];
+    }
+
+    interface SchedulePreview {
+      time_zone: string;
+      next: string[];
+      error: string;
+    }
+
+    interface TaskRun {
+      id: number;
+      created_at: string;
+      trigger: 'schedule' | 'manual';
+      status: 'running' | 'success' | 'failed';
+      started_at: string;
+      finished_at: string | null;
+      output: string;
+      tools: string;
+      delivered: string[];
+      error: string;
+      delivery_error: string;
+    }
+
+    interface TaskRunList {
+      list: TaskRun[];
+      total: number;
+    }
   }
 }

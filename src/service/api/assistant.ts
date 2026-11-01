@@ -98,6 +98,46 @@ export function fetchBatchDeleteAssistantSkills(ids: number[]) {
   return request<string>({ url: `${base}/skills/batch-delete`, method: 'post', data: { ids } });
 }
 
+export function fetchGetAssistantTasks(params: {
+  page: number;
+  page_size: number;
+  keyword?: string;
+  enabled?: boolean;
+  source?: 'chat' | 'page';
+}) {
+  return request<Api.Assistant.TaskList>({ url: `${base}/tasks`, method: 'get', params });
+}
+
+/** the next times a schedule fires, or why it is not valid */
+export function fetchPreviewAssistantSchedule(schedule: string) {
+  return request<Api.Assistant.SchedulePreview>({ url: `${base}/tasks/preview`, method: 'get', params: { schedule } });
+}
+
+export function fetchCreateAssistantTask(data: Api.Assistant.TaskPayload) {
+  return request<Api.Assistant.TaskRow>({ url: `${base}/tasks`, method: 'post', data });
+}
+
+export function fetchUpdateAssistantTask(id: number, data: Api.Assistant.TaskPayload) {
+  return request<Api.Assistant.TaskRow>({ url: `${base}/tasks/${id}`, method: 'put', data });
+}
+
+export function fetchDeleteAssistantTask(id: number) {
+  return request<string>({ url: `${base}/tasks/${id}`, method: 'delete' });
+}
+
+export function fetchBatchDeleteAssistantTasks(ids: number[]) {
+  return request<string>({ url: `${base}/tasks/batch-delete`, method: 'post', data: { ids } });
+}
+
+/** queues a run of the task in the task center, which does not wait for the schedule */
+export function fetchRunAssistantTask(id: number) {
+  return request<string>({ url: `${base}/tasks/${id}/run`, method: 'post' });
+}
+
+export function fetchGetAssistantTaskRuns(id: number, params: { page: number; page_size: number }) {
+  return request<Api.Assistant.TaskRunList>({ url: `${base}/tasks/${id}/runs`, method: 'get', params });
+}
+
 /**
  * Downloads a file the assistant made available. The file is the response of an API that needs the login, so it is fetched with it and
  * saved from memory; a plain link would not carry it.

@@ -22,6 +22,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   login: () => import("@/views/_builtin/login/index.vue"),
   "ai-config_llm": () => import("@/views/ai-config/llm/index.vue"),
   "ai-config_skill": () => import("@/views/ai-config/skill/index.vue"),
+  "ai-config_task": () => import("@/views/ai-config/task/index.vue"),
   authorization_menu: () => import("@/views/authorization/menu/index.vue"),
   authorization_role: () => import("@/views/authorization/role/index.vue"),
   authorization_user: () => import("@/views/authorization/user/index.vue"),
