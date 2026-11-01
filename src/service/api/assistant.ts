@@ -2,10 +2,12 @@ import { request, serviceBaseURL } from '../request';
 import { getAuthorization } from '../request/shared';
 
 const base = '/api/v1/assistant';
+/** the chat shows a failure in the conversation itself, so the request is asked not to pop one up as well */
+const silent = { 'X-Silent-Error': '1' };
 
-/** whether the assistant can be used, and what is missing when it cannot */
+/** whether the assistant is on, whether a language model can be asked, and its skills */
 export function fetchAssistantStatus() {
-  return request<Api.Assistant.Availability>({ url: `${base}/status`, method: 'get' });
+  return request<Api.Assistant.Availability>({ url: `${base}/status`, method: 'get', headers: silent });
 }
 
 /** one question: the conversation so far, the last message being the question; a language model may take a while to answer */
@@ -15,7 +17,53 @@ export function fetchAssistantChat(messages: Api.Assistant.Turn[], lang: string)
     method: 'post',
     data: { messages, lang },
     timeout: 5 * 60 * 1000,
-    headers: { 'X-Silent-Error': '1' }
+    headers: silent
+  });
+}
+
+/** a skill of the chat (/report, /export, ...) with what was typed after it */
+export function fetchAssistantSkill(name: string, args: string, lang: string) {
+  return request<Api.Assistant.Reply>({
+    url: `${base}/skill`,
+    method: 'post',
+    data: { name, args, lang },
+    timeout: 5 * 60 * 1000,
+    headers: silent
+  });
+}
+
+export function fetchGetAssistantConnections(params: {
+  page: number;
+  page_size: number;
+  keyword?: string;
+  enabled?: boolean;
+}) {
+  return request<Api.Assistant.ConnectionList>({ url: `${base}/connections`, method: 'get', params });
+}
+
+export function fetchCreateAssistantConnection(data: Api.Assistant.ConnectionPayload) {
+  return request<Api.Assistant.Connection>({ url: `${base}/connections`, method: 'post', data });
+}
+
+export function fetchUpdateAssistantConnection(id: number, data: Api.Assistant.ConnectionPayload) {
+  return request<Api.Assistant.Connection>({ url: `${base}/connections/${id}`, method: 'put', data });
+}
+
+export function fetchDeleteAssistantConnection(id: number) {
+  return request<string>({ url: `${base}/connections/${id}`, method: 'delete' });
+}
+
+export function fetchBatchDeleteAssistantConnections(ids: number[]) {
+  return request<string>({ url: `${base}/connections/batch-delete`, method: 'post', data: { ids } });
+}
+
+/** asks the connection the form holds right now a small question (an empty key means the stored one) */
+export function fetchTestAssistantConnection(data: Api.Assistant.ConnectionPayload) {
+  return request<Api.Assistant.TestResult>({
+    url: `${base}/connections/test`,
+    method: 'post',
+    data,
+    timeout: 90 * 1000
   });
 }
 

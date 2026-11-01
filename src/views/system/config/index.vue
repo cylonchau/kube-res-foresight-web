@@ -84,13 +84,9 @@ const editForm = reactive({
 });
 
 const rules = {
-  // most LDAP parameters may stay empty (bind account, phone attribute, group search ...): the server validates the whole; so may the
-  // model and the key of the assistant (clearing the key switches it off)
+  // most LDAP parameters may stay empty (bind account, phone attribute, group search ...): the server validates the whole
   config_value: {
-    validator: () =>
-      editForm.config_key.startsWith('ldap.') ||
-      ['assistant.model', 'assistant.api_key'].includes(editForm.config_key) ||
-      editForm.config_value.trim() !== '',
+    validator: () => editForm.config_key.startsWith('ldap.') || editForm.config_value.trim() !== '',
     message: t('form.required'),
     trigger: 'blur'
   }

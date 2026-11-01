@@ -1,43 +1,46 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useThemeVars } from 'naive-ui';
+import { computed, onMounted, watch } from 'vue';
+import { useEventListener } from '@vueuse/core';
+import { NButton, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import AssistantChat from '@/components/business/assistant-chat.vue';
-import { router } from '@/router';
 import { useAppStore } from '@/store/modules/app';
 import { useAssistantStore } from '@/store/modules/assistant';
-import { useRouteStore } from '@/store/modules/route';
+import { useAuthStore } from '@/store/modules/auth';
 import { useThemeStore } from '@/store/modules/theme';
-import { useRouterPush } from '@/hooks/common/router';
 
 defineOptions({ name: 'AssistantButton' });
 
 /**
- * The assistant at the top right of the header: a button, and under it a window with the conversation. The window is the same chat as the
- * page of the menu "AI assistant", over whichever page the user is on, so a question can be asked without leaving it. The button is
- * there only for a user whose role has the menu.
+ * The assistant at the top right of the header: a button, and under it a window with the conversation, over whichever page the user is
+ * on. It is there only for a user whose role may ask it (the permission "assistant:chat"), and only while the switch of the assistant
+ * (the system parameter assistant.enabled) is on: switch it off and the button and the window go away, wherever they are open.
  */
 const { t } = useI18n();
 const store = useAssistantStore();
 const appStore = useAppStore();
+const authStore = useAuthStore();
 const themeStore = useThemeStore();
-const routeStore = useRouteStore();
-const { routerPushByKey } = useRouterPush();
 
-const allowed = computed(() => routeStore.isInitAuthRoute && router.hasRoute('assistant'));
+const mayAsk = computed(() => authStore.userInfo.buttons.includes('assistant:chat'));
+const shown = computed(() => mayAsk.value && store.enabled);
+
 const vars = useThemeVars();
 // the window is placed on the body, outside the theme provider's elements: it takes the theme's colours from the theme itself
 const top = computed(() => `${themeStore.header.height + 6}px`);
 const colors = computed(() => ({ background: vars.value.modalColor, color: vars.value.textColor2 }));
 
-function openPage() {
-  store.panelOpen = false;
-  routerPushByKey('assistant');
+function refresh() {
+  if (mayAsk.value) store.loadStatus();
 }
+onMounted(refresh);
+// the switch is read again when the person comes back to this tab, and when the permissions of the login arrive
+useEventListener(window, 'focus', refresh);
+watch(mayAsk, refresh);
 </script>
 
 <template>
-  <template v-if="allowed">
+  <template v-if="shown">
     <ButtonIcon
       icon="carbon:bot"
       :tooltip-content="t('page.assistant.title')"
@@ -56,10 +59,7 @@ function openPage() {
         >
           <header class="assistant-panel-header">
             <span class="font-medium">{{ t('page.assistant.title') }}</span>
-            <span class="flex-y-center gap-4px">
-              <NButton size="tiny" quaternary @click="openPage">{{ t('page.assistant.openPage') }}</NButton>
-              <NButton size="tiny" quaternary @click="store.panelOpen = false">{{ t('common.close') }}</NButton>
-            </span>
+            <NButton size="tiny" quaternary @click="store.panelOpen = false">{{ t('common.close') }}</NButton>
           </header>
           <AssistantChat class="min-h-0 flex-1" />
         </section>
