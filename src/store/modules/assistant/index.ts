@@ -34,6 +34,21 @@ function restore(): ChatMessage[] {
   }
 }
 
+/** what a skill is called in the chat: a built-in one in the words of the console, a custom one in its own */
+export function skillTitle(skill: Api.Assistant.Skill) {
+  return skill.builtin
+    ? $t(`page.assistant.skill_${skill.name}` as App.I18n.I18nKey)
+    : [skill.title || skill.name, skill.description].filter(Boolean).join(' · ');
+}
+
+/** the hint of what is typed after a command: " <module>", " [module]", " <text>" ... */
+export function argHint(skill: Api.Assistant.Skill) {
+  if (!skill.arg) return '';
+  const word =
+    skill.arg_hint || $t(skill.arg.startsWith('module') ? 'page.assistant.argModule' : 'page.assistant.argText');
+  return skill.arg.endsWith('?') ? ` [${word}]` : ` <${word}>`;
+}
+
 /** "/effect shop" -> { name: 'effect', args: 'shop' }; null when the text is not a command */
 export function parseCommand(text: string): { name: string; args: string } | null {
   const match = /^\/([A-Za-z][\w-]*)(?:\s+([\s\S]*))?$/.exec(text.trim());
@@ -158,10 +173,8 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
   /** the list of the commands, in the words of the console */
   function helpText() {
     const lines = skills.value.map(skill => {
-      const module = $t('page.assistant.argModule');
-      const arg = skill.arg === 'module' ? ` <${module}>` : skill.arg === 'module?' ? ` [${module}]` : '';
       const suffix = skill.needs_model ? '' : $t('page.assistant.noModelNeeded');
-      return `- \`/${skill.name}${arg}\` ${$t(`page.assistant.skill_${skill.name}` as App.I18n.I18nKey)}${suffix}`;
+      return `- \`/${skill.name}${argHint(skill)}\` ${skillTitle(skill)}${suffix}`;
     });
     return `${$t('page.assistant.helpTitle')}\n${lines.join('\n')}`;
   }

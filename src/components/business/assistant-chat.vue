@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { router } from '@/router';
 import { useRouterPush } from '@/hooks/common/router';
 import { downloadAssistantFile } from '@/service/api';
-import { MAX_MESSAGE_CHARS, useAssistantStore } from '@/store/modules/assistant';
+import { MAX_MESSAGE_CHARS, argHint, skillTitle, useAssistantStore } from '@/store/modules/assistant';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
 
 defineOptions({ name: 'AssistantChat' });
@@ -24,7 +24,7 @@ const downloading = ref('');
 const highlighted = ref(0);
 
 const ready = computed(() => store.status?.ready === true);
-const canConfigure = computed(() => router.hasRoute('assistant'));
+const canConfigure = computed(() => router.hasRoute('ai-config_llm'));
 
 interface Command {
   name: string;
@@ -37,21 +37,16 @@ interface Command {
   needsArg: boolean;
 }
 
-function argHint(arg: Api.Assistant.Skill['arg']) {
-  const module = t('page.assistant.argModule');
-  return arg === 'module' ? ` <${module}>` : arg === 'module?' ? ` [${module}]` : '';
-}
-
 /** the commands, the ones that need no language model first */
 const commands = computed<Command[]>(() => [
   ...[...store.skills]
     .sort((a, b) => Number(a.needs_model) - Number(b.needs_model))
     .map(skill => ({
       name: skill.name,
-      usage: `/${skill.name}${argHint(skill.arg)}`,
-      title: t(`page.assistant.skill_${skill.name}`),
+      usage: `/${skill.name}${argHint(skill)}`,
+      title: skillTitle(skill),
       unavailable: skill.needs_model && !ready.value,
-      needsArg: skill.arg === 'module'
+      needsArg: skill.arg === 'module' || skill.arg === 'text'
     })),
   { name: 'help', usage: '/help', title: t('page.assistant.skill_help'), unavailable: false, needsArg: false }
 ]);
@@ -169,7 +164,7 @@ watch(
         <div class="mt-10px text-12px opacity-60">{{ t('page.assistant.slashHint') }}</div>
         <div v-if="!ready" class="mt-10px text-12px">
           <span class="opacity-70">{{ t(`page.assistant.notReady_${store.status?.reason || 'no_connection'}`) }}</span>
-          <NButton v-if="canConfigure" class="ml-6px" size="tiny" secondary @click="routerPushByKey('assistant')">
+          <NButton v-if="canConfigure" class="ml-6px" size="tiny" secondary @click="routerPushByKey('ai-config_llm')">
             {{ t('page.assistant.openSettings') }}
           </NButton>
         </div>

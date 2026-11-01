@@ -67,6 +67,37 @@ export function fetchTestAssistantConnection(data: Api.Assistant.ConnectionPaylo
   });
 }
 
+/** the enabled language models, for the selector of a skill */
+export function fetchGetAssistantConnectionOptions() {
+  return request<Api.Assistant.ConnectionOption[]>({ url: `${base}/connection-options`, method: 'get' });
+}
+
+export function fetchGetAssistantSkills(params: {
+  page: number;
+  page_size: number;
+  keyword?: string;
+  enabled?: boolean;
+  kind?: 'builtin' | 'custom';
+}) {
+  return request<Api.Assistant.SkillList>({ url: `${base}/skills`, method: 'get', params });
+}
+
+export function fetchCreateAssistantSkill(data: Api.Assistant.SkillPayload) {
+  return request<Api.Assistant.SkillRow>({ url: `${base}/skills`, method: 'post', data });
+}
+
+export function fetchUpdateAssistantSkill(id: number, data: Api.Assistant.SkillPayload) {
+  return request<Api.Assistant.SkillRow>({ url: `${base}/skills/${id}`, method: 'put', data });
+}
+
+export function fetchDeleteAssistantSkill(id: number) {
+  return request<string>({ url: `${base}/skills/${id}`, method: 'delete' });
+}
+
+export function fetchBatchDeleteAssistantSkills(ids: number[]) {
+  return request<string>({ url: `${base}/skills/batch-delete`, method: 'post', data: { ids } });
+}
+
 /**
  * Downloads a file the assistant made available. The file is the response of an API that needs the login, so it is fetched with it and
  * saved from memory; a plain link would not carry it.

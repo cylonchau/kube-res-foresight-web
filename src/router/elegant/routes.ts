@@ -40,13 +40,33 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
-    name: 'assistant',
-    path: '/assistant',
-    component: 'layout.base$view.assistant',
+    name: 'ai-config',
+    path: '/ai-config',
+    component: 'layout.base',
     meta: {
-      title: 'assistant',
-      i18nKey: 'route.assistant'
-    }
+      title: 'ai-config',
+      i18nKey: 'route.ai-config'
+    },
+    children: [
+      {
+        name: 'ai-config_llm',
+        path: '/ai-config/llm',
+        component: 'view.ai-config_llm',
+        meta: {
+          title: 'ai-config_llm',
+          i18nKey: 'route.ai-config_llm'
+        }
+      },
+      {
+        name: 'ai-config_skill',
+        path: '/ai-config/skill',
+        component: 'view.ai-config_skill',
+        meta: {
+          title: 'ai-config_skill',
+          i18nKey: 'route.ai-config_skill'
+        }
+      }
+    ]
   },
   {
     name: 'authorization',

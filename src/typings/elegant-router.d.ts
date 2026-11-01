@@ -20,7 +20,9 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
-    "assistant": "/assistant";
+    "ai-config": "/ai-config";
+    "ai-config_llm": "/ai-config/llm";
+    "ai-config_skill": "/ai-config/skill";
     "authorization": "/authorization";
     "authorization_menu": "/authorization/menu";
     "authorization_role": "/authorization/role";
@@ -95,7 +97,7 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
-    | "assistant"
+    | "ai-config"
     | "authorization"
     | "dashboard"
     | "datasource"
@@ -130,7 +132,8 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
-    | "assistant"
+    | "ai-config_llm"
+    | "ai-config_skill"
     | "authorization_menu"
     | "authorization_role"
     | "authorization_user"
