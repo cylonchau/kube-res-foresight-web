@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { NButton, NCard, NEmpty, NFormItemGi, NSelect, NSpin, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import { percentName } from '@/utils/percentile';
 import { useRoute } from 'vue-router';
 import ChangePreviewModal from '@/components/business/change-preview-modal.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
@@ -146,7 +147,7 @@ const sections = computed<Section[]>(() => {
         note: t('page.forecast.delay.window', { hours: r.delay.hours, judged: r.delay.judged, scaled: r.delay.scaled }),
         cells: r.delay.indicators.map(item => ({
           key: item.key,
-          label: t(`page.forecast.delay.indicator_${item.key}`),
+          label: t(`page.forecast.delay.indicator_${item.key}`, { p: percentName(item.percentile) }),
           help: item.note,
           value:
             item.verdict === 'insufficient'

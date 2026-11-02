@@ -474,7 +474,9 @@ const local = {
           '这些设置决定写入数据集的数值：换算系数、保留的小数位、粒度大于查询步长时怎样聚合，以及缺失的点怎样处理。修改后，这个指标已采集的历史会作废并按新设置重新采集。',
         scaleHint: '写入前对查询结果乘以这个系数：0.001 把毫核换成核，0.01 把百分比换成比例，1 表示不换算。',
         aggregationHint:
-          '模块的采样粒度大于查询步长时，落在同一个粒度内的样本怎样合并。一个点只包含它所在粒度之前的样本，不含之后的数据。',
+          '模块的采样粒度大于查询步长时，落在同一个粒度内的样本怎样合并。一个点只包含它所在粒度之前的样本，不含之后的数据。除平均、最大等外，也可以取分位数：p 加数字，任意数值（p40、p95、p99.9），输入后回车。',
+        aggregationInvalid: '合并方式不对：下拉里的，或 p 加数字（p40、p95、p99.9，大于 0 小于 100）',
+        percentilePlaceholder: '选择，或输入 p40、p95、p99.9 后回车',
         missingHint:
           '准备预测时，缺失的步（不超过模块的最大插值步数）怎样补：线性插值适合水平量，填 0 适合 OOM 这类没有样本就代表没发生的计数，不填充则在断点处截断历史。',
         sectionRole: '在推荐中的作用',
@@ -1660,7 +1662,7 @@ const local = {
           '模块配置的预测期 {configured} 分钟比提前量需要的短（看提前量，再多看同样长），预测实际延长到 {n} 分钟，才看得到扩容要应对的负载。',
         aheadReachFine: '预测期覆盖了提前量的两倍，提前量之后的负载也看得到。',
         aheadLeadParts: 'Pod 就绪 {ready} 秒（{source}）+ 节点 {node} 秒 + 决策等待 {wait} 秒 + 延迟余量 {margin} 秒',
-        aheadLeadMeasured: '实测 P90，{n} 次扩容',
+        aheadLeadMeasured: '实测 {p}，{n} 次扩容',
         aheadLeadConfigured: '系统设置',
         aheadLeadCapped: '，已截到预测范围',
         aheadSeconds: '{n} 秒',
@@ -1750,7 +1752,9 @@ const local = {
         weight: '权重',
         weightHint: '同一资源有多个来源时的加权平均权重；也是多指标压力的权重。',
         stat: '统计方式',
-        statHint: '把一段取值归约成一个需求量：平均、分位数、最大、求和或最后值。',
+        statHint:
+          '把一段取值归约成一个需求量：平均、最大、求和、最后值，或分位数。分位数写成 p 加数字，任意数值都行（p40、p41、p95、p99.9，大于 0 小于 100，最长 8 个字符），下拉里的只是常用的几个，可以直接输入后回车。',
+        statInvalid: '统计方式不对：avg、max、sum、last，或 p 加数字（p40、p95、p99.9，大于 0 小于 100）',
         basis: '取值依据',
         basisHint: '预测：取预测视野内的预测值。历史：取最近一段实测值（OOM 次数等不适合预测的指标用它）。',
         basis_forecast: '预测值',
@@ -1869,9 +1873,9 @@ const local = {
         verdict_fail: '未达标',
         verdict_insufficient: '待积累',
         indicator_timely_rate: '扩容及时率',
-        indicator_late_p90_seconds: '迟到时长 P90',
+        indicator_late_p90_seconds: '迟到时长 {p}',
         indicator_emergency_share: '实时兜底占比',
-        indicator_peak_under_p90: '峰值低估 P90',
+        indicator_peak_under_p90: '峰值低估 {p}',
         indicator_reach_over_lead: '预测期 / 提前量',
         indicator_decision_wait_seconds: '决策等待'
       },

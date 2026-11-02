@@ -16,10 +16,12 @@ declare namespace Api {
       | 'custom'
       | AuxMetric;
     type MetricCategory = 'cpu' | 'memory' | 'gpu' | 'network' | 'other';
-    type SourceAggregation = 'avg' | 'max' | 'min' | 'last' | 'sum';
+    /** avg, max, min, last, sum, or a percentile p<number> (p40, p95, p99.9) */
+    type SourceAggregation = string;
     type SourceMissing = 'interpolate' | 'forward_fill' | 'zero' | 'skip';
     type SourceResource = 'cpu' | 'memory' | 'gpu' | 'replicas' | 'signal';
-    type SourceStat = 'avg' | 'p50' | 'p90' | 'p95' | 'p99' | 'max' | 'sum' | 'last';
+    /** avg, max, sum, last, or a percentile p<number>: any level above 0 and below 100 (p40, p41, p95, p99.9) */
+    type SourceStat = string;
     type SourceBasis = 'forecast' | 'history';
     type MaxReplicasMode = 'fixed' | 'dynamic';
     type ReplicaMode = 'fixed' | 'dynamic';
@@ -34,6 +36,8 @@ declare namespace Api {
         | 'reach_over_lead'
         | 'decision_wait_seconds';
       unit: 'ratio' | 'seconds';
+      /** the level (0..1) of an indicator that is a percentile, as set by the system parameter */
+      percentile?: number;
       op: '>=' | '<=';
       target: number;
       value: number;
@@ -1482,6 +1486,8 @@ declare namespace Api {
       seconds: number;
       ready_seconds: number;
       ready_source: 'measured' | 'configured';
+      /** the level (0..1) the ready times and the lateness margin were taken at */
+      percentile?: number;
       ready_samples: number;
       node_seconds: number;
       decision_seconds: number;

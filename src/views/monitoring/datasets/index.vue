@@ -33,6 +33,7 @@ import {
 } from '@/hooks/business/use-forecast-modules';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { operateWidth } from '@/utils/operate-width';
+import { isPercentileStat } from '@/utils/percentile';
 import {
   fetchCreateModuleSource,
   fetchDeleteModuleSource,
@@ -44,7 +45,7 @@ import {
 
 defineOptions({ name: 'MonitoringDatasets' });
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const message = useMessage();
 const route = useRoute();
 const { modules, moduleOptions, loadModules } = useForecastModules();
@@ -73,12 +74,13 @@ const stepLabel = (seconds: number) => {
 const categoryOptions = computed(() =>
   (catalog.value?.categories || []).map(item => ({ label: categoryLabel(item.id), value: item.id }))
 );
-const aggregationOptions = computed(() =>
-  (catalog.value?.aggregations || []).map(value => ({
-    label: t(`page.monitoring.datasets.aggregation_${value}`),
-    value
-  }))
-);
+// the aggregations of the platform, and any percentile typed in (p40, p95, p99.9): the name of a percentile is its own label
+const aggregationLabel = (value: string) =>
+  te(`page.monitoring.datasets.aggregation_${value}`) ? t(`page.monitoring.datasets.aggregation_${value}`) : value;
+const aggregationOptions = computed(() => [
+  ...(catalog.value?.aggregations || []).map(value => ({ label: aggregationLabel(value), value })),
+  ...((catalog.value?.aggregations || []).includes('p95') ? [] : [{ label: 'p95', value: 'p95' }])
+]);
 const missingOptions = computed(() =>
   (catalog.value?.missing || []).map(value => ({ label: t(`page.monitoring.datasets.missing_${value}`), value }))
 );
@@ -86,6 +88,16 @@ const resourceOptions = computed(() =>
   SOURCE_RESOURCES.map(value => ({ label: t(`page.forecast.modules.resource_${value}`), value }))
 );
 const statOptions = SOURCE_STATS.map(value => ({ label: value, value }));
+
+/** what is typed into the two selects must be a known name or a percentile: p<number> above 0 and below 100 */
+function statProblem(stat: string, aggregation: string): string {
+  const known = new Set(catalog.value?.aggregations || []);
+  if (!known.has(aggregation) && !isPercentileStat(aggregation))
+    return t('page.monitoring.datasets.aggregationInvalid');
+  if (!['avg', 'max', 'sum', 'last'].includes(stat) && !isPercentileStat(stat))
+    return t('page.forecast.sources.statInvalid');
+  return '';
+}
 const basisOptions = computed(() =>
   (['forecast', 'history'] as const).map(value => ({ label: t(`page.forecast.sources.basis_${value}`), value }))
 );
@@ -220,6 +232,11 @@ async function save() {
     message.warning(t('page.forecast.sources.required'));
     return;
   }
+  const problem = statProblem(form.stat, form.aggregation);
+  if (problem) {
+    message.warning(problem);
+    return;
+  }
   saving.value = true;
   try {
     const payload: Api.Forecast.SourcePayload = {
@@ -335,7 +352,7 @@ const columnMap: Record<string, any> = {
     key: 'aggregation',
     width: 110,
     align: 'center',
-    render: (row: Api.Forecast.DatasetSource) => t(`page.monitoring.datasets.aggregation_${row.aggregation}`)
+    render: (row: Api.Forecast.DatasetSource) => aggregationLabel(row.aggregation)
   },
   scale: {
     title: t('page.monitoring.datasets.scale'),
@@ -581,7 +598,13 @@ onMounted(async () => {
                 </IconTooltip>
               </span>
             </template>
-            <NSelect v-model:value="form.aggregation" :options="aggregationOptions" />
+            <NSelect
+              v-model:value="form.aggregation"
+              filterable
+              tag
+              :options="aggregationOptions"
+              :placeholder="t('page.monitoring.datasets.percentilePlaceholder')"
+            />
           </NFormItem>
           <NFormItem>
             <template #label>
@@ -650,7 +673,13 @@ onMounted(async () => {
                 </IconTooltip>
               </span>
             </template>
-            <NSelect v-model:value="form.stat" :options="statOptions" />
+            <NSelect
+              v-model:value="form.stat"
+              filterable
+              tag
+              :options="statOptions"
+              :placeholder="t('page.monitoring.datasets.percentilePlaceholder')"
+            />
           </NFormItem>
           <NFormItem>
             <template #label>

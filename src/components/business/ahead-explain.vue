@@ -4,6 +4,7 @@ import { NDataTable, NTag } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { formatDecimal, formatScore } from '@/utils/format';
+import { percentName } from '@/utils/percentile';
 
 defineOptions({ name: 'AheadExplain' });
 
@@ -21,7 +22,7 @@ const leadParts = computed(() => {
   const l = props.ahead.lead;
   const source =
     l.ready_source === 'measured'
-      ? t('page.forecast.explain.aheadLeadMeasured', { n: l.ready_samples })
+      ? t('page.forecast.explain.aheadLeadMeasured', { n: l.ready_samples, p: percentName(l.percentile) })
       : t('page.forecast.explain.aheadLeadConfigured');
   return (
     t('page.forecast.explain.aheadLeadParts', {

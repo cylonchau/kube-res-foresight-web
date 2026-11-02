@@ -479,7 +479,10 @@ const local = {
         scaleHint:
           'The query result is multiplied by this factor before it is stored: 0.001 turns millicores into cores, 0.01 a percentage into a ratio, 1 leaves it as it is.',
         aggregationHint:
-          'How the samples that fall into one granularity are combined when the module samples more coarsely than the query steps. A point only contains samples from before its own granularity, never from after it.',
+          'How the samples that fall into one granularity are combined when the module samples more coarsely than the query steps. A point only contains samples from before its own granularity, never from after it. Besides average, maximum and the like, a percentile can be taken: p and a number, any number (p40, p95, p99.9); type it and press Enter.',
+        aggregationInvalid:
+          'Not a way to combine: one of the list, or p and a number (p40, p95, p99.9: above 0 and below 100)',
+        percentilePlaceholder: 'Choose, or type p40, p95, p99.9 and press Enter',
         missingHint:
           'How a missing step (up to the max interpolation steps of the module) is filled when a forecast is prepared: interpolation suits levels, 0 suits counts such as OOM where no sample means nothing happened, no fill cuts the history at a gap.',
         sectionRole: 'Role in the recommendation',
@@ -1724,7 +1727,7 @@ const local = {
         aheadReachFine: 'The forecasts reach twice the lead, so the load after it is in sight as well.',
         aheadLeadParts:
           'Pod ready {ready}s ({source}) + node {node}s + decision wait {wait}s + lateness margin {margin}s',
-        aheadLeadMeasured: 'measured P90 of {n} scale-ups',
+        aheadLeadMeasured: 'measured {p} of {n} scale-ups',
         aheadLeadConfigured: 'system setting',
         aheadLeadCapped: ', cut to the forecast horizon',
         aheadSeconds: '{n}s',
@@ -1815,7 +1818,9 @@ const local = {
         weight: 'Weight',
         weightHint: 'The weight in the weighted average of one resource, and in the multi-metric pressure.',
         stat: 'Statistic',
-        statHint: 'How a run of values becomes one demand: average, a percentile, maximum, sum or last value.',
+        statHint:
+          'How a run of values becomes one demand: average, maximum, sum, last value, or a percentile. A percentile is p and a number, any number (p40, p41, p95, p99.9: above 0 and below 100, at most 8 characters); the list holds only the common ones, type another and press Enter.',
+        statInvalid: 'Not a statistic: avg, max, sum, last, or p and a number (p40, p95, p99.9: above 0 and below 100)',
         basis: 'Value basis',
         basisHint:
           'Forecast: the predicted values over the horizon. History: the measured values of a recent window (for metrics such as OOM counts that are not worth forecasting).',
@@ -1941,9 +1946,9 @@ const local = {
         verdict_fail: 'Fail',
         verdict_insufficient: 'Collecting',
         indicator_timely_rate: 'Scale-ups in time',
-        indicator_late_p90_seconds: 'Lateness P90',
+        indicator_late_p90_seconds: 'Lateness {p}',
         indicator_emergency_share: 'Share asked for by the live load',
-        indicator_peak_under_p90: 'Peak under-estimation P90',
+        indicator_peak_under_p90: 'Peak under-estimation {p}',
         indicator_reach_over_lead: 'Forecast reach / lead',
         indicator_decision_wait_seconds: 'Decision wait'
       },

@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n';
 import { usePagedList } from '@/hooks/business/use-paged-list';
 import { fetchGetModuleDelayReport, fetchGetScaleOutcomes } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { percentName } from '@/utils/percentile';
 
 defineOptions({ name: 'ScaleOutcomeModal' });
 
@@ -146,7 +147,9 @@ const columns = computed<DataTableColumns<Api.Forecast.ScaleOutcome>>(() => [
           <NTag size="tiny" :bordered="false" :type="verdictTag[item.verdict]">
             {{ t(`page.forecast.delay.verdict_${item.verdict}`) }}
           </NTag>
-          <span class="ml-6px">{{ t(`page.forecast.delay.indicator_${item.key}`) }}</span>
+          <span class="ml-6px">
+            {{ t(`page.forecast.delay.indicator_${item.key}`, { p: percentName(item.percentile) }) }}
+          </span>
           <div class="pl-2px text-12px opacity-65">{{ indicatorLine(item) }}</div>
         </div>
       </div>
