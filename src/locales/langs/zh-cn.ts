@@ -540,6 +540,8 @@ const local = {
         '还没有启用的 LLM：在菜单「AI 配置 > LLM 管理」里添加并启用一个。/report 和 /export 不需要它，可以直接用。',
       notReady_bad_connection:
         '默认的 LLM 缺少必要的设置（密钥读取不了，或地址、模型为空），请在「AI 配置 > LLM 管理」里检查。',
+      expand: '放大',
+      restore: '还原',
       skill_report: '使用情况报告（近 24 小时，直接生成）',
       skill_tasks: '我的 AI 定时任务（计划、下次运行、最近结果）',
       skill_export: '导出服务运行状态文件（文档和 JSON）',
@@ -2703,6 +2705,16 @@ const local = {
         forecast: '预测与资源',
         operator: 'Operator 参数',
         assistant: 'AI 助手'
+      },
+      email: {
+        test: '发送测试邮件',
+        testHint:
+          '用当前保存的邮件参数（notify.email.*）给下面的地址发一封测试邮件。刚保存的参数最多 10 秒后生效；失败时这里会显示邮件服务器的原话。',
+        address: "收件邮箱，例如 you{'@'}example.com",
+        invalidAddress: '请输入有效的邮箱地址',
+        send: '发送',
+        sent: '已发送到 {to}，请到邮箱查收',
+        securityNone: '不加密（只用于本机或内网）'
       },
       readbackMismatch: '配置写入后回读不一致，请检查当前服务实例使用的数据库',
       secretKeys: {

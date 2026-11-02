@@ -39,6 +39,18 @@ export function fetchUpdateConfig(key: string, configValue: string) {
 }
 
 /**
+ * Sends a short message to one address through the e-mail channel as it is set up now; the error is the SMTP server's own
+ */
+export function fetchSendTestEmail(to: string) {
+  return request<string>({
+    url: '/api/v1/configs/notify-email/test',
+    method: 'post',
+    data: { to },
+    timeout: 130 * 1000
+  });
+}
+
+/**
  * Get column metadata for a model via reflection
  * @param model Model name
  */

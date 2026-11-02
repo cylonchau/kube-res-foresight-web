@@ -2,7 +2,7 @@
 import { ref, onMounted, h, reactive, computed, watch } from 'vue';
 import StatusSelect from '@/components/business/status-select.vue';
 import HelpLabel from '@/components/common/help-label.vue';
-import { fetchGetConfig, fetchGetConfigs, fetchUpdateConfig } from '@/service/api/system';
+import { fetchGetConfig, fetchGetConfigs, fetchSendTestEmail, fetchUpdateConfig } from '@/service/api/system';
 import { formatDateTime } from '@/utils/date';
 import {
   NButton,
@@ -287,6 +287,35 @@ const pagedConfigs = computed(() => {
   return filteredConfigs.value.slice(start, start + pagination.pageSize);
 });
 
+// The e-mail channel: the security is one of three, and the settings can be tried with a test mail.
+const EMAIL_SECURITY_KEY = 'notify.email.security';
+const securityOptions = [
+  { label: 'STARTTLS (587)', value: 'starttls' },
+  { label: 'TLS (465)', value: 'tls' },
+  { label: t('page.system.email.securityNone'), value: 'none' }
+];
+const testMailVisible = ref(false);
+const testMailTo = ref('');
+const testMailSending = ref(false);
+
+async function sendTestMail() {
+  const to = testMailTo.value.trim();
+  if (!/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(to)) {
+    message.warning(t('page.system.email.invalidAddress'));
+    return;
+  }
+  testMailSending.value = true;
+  try {
+    const { error } = await fetchSendTestEmail(to);
+    if (!error) {
+      message.success(t('page.system.email.sent', { to }));
+      testMailVisible.value = false;
+    }
+  } finally {
+    testMailSending.value = false;
+  }
+}
+
 async function loadConfigs() {
   startLoading();
   try {
@@ -414,7 +443,14 @@ onMounted(() => {
           :show-add="false"
           :show-delete="false"
           @refresh="loadConfigs"
-        />
+        >
+          <template #prefix>
+            <NButton size="small" @click="testMailVisible = true">
+              <template #icon><icon-ic-round-mail-outline /></template>
+              {{ t('page.system.email.test') }}
+            </NButton>
+          </template>
+        </TableHeaderOperation>
         <div class="flex-1 overflow-hidden">
           <ExpandableDataTable
             v-model:columns="tableColumns"
@@ -475,6 +511,14 @@ onMounted(() => {
             />
           </div>
 
+          <!-- The security of the e-mail connection -->
+          <NSelect
+            v-else-if="editForm.config_key === EMAIL_SECURITY_KEY"
+            v-model:value="editForm.config_value"
+            :options="securityOptions"
+            class="w-full"
+          />
+
           <!-- Integer Number Input -->
           <NInputNumber
             v-else-if="isNumberKey(editForm.config_key, editForm.config_value)"
@@ -527,6 +571,19 @@ onMounted(() => {
           <NButton @click="showModal = false">{{ t('common.cancel') }}</NButton>
           <NButton type="primary" :loading="saving" @click="handleSubmit">
             {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <NModal v-model:show="testMailVisible" preset="card" :title="t('page.system.email.test')" class="w-480px">
+      <div class="mb-12px leading-22px opacity-80">{{ t('page.system.email.testHint') }}</div>
+      <NInput v-model:value="testMailTo" :placeholder="t('page.system.email.address')" @keyup.enter="sendTestMail" />
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="testMailVisible = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="testMailSending" @click="sendTestMail">
+            {{ t('page.system.email.send') }}
           </NButton>
         </NSpace>
       </template>

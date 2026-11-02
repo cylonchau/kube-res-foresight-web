@@ -547,6 +547,8 @@ const local = {
         'No LLM is enabled: add and enable one in the menu AI configuration > LLM management. /report and /export need none and work as they are.',
       notReady_bad_connection:
         'The default LLM is missing something (its key cannot be read, or the URL or model is empty): check it in AI configuration > LLM management.',
+      expand: 'Expand',
+      restore: 'Restore',
       skill_report: 'Usage report of the last 24 hours (made at once)',
       skill_export: 'Export the service status as files (document and JSON)',
       skill_tasks: 'My AI scheduled tasks (schedule, next run, last result)',
@@ -2813,6 +2815,16 @@ const local = {
         ldap: 'LDAP sign-in',
         forecast: 'Forecast and resources',
         operator: 'Operator settings'
+      },
+      email: {
+        test: 'Send test mail',
+        testHint:
+          'Sends a test mail to the address below with the saved e-mail parameters (notify.email.*). Parameters saved a moment ago take up to 10 seconds to apply; on failure the answer of the mail server is shown.',
+        address: "Recipient, for example you{'@'}example.com",
+        invalidAddress: 'Enter a valid e-mail address',
+        send: 'Send',
+        sent: 'Sent to {to}: check the mailbox',
+        securityNone: 'No encryption (this machine or an internal network only)'
       },
       readbackMismatch:
         "The value read back after writing doesn't match 鈥?check which database this server instance is using",
