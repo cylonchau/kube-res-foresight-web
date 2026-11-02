@@ -190,7 +190,7 @@ function exportChecked() {
   }
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'kubeforecast-curve.csv';
+  link.download = 'kube-res-foresight-curve.csv';
   link.click();
   URL.revokeObjectURL(link.href);
 }
