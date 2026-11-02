@@ -1,6 +1,6 @@
 const local = {
   system: {
-    title: 'kube-resource-fcst',
+    title: 'kube-res-foresight',
     updateTitle: '系统版本更新通知',
     updateContent: '检测到系统有新版本发布，是否立即刷新页面？',
     updateConfirm: '立即刷新',
@@ -1031,7 +1031,7 @@ const local = {
         source_decision: '决策值',
         source_previous: '此前有效值',
         help: '每个模块当前的推荐：CPU 和内存是 Pod 的资源规格（准入时给新 Pod 设置，规格生效后保持不变，只有预测与它相差够大才会更新）；副本数随预测每个周期变化，由 operator 扩缩，不会改动 Pod 资源。点「决策说明」看计算依据，历史见「推荐快照」。',
-        executionsHelp: 'kube-resource-fcst-operator 每次实际扩缩、观察、暂缓、冲突或出错后上报的记录。',
+        executionsHelp: 'kube-res-foresight-operator 每次实际扩缩、观察、暂缓、冲突或出错后上报的记录。',
         empty: '还没有资源推荐：预测模块进入仅推荐及以上模式后每个周期生成一个。',
         sourceLabel: '决定来源',
         degraded: '降级',
@@ -1555,7 +1555,7 @@ const local = {
         source_fallback: '回退副本',
         source_frozen: '保持当前',
         reportedAt: '平台收到时间',
-        empty: '还没有执行记录：kube-resource-fcst-operator 每次调和后上报。',
+        empty: '还没有执行记录：kube-res-foresight-operator 每次调和后上报。',
         keywordPlaceholder: '目标、命名空间、原因',
         action_ScaleUp: '扩容',
         action_ScaleDown: '缩容',
@@ -2672,7 +2672,7 @@ const local = {
       bindWeChat: {
         title: '绑定微信'
       },
-      title: 'kube-resource-fcst - Kubernetes 资源预测与 Pod 扩容'
+      title: 'kube-res-foresight - Kubernetes 资源预测与 Pod 扩容'
     },
     system: {
       title: '系统参数管理',
@@ -2724,7 +2724,7 @@ const local = {
         accessKey: 'Access Key（AK）',
         kindTitle: '集群接入凭据：Access Key + Secret Key',
         kindHelp:
-          '这里的凭据是一对 Access Key / Secret Key（AK/SK）：集群里的扩缩容控制器或 Kyverno 调用平台 API 时，在请求头 Authorization 里带上“kube-resource-fcst-AK <Access Key>:<Secret Key>”。它不是 Kubernetes Secret，也不是加密用的盐值。Secret Key 只在创建和重置时显示一次，之后只显示隐藏后的样子。要在集群里使用，请自己把 AK:SK 存进一个 Kubernetes Secret 供组件引用，平台不会读取或创建集群里的 Secret。'
+          '这里的凭据是一对 Access Key / Secret Key（AK/SK）：集群里的扩缩容控制器或 Kyverno 调用平台 API 时，在请求头 Authorization 里带上“kube-res-foresight-AK <Access Key>:<Secret Key>”。它不是 Kubernetes Secret，也不是加密用的盐值。Secret Key 只在创建和重置时显示一次，之后只显示隐藏后的样子。要在集群里使用，请自己把 AK:SK 存进一个 Kubernetes Secret 供组件引用，平台不会读取或创建集群里的 Secret。'
       },
       ldapEntry: 'LDAP 认证配置'
     },

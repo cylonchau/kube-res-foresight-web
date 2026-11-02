@@ -1,7 +1,7 @@
 {
-  "name": "kube-resource-fcst-admin",
+  "name": "kube-res-foresight-admin",
   "version": "2.1.0",
-  "description": "kube-resource-fcst admin for Kubernetes resource forecasting, Pod scaling orchestration and capacity planning.",
+  "description": "kube-res-foresight admin for Kubernetes resource forecasting, Pod scaling orchestration and capacity planning.",
   "keywords": [
     "TypeScript",
     "UnoCSS",

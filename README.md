@@ -1,4 +1,4 @@
-# kube-resource-fcst 管理界面
+# kube-res-foresight 管理界面
 
 面向 Kubernetes 资源预测、Pod 弹性扩容与容量规划的管理基础框架。
 

@@ -8,7 +8,7 @@ import { localStg } from '@/utils/storage';
 export type StreamStatus = 'connecting' | 'live' | 'closed';
 
 /** Must match middleware.WebSocketAuthSubprotocol on the backend. */
-const AUTH_SUBPROTOCOL = 'kube-resource-fcst.jwt';
+const AUTH_SUBPROTOCOL = 'kube-res-foresight.jwt';
 const MAX_RETRY_DELAY_MS = 15_000;
 
 function buildStreamUrl(path: string) {

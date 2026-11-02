@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import darkLogo from '@/assets/svg-icon/kube-resource-fcst-logo-dark.svg';
-import lightLogo from '@/assets/svg-icon/kube-resource-fcst-logo-light.svg';
+import darkLogo from '@/assets/svg-icon/kube-res-foresight-logo-dark.svg';
+import lightLogo from '@/assets/svg-icon/kube-res-foresight-logo-light.svg';
 import { useThemeStore } from '@/store/modules/theme';
 
 interface Props {
@@ -16,7 +16,7 @@ const logoSrc = computed(() => (themeStore.darkMode ? darkLogo : lightLogo));
 
 <template>
   <div class="app-logo flex-center" :data-small="props.small || undefined">
-    <img :src="logoSrc" alt="kube-resource-fcst" class="size-full object-contain" />
+    <img :src="logoSrc" alt="kube-res-foresight" class="size-full object-contain" />
   </div>
 </template>
 

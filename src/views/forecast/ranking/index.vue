@@ -230,7 +230,7 @@ function exportMain() {
       ].join(',')
     );
   }
-  download('kube-resource-fcst-ranking.csv', lines);
+  download('kube-res-foresight-ranking.csv', lines);
 }
 
 function resetSearch() {

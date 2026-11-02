@@ -1,4 +1,4 @@
-# kube-resource-fcst Admin
+# kube-res-foresight Admin
 
 Management foundation for Kubernetes resource forecasting, Pod scaling orchestration
 and capacity planning.

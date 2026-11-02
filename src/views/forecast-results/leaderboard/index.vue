@@ -112,7 +112,7 @@ function exportChecked() {
   });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'kube-resource-fcst-leaderboard.csv';
+  link.download = 'kube-res-foresight-leaderboard.csv';
   link.click();
   URL.revokeObjectURL(link.href);
 }

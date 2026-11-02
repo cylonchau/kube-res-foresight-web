@@ -143,7 +143,7 @@ export function fetchGetAssistantTaskRuns(id: number, params: { page: number; pa
  * saved from memory; a plain link would not carry it.
  */
 export async function downloadAssistantFile(file: Pick<Api.Assistant.Attachment, 'name' | 'path'>) {
-  const headers: Record<string, string> = { 'X-kube-resource-fcst-Client': 'web' };
+  const headers: Record<string, string> = { 'X-kube-res-foresight-Client': 'web' };
   const authorization = getAuthorization();
   if (authorization) headers.Authorization = authorization;
   const response = await fetch(`${serviceBaseURL.replace(/\/+$/, '')}${file.path}`, { headers });

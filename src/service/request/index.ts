@@ -37,7 +37,7 @@ export const request = createFlatRequest(
       apifoxToken: 'XL299LiMEDZ0H5h3A29PxwQXdMJqWyY2',
       // Lets the backend tell this web console's requests apart from access-key API calls — used for
       // single-session-per-client-type enforcement and the operation-log source filter.
-      'X-kube-resource-fcst-Client': 'web'
+      'X-kube-res-foresight-Client': 'web'
     }
   },
   {

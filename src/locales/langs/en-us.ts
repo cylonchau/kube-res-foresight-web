@@ -1,6 +1,6 @@
 const local = {
   system: {
-    title: 'kube-resource-fcst',
+    title: 'kube-res-foresight',
     updateTitle: 'System Version Update Notification',
     updateContent: 'A new version of the system has been detected. Do you want to refresh the page immediately?',
     updateConfirm: 'Refresh immediately',
@@ -1075,7 +1075,7 @@ const local = {
         source_previous: 'previously valid',
         help: 'Every decision becomes an immutable version that records which source decided each field (algorithm, fixed period, fallback or the original kept) and why.',
         executionsHelp:
-          'Reports from kube-resource-fcst-operator after each scale, observation, hold, conflict or error.',
+          'Reports from kube-res-foresight-operator after each scale, observation, hold, conflict or error.',
         empty: 'No snapshots yet: a module in Recommend mode or above writes one each cycle.',
         sourceLabel: 'Source',
         degraded: 'Degraded',
@@ -1615,7 +1615,7 @@ const local = {
         source_fallback: 'Fallback',
         source_frozen: 'Held as is',
         reportedAt: 'Received at',
-        empty: 'No execution records yet: kube-resource-fcst-operator reports after each reconcile.',
+        empty: 'No execution records yet: kube-res-foresight-operator reports after each reconcile.',
         keywordPlaceholder: 'Target, namespace, reason',
         action_ScaleUp: 'Scale up',
         action_ScaleDown: 'Scale down',
@@ -2783,7 +2783,7 @@ const local = {
       bindWeChat: {
         title: 'Bind WeChat'
       },
-      title: 'kube-resource-fcst - Kubernetes Resource Forecasting and Pod Scaling'
+      title: 'kube-res-foresight - Kubernetes Resource Forecasting and Pod Scaling'
     },
     system: {
       title: 'System Parameters Management',

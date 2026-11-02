@@ -22,7 +22,7 @@ export interface ChatMessage {
 export const MAX_HISTORY = 40;
 export const MAX_MESSAGE_CHARS = 4000;
 
-const STORAGE_KEY = 'kube-resource-fcst-assistant';
+const STORAGE_KEY = 'kube-res-foresight-assistant';
 
 function restore(): ChatMessage[] {
   try {

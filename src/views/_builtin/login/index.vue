@@ -91,7 +91,7 @@ const bgColor = computed(() => {
         </Transition>
       </NCard>
     </div>
-    <footer class="login-footer">Copyright © {{ currentYear }} kube-resource-fcst</footer>
+    <footer class="login-footer">Copyright © {{ currentYear }} kube-res-foresight</footer>
   </div>
 </template>
 
