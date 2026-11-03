@@ -1094,6 +1094,17 @@ onMounted(() => {
             </template>
             <NSelect v-model:value="form.replica_mode" :options="replicaModeOptions" />
           </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.podCapacity') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.podCapacityHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.pod_capacity_rps" :min="0" class="w-full" />
+          </NFormItem>
           <template v-if="form.replica_mode === 'dynamic'">
             <NFormItem>
               <template #label>
@@ -1149,28 +1160,6 @@ onMounted(() => {
           <NFormItem>
             <template #label>
               <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.fallbackReplicas') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fallbackReplicasHint') }}</div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NInputNumber v-model:value="form.fallback_replicas" :min="0" :precision="0" class="w-full" />
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.recoverCycles') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.recoverCyclesHint') }}</div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
                 {{ t('page.forecast.modules.maxReplicasMode') }}
                 <IconTooltip icon="mdi-help-circle" placement="top">
                   <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasModeHint') }}</div>
@@ -1205,6 +1194,28 @@ onMounted(() => {
           <NFormItem :label="t('page.forecast.modules.fallbackGpu')">
             <NInputNumber v-model:value="form.fallback_gpu" :min="0" :precision="0" class="w-full" />
           </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.fallbackReplicas') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fallbackReplicasHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.fallback_replicas" :min="0" :precision="0" class="w-full" />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.recoverCycles') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.recoverCyclesHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
+          </NFormItem>
         </NForm>
 
         <NDivider class="!my-18px" />
@@ -1227,6 +1238,11 @@ onMounted(() => {
             <div class="max-w-420px leading-22px">{{ t('page.forecast.periods.rules') }}</div>
           </IconTooltip>
         </div>
+        <NForm :model="form" label-placement="top">
+          <NFormItem :label="t('page.forecast.modules.timezone')">
+            <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
+          </NFormItem>
+        </NForm>
         <PeriodEditor ref="periodEditor" />
 
         <div class="mb-8px mt-12px flex items-center gap-6px font-medium">
@@ -1377,20 +1393,6 @@ onMounted(() => {
               </span>
             </template>
             <NInputNumber v-model:value="form.limit_memory_ratio" :min="0" :max="10" :step="0.1" class="w-full" />
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.podCapacity') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.podCapacityHint') }}</div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NInputNumber v-model:value="form.pod_capacity_rps" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.timezone')">
-            <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
           </NFormItem>
         </NForm>
       </div>

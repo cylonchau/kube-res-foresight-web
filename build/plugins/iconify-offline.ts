@@ -15,6 +15,7 @@ const WHOLE_COLLECTIONS = ['carbon'];
 
 const SOURCE_FILE = /\.(vue|ts|tsx|js|jsx)$/;
 const ICON_NAME = /['"`]([a-z][a-z0-9-]*):([a-z0-9][a-z0-9-]*)['"`]/g;
+const ICON_DASH_NAME = /['"`]([a-z][a-z0-9]*(?:-[a-z0-9]+)+)['"`]/g;
 
 function listSourceFiles(dir: string, files: string[] = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -33,14 +34,31 @@ export function setupIconifyOffline(rootDir: string): Plugin {
   const jsonDir = path.join(rootDir, 'node_modules/@iconify/json/json');
 
   const build = () => {
+    const known = new Set(
+      fs
+        .readdirSync(jsonDir)
+        .filter(f => f.endsWith('.json'))
+        .map(f => f.slice(0, -5))
+    );
     const wanted = new Map<string, Set<string>>();
+    const want = (prefix: string, name: string) => {
+      if (!wanted.has(prefix)) wanted.set(prefix, new Set());
+      wanted.get(prefix)!.add(name);
+    };
     for (const file of listSourceFiles(path.join(rootDir, 'src'))) {
       const text = fs.readFileSync(file, 'utf8');
       for (const match of text.matchAll(ICON_NAME)) {
         const [, prefix, name] = match;
-        if (!fs.existsSync(path.join(jsonDir, `${prefix}.json`))) continue;
-        if (!wanted.has(prefix)) wanted.set(prefix, new Set());
-        wanted.get(prefix)!.add(name);
+        if (known.has(prefix)) want(prefix, name);
+      }
+      // Iconify also takes "mdi-help-circle" (a dash instead of the colon): every quoted word that starts with a collection prefix
+      // is a candidate, and getIcons below keeps only the ones the collection really has.
+      for (const match of text.matchAll(ICON_DASH_NAME)) {
+        const word = match[1];
+        for (let i = word.indexOf('-'); i > 0; i = word.indexOf('-', i + 1)) {
+          const prefix = word.slice(0, i);
+          if (known.has(prefix)) want(prefix, word.slice(i + 1));
+        }
       }
     }
     for (const prefix of WHOLE_COLLECTIONS) wanted.delete(prefix);

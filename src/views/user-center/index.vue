@@ -169,6 +169,11 @@ onMounted(() => {
             {{ userInfo.otpEnabled ? $t('page.userCenter.otpOn') : $t('page.userCenter.otpOff') }}
           </NTag>
         </NDescriptionsItem>
+        <NDescriptionsItem :label="$t('page.manage.user.source')">
+          <NTag size="small" :bordered="false" :type="userInfo.source === 'ldap' ? 'info' : 'default'">
+            {{ $t(`page.manage.user.source_${userInfo.source === 'ldap' ? 'ldap' : 'local'}`) }}
+          </NTag>
+        </NDescriptionsItem>
         <NDescriptionsItem :label="$t('page.userCenter.language')">{{ userInfo.language || '-' }}</NDescriptionsItem>
         <NDescriptionsItem :label="$t('page.userCenter.lastLogin')">
           {{ userInfo.lastLoginAt ? `${formatDateTime(userInfo.lastLoginAt)} ${userInfo.lastLoginIp || ''}` : '-' }}
@@ -178,7 +183,10 @@ onMounted(() => {
     <div class="grid grid-cols-1 items-start gap-16px xl:grid-cols-3 lg:grid-cols-2">
       <!-- 修改密码 -->
       <NCard :title="$t('page.userCenter.updatePassword')" :bordered="false" size="small" class="rounded-8px shadow-sm">
-        <div class="pt-4px">
+        <div v-if="userInfo?.source === 'ldap'" class="pt-4px text-gray-600">
+          {{ $t('page.userCenter.directoryPassword') }}
+        </div>
+        <div v-else class="pt-4px">
           <NForm :model="pwdForm" label-placement="top">
             <NFormItem :label="$t('page.userCenter.oldPassword')">
               <NInput

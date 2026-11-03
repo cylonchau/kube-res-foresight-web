@@ -27,6 +27,8 @@ declare namespace Api {
       /** the ways to reach the user: any type name and its value */
       contacts: Array<{ type: string; value: string }>;
       otpEnabled: boolean;
+      /** where the account is authenticated: "ldap" (directory account, password kept in the directory) or "local" */
+      source: 'local' | 'ldap';
       /** Saved account-level UI language preference, e.g. "zh-CN"/"en-US". Empty = no preference set. */
       language: string;
       roles: string[];
