@@ -2947,7 +2947,7 @@ const local = {
     },
     pwd: {
       required: '输入密码',
-      invalid: '密码格式不正确，6-18位字符，包含字母、数字、下划线'
+      invalid: '密码格式不正确，6-32位字符，包含字母、数字、下划线'
     },
     confirmPwd: {
       required: '输入确认密码',

@@ -3056,7 +3056,7 @@ const local = {
     },
     pwd: {
       required: 'Enter password',
-      invalid: '6-18 characters, including letters, numbers, and underscores'
+      invalid: '6-32 characters, including letters, numbers, and underscores'
     },
     confirmPwd: {
       required: 'Enter password again',
