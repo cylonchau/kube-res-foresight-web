@@ -1,25 +1,61 @@
 name: Release
 
+# Every push to main is a release. No tag is pushed by hand: the version is the date and a number
+# for that day (2026.11.03.1, 2026.11.03.2, ...), and the release creates its own tag.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
 permissions:
   contents: write
 
-on:
-  push:
-    tags:
-      - 'v*'
+# one release at a time, so the number of the day never collides
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
-          node-version: 18.x
+          node-version: '24'
 
-      - run: npx githublogen
+      - name: Install pnpm
+        run: npm install --global pnpm@10.5.2
+
+      - name: Install and verify
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test:unit
+          pnpm build
+          test -s dist/index.html
+
+      - name: Version of this release (date and number of the day)
+        id: version
+        run: |
+          git fetch --tags --force
+          day="$(TZ=Asia/Shanghai date +%Y.%m.%d)"
+          number=$(( $(git tag --list "${day}.*" | wc -l) + 1 ))
+          version="${day}.${number}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          printf '{\n  "version": "%s",\n  "commit": "%s"\n}\n' "$version" "$GITHUB_SHA" > dist/build-info.json
+          mkdir -p target
+          tar -czf "target/kube-res-foresight-web_${version}.tar.gz" -C dist .
+
+      - name: Publish the release
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd target
+          sha256sum ./*.tar.gz > SHA256SUMS
+          gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$VERSION" --generate-notes ./*.tar.gz SHA256SUMS
