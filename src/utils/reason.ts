@@ -2,6 +2,8 @@
  * The reasons the platform gives are written by the backend in English (they are also logged and returned by the API). The
  * pages show them in Chinese: a known sentence is translated, one that is not known is shown as it is, so nothing is lost.
  */
+import { formatDateTime } from '@/utils/date';
+
 const MODE: Record<string, string> = { observe: '仅观察', recommend: '仅推荐', admission: '准入', auto: '自动' };
 const METRIC: Record<string, string> = { cpu: 'CPU', memory: '内存', gpu: 'GPU', replicas: '副本数', rps: '请求量' };
 
@@ -17,8 +19,17 @@ const RULES: Rule[] = [
     m => `历史不足：公式至少需要 ${m[1]} 个样本，只有 ${m[2]} 个`
   ],
   [
-    /^insufficient or low quality history: only (\d+)% of the observed (\S+) history is one contiguous usable run \(minimum (\d+)%\)$/,
-    m => `历史不足或质量太差：${METRIC[m[2]] || m[2]}历史里只有 ${m[1]}% 是连续可用的一段，至少需要 ${m[3]}%`
+    // the tail after the semicolon says what the run is and what ends it (see runDetail in the backend)
+    /^insufficient or low quality history: only (\d+)% of the observed (\S+) history is one contiguous usable run \(minimum (\d+)%\)(?:; observed ([\d.]+)h, the run is ([\d.]+)h from (\S+?)(?:, the gap before it is (\d+) steps \(fill limit (\d+)\)|, nothing is stored before it))?$/,
+    m => {
+      const head = `历史不足或质量太差：${METRIC[m[2]] || m[2]}历史里只有 ${m[1]}% 是连续可用的一段，至少需要 ${m[3]}%`;
+      if (!m[4]) return head;
+      const span = (hours: string) => (Number(hours) >= 48 ? `${(Number(hours) / 24).toFixed(1)} 天` : `${hours} 小时`);
+      const run = `。已存的数据跨度 ${span(m[4])}，其中连续的一段是 ${span(m[5])}，从 ${formatDateTime(m[6])} 起`;
+      return m[7] === undefined
+        ? `${head}${run}，它之前没有数据`
+        : `${head}${run}；它前面有一段 ${m[7]} 步的缺口没有被补上（最大补缺步数 ${m[8]}）`;
+    }
   ],
   [
     /^(?:\S+: )?(?:not eligible: )?candidate skipped: insufficient history: need (\d+) training and (\d+) test steps, have (\d+)$/,
