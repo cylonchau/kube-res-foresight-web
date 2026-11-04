@@ -29,7 +29,8 @@ const rules = computed<Partial<Record<keyof FormModel, App.Global.FormRule[]>>>(
 
   return {
     userName: formRules.userName,
-    password: formRules.pwd,
+    // 登录只要求非空，密码是否正确由服务端判断；复杂度只在设置密码时检查
+    password: [formRules.pwd[0]],
     captchaCode: authStore.captchaRequired
       ? [{ required: true, message: $t('page.login.common.captchaPlaceholder') }]
       : []
