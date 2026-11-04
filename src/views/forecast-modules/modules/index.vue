@@ -223,6 +223,15 @@ const paceModel = {
   scaleUpCooldown: 'scale_up_cooldown_seconds',
   scaleDownCooldown: 'scale_down_cooldown_seconds'
 } as const;
+// the floor and the cap that hold a recommendation: a guardrail on the result, not a forecast (0 = not set)
+const resourceBounds = [
+  { model: 'min_cpu_milli', label: 'minCpu', hint: 'floorHint' },
+  { model: 'max_cpu_milli', label: 'maxCpu', hint: 'capHint' },
+  { model: 'min_memory_mib', label: 'minMemory', hint: 'floorHint' },
+  { model: 'max_memory_mib', label: 'maxMemory', hint: 'capHint' },
+  { model: 'min_gpu', label: 'minGpu', hint: 'floorHint' },
+  { model: 'max_gpu', label: 'maxGpu', hint: 'capHint' }
+] as const;
 
 // ---- the preview of a metric, asked for on demand: choose the module and its metric, then the same query test dialog as the
 // Metrics dataset page runs the PromQL against Prometheus (the dialog also takes a PromQL typed by hand, e.g. a log metric)
@@ -1340,25 +1349,28 @@ onMounted(() => {
           @preview="source => showPreview(editing?.id ?? null, source)"
         />
 
-        <div class="mb-8px mt-12px font-medium">{{ t('page.forecast.modules.sectionSafety') }}</div>
+        <div class="mb-8px mt-12px flex items-center gap-6px font-medium">
+          {{ t('page.forecast.modules.sectionSafety') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.sectionSafetyHint') }}</div>
+          </IconTooltip>
+        </div>
         <NForm :model="form" label-placement="top">
-          <NFormItem :label="t('page.forecast.modules.minCpu')">
-            <NInputNumber v-model:value="form.min_cpu_milli" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.maxCpu')">
-            <NInputNumber v-model:value="form.max_cpu_milli" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.minMemory')">
-            <NInputNumber v-model:value="form.min_memory_mib" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.maxMemory')">
-            <NInputNumber v-model:value="form.max_memory_mib" :min="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.minGpu')">
-            <NInputNumber v-model:value="form.min_gpu" :min="0" :precision="0" class="w-full" />
-          </NFormItem>
-          <NFormItem :label="t('page.forecast.modules.maxGpu')">
-            <NInputNumber v-model:value="form.max_gpu" :min="0" :precision="0" class="w-full" />
+          <NFormItem v-for="bound in resourceBounds" :key="bound.model">
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t(`page.forecast.modules.${bound.label}`) }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-320px leading-22px">{{ t(`page.forecast.modules.${bound.hint}`) }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber
+              v-model:value="form[bound.model]"
+              :min="0"
+              :precision="bound.model.endsWith('gpu') ? 0 : undefined"
+              class="w-full"
+            />
           </NFormItem>
           <NFormItem>
             <template #label>

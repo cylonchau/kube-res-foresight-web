@@ -745,16 +745,22 @@ const local = {
         editTitle: 'Edit forecast module',
         required: 'Name, namespace and workload are required',
         sectionBasic: 'Basics',
-        sectionSafety: 'Resource range and headroom',
+        sectionSafety: 'How the recommendation is calculated and bounded',
+        sectionSafetyHint:
+          'Recommendation = predicted peak x headroom ratio, then held between the floor and the cap; the limit follows from the final request and the limit ratio. The floor and the cap are guardrails, not forecasts; 0 means no bound.',
+        floorHint:
+          'The recommendation never goes below it. A forecast only reflects history: when a service is idle, has missing data or has just started it can be tiny, and a burst would then throttle or OOM the Pod. The floor guards against that. 0 = not set.',
+        capHint:
+          'The recommendation never goes above it, so an abnormal forecast (a spike, bad data) cannot claim too much at once. 0 = not set.',
         ttlSeconds: 'Recommendation validity (s)',
         ttlHint: 'After it expires neither admission nor the operator uses the recommendation until a new one is made.',
         maxFillSteps: 'Max steps to fill',
         maxFillStepsHint:
           'Gaps up to this many steps are linearly interpolated; a longer gap truncates the training data. 0 disables filling.',
-        minCpu: 'Min CPU (m)',
-        maxCpu: 'Max CPU (m)',
-        minMemory: 'Min memory (MiB)',
-        maxMemory: 'Max memory (MiB)',
+        minCpu: 'CPU floor (m)',
+        maxCpu: 'CPU cap (m)',
+        minMemory: 'Memory floor (MiB)',
+        maxMemory: 'Memory cap (MiB)',
         minReplicas: 'Minimum replicas',
         maxReplicas: 'Maximum replicas',
         fallbackCpu: 'Degraded default CPU (m)',
@@ -782,12 +788,12 @@ const local = {
           'A fixed setting of the module: scaling never goes above this replica count; with dynamic expansion it is the starting ceiling and the hard maximum below caps it.',
         fallbackReplicasHint:
           'The replica count the operator uses when there is no fresh forecast (model failure, too little data, expired recommendation); it never scales down below the current count because of it. 0 = unset: the current replicas are frozen.',
-        limitCpuRatio: 'CPU limit ratio',
-        limitMemoryRatio: 'Memory limit ratio',
+        limitCpuRatio: 'CPU limit factor',
+        limitMemoryRatio: 'Memory limit factor',
         limitRatioHint:
           'A module sets requests only; the limit follows from them: limit = final request x this ratio (1-10), for example a memory request of 10 GiB and a ratio of 1.2 give a 12 GiB memory limit. 0 leaves the limit as the workload declares it. It is computed and written at admission only (the Pods of a new or updated workload); scaling changes the replica count and never requests or limits. A memory ratio of 1 makes the request the OOM line, so 1.2 or more is usual. Running Pods wait until the workload rolls.',
         headroomHint:
-          'The predicted peak is multiplied by this ratio; 1 leaves no headroom. It is a policy parameter: set it from your tolerance.',
+          'Recommendation = predicted peak x headroom ratio. For example a predicted peak of 2 cores and a ratio of 1.2 recommend 2.4 cores; memory and GPUs work the same way, and replicas are predicted peak x ratio / capacity of one Pod. 1 leaves no headroom, 10 is the most. Set it from how much forecast error the service can tolerate.',
         podCapacity: 'Safe capacity per pod (RPS)',
         podCapacityHint:
           'The RPS one Ready pod can carry, verified by a load test or controlled observation. With 0 no replicas are recommended from forecasts.',
@@ -967,8 +973,8 @@ const local = {
           'Fixed: the maximum is the ceiling. Dynamic: when the forecast exceeds the maximum and the algorithm scored well enough, the effective ceiling rises by at most a ratio per cycle, never beyond the independent hard ceiling, and falls back with the forecast.',
         hardMaxReplicas: 'Hard ceiling (replicas)',
         expandStepRatio: 'Largest rise per cycle',
-        minGpu: 'Minimum GPUs',
-        maxGpu: 'Maximum GPUs',
+        minGpu: 'GPU floor',
+        maxGpu: 'GPU cap',
         workloadKind: 'Workload kind',
         workloadKindHint:
           'A module is one Kubernetes workload: namespace + kind + name. A DaemonSet has no replica count, only its resource requests are adjusted.',
