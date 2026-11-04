@@ -1051,7 +1051,7 @@ onMounted(() => {
                 </IconTooltip>
               </span>
             </template>
-            <NInputNumber v-model:value="form.max_fill_steps" :min="0" :max="60" :precision="0" class="w-full" />
+            <NInputNumber v-model:value="form.max_fill_steps" :min="0" :max="10000" :precision="0" class="w-full" />
           </NFormItem>
           <NFormItem>
             <template #label>

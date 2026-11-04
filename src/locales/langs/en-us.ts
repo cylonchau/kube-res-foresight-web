@@ -756,7 +756,7 @@ const local = {
         ttlHint: 'After it expires neither admission nor the operator uses the recommendation until a new one is made.',
         maxFillSteps: 'Max steps to fill',
         maxFillStepsHint:
-          'Gaps up to this many steps are linearly interpolated; a longer gap truncates the training data. 0 disables filling.',
+          'Gaps up to this many steps are linearly interpolated, at training time only (Prometheus and the stored samples are not changed); a longer gap truncates the training data. It counts steps, so the time it covers follows the sampling step: 480 steps are 4 hours at 30 seconds, 48 steps at 5 minutes. What is filled is interpolated, not real data, and the longer the gap the less reliable. 0 disables filling, 10000 is the most.',
         minCpu: 'CPU floor (m)',
         maxCpu: 'CPU cap (m)',
         minMemory: 'Memory floor (MiB)',

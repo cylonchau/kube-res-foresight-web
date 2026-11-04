@@ -734,7 +734,8 @@ const local = {
         ttlSeconds: '推荐有效期(秒)',
         ttlHint: '推荐过期后，准入与 Operator 都不再使用它，直到生成新的推荐。',
         maxFillSteps: '最大补缺步数',
-        maxFillStepsHint: '不超过该步数的缺口按线性插值补齐，更长的缺口会截断训练数据。0 表示不补。',
+        maxFillStepsHint:
+          '不超过该步数的缺口按线性插值补齐（只在训练时补，不改 Prometheus 也不改已存样本），更长的缺口会截断训练数据。按步数算，覆盖的时间随采样粒度变化：30 秒时 480 步是 4 小时，5 分钟时 48 步是 4 小时。补的是插值数据，不是真实数据，缺口越长越不可靠。0 表示不补，最大 10000。',
         minCpu: 'CPU 保底(m)',
         maxCpu: 'CPU 封顶(m)',
         minMemory: '内存保底(MiB)',
