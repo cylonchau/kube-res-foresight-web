@@ -506,7 +506,7 @@ onMounted(() => {
             class="flex items-center gap-12px w-full"
           >
             <StatusSelect
-              :value="editForm.config_value === 'true'"
+              :value="['true', '1'].includes(String(editForm.config_value).trim().toLowerCase())"
               @update:value="(val: boolean) => (editForm.config_value = String(val))"
             />
           </div>

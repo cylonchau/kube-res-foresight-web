@@ -15,7 +15,14 @@ function change(next: string) {
 </script>
 
 <template>
-  <NRadioGroup :value="props.value ? 'on' : 'off'" size="small" :disabled="props.disabled" @update:value="change">
+  <!-- solid: the chosen word is filled, so the stored state is the one thing that stands out (the outline style looked chosen on focus) -->
+  <NRadioGroup
+    :value="props.value ? 'on' : 'off'"
+    button-style="solid"
+    size="small"
+    :disabled="props.disabled"
+    @update:value="change"
+  >
     <NRadioButton value="on">{{ $t('common.enable') }}</NRadioButton>
     <NRadioButton value="off">{{ $t('common.disable') }}</NRadioButton>
   </NRadioGroup>
