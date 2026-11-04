@@ -41,6 +41,13 @@ const catalog = ref<Api.Datasource.MetricCatalog>({
 const presets = ref<Api.Datasource.Preset[]>([]);
 const saving = ref(false);
 const previewModule = ref<number | null>(null);
+// no module yet (a metric is often made first): the variables of the query can be given by hand for the test
+const sample = reactive<Record<'namespace' | 'workload' | 'container' | 'service', string>>({
+  namespace: '',
+  workload: '',
+  container: '',
+  service: ''
+});
 
 const form = reactive({
   datasource_id: null as number | null,
@@ -53,6 +60,12 @@ const form = reactive({
   enabled: true,
   remark: ''
 });
+
+const sampleVariables = computed(() =>
+  (['namespace', 'workload', 'container', 'service'] as const).filter(name =>
+    new RegExp(`\\{\\{\\s*${name}\\s*\\}\\}`).test(form.query)
+  )
+);
 
 const datasourceOptions = computed(() => datasources.value.map(item => ({ label: item.name, value: item.id })));
 const metricOptions = computed(() =>
@@ -274,8 +287,16 @@ watch(show, async visible => {
           </template>
           <NSelect v-model:value="previewModule" clearable filterable :options="moduleOptions" />
         </NFormItem>
+        <NFormItem
+          v-for="name in sampleVariables"
+          v-show="!previewModule"
+          :key="name"
+          :label="t('page.datasource.mappings.sampleValue', { name })"
+        >
+          <NInput v-model:value="sample[name]" :placeholder="t('page.datasource.mappings.samplePlaceholder')" />
+        </NFormItem>
         <div>
-          <QueryTestResult :config="testConfig" :module-id="previewModule" />
+          <QueryTestResult :config="testConfig" :module-id="previewModule" :sample="sample" />
         </div>
       </NForm>
     </div>

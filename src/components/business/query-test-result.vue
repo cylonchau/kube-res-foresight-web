@@ -27,6 +27,8 @@ interface Props {
   config: QueryConfig;
   /** the module whose workload fills the variables of the template ({{namespace}}, {{workload}}, ...) */
   moduleId?: number | null;
+  /** values for the variables when no module is chosen, so a template can be tried before any module exists */
+  sample?: Partial<Record<'namespace' | 'workload' | 'container' | 'service', string>>;
   height?: number;
 }
 
@@ -108,6 +110,14 @@ async function draw() {
   }));
 }
 
+function sampleValues() {
+  const out: Record<string, string> = {};
+  Object.entries(props.sample || {}).forEach(([key, value]) => {
+    if (value?.trim()) out[key] = value.trim();
+  });
+  return out;
+}
+
 /** Runs the query of the form against its datasource and shows what came back. */
 async function run() {
   const c = props.config;
@@ -138,6 +148,7 @@ async function run() {
       unit: c.metric === 'custom' ? c.unit : undefined,
       step_seconds: c.step_seconds,
       module_id: props.moduleId ?? undefined,
+      ...(props.moduleId ? {} : sampleValues()),
       scale: c.scale,
       precision: c.precision,
       ...rangeParams(range.value)

@@ -2540,7 +2540,9 @@ const local = {
         metric_network_rx: 'Network receive rate',
         metric_network_tx: 'Network transmit rate',
         metric_custom: 'Custom Prometheus metric',
-        previewModule: 'Preview with module'
+        previewModule: 'Preview with module',
+        sampleValue: 'Preview value for {name}',
+        samplePlaceholder: 'With no module yet, enter a real value to try this query'
       },
       presets: {
         title: 'Metric presets',

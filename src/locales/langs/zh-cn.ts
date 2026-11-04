@@ -2430,7 +2430,9 @@ const local = {
         metric_network_rx: '网络接收速率',
         metric_network_tx: '网络发送速率',
         metric_custom: '自定义 Prometheus 指标',
-        previewModule: '用哪个模块预览'
+        previewModule: '用哪个模块预览',
+        sampleValue: '预览用的 {name}',
+        samplePlaceholder: '还没有模块时，填一个真实存在的值来试这条查询'
       },
       presets: {
         title: '指标预设',
