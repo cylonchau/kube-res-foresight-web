@@ -42,6 +42,14 @@ const RULES: Rule[] = [
   ],
   [/^parameter "(\w+)" is required$/, m => `必填参数 "${m[1]}" 没有设置`],
   [/^cannot enable (\S+): parameter "(\w+)" is required$/, m => `不能启用 ${m[1]}：必填参数 "${m[2]}" 没有设置`],
+  [
+    /^this metric's source is disabled, so no algorithm runs on it$/,
+    () => '这个指标的来源已停用，所以没有算法在它上面运行'
+  ],
+  [
+    /^this metric is read as measured history, not forecast, so no algorithm runs on it$/,
+    () => '这个指标按实测历史取值（用于 OOM 等保护），不做预测，所以没有算法曲线'
+  ],
   [/^(?:\S+: )?no prediction yet$/, () => '还没有预测'],
   [/^no recommendation has been made yet$/, () => '还没有生成推荐'],
   [/^the latest recommendation has expired$/, () => '最新一次推荐已过期'],
