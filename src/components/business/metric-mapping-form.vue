@@ -234,24 +234,26 @@ watch(show, async visible => {
           <template #label>
             <HelpLabel :label="t('page.monitoring.datasets.usePreset')" :help="t('page.formHelp.datasetPreset')" />
           </template>
-          <NSelect
-            :value="null"
-            clearable
-            filterable
-            :options="presetOptions"
-            :placeholder="t('page.monitoring.datasets.usePresetHint')"
-            @update:value="applyPreset"
-          />
-          <div v-if="pickedPreset" class="mt-4px text-12px leading-20px opacity-70">
-            <div>{{ pickedText(pickedPreset.scenario) }}</div>
-            <div v-if="pickedText(pickedPreset.usage)">{{ pickedText(pickedPreset.usage) }}</div>
-            <div v-if="pickedText(pickedPreset.limitations)">{{ pickedText(pickedPreset.limitations) }}</div>
-            <div>
-              {{ t('page.datasource.presets.columns.source') }}: {{ pickedPreset.source.component }} ·
-              {{ t('page.datasource.presets.series') }}: {{ pickedPreset.source.metrics.join(', ') }} ·
-              {{ t('page.datasource.presets.labels') }}: {{ pickedPreset.source.labels.join(', ') }}
+          <div class="w-full">
+            <NSelect
+              :value="null"
+              clearable
+              filterable
+              :options="presetOptions"
+              :placeholder="t('page.monitoring.datasets.usePresetHint')"
+              @update:value="applyPreset"
+            />
+            <div v-if="pickedPreset" class="mt-4px text-12px leading-20px opacity-70">
+              <div>{{ pickedText(pickedPreset.scenario) }}</div>
+              <div v-if="pickedText(pickedPreset.usage)">{{ pickedText(pickedPreset.usage) }}</div>
+              <div v-if="pickedText(pickedPreset.limitations)">{{ pickedText(pickedPreset.limitations) }}</div>
+              <div>
+                {{ t('page.datasource.presets.columns.source') }}: {{ pickedPreset.source.component }} ·
+                {{ t('page.datasource.presets.series') }}: {{ pickedPreset.source.metrics.join(', ') }} ·
+                {{ t('page.datasource.presets.labels') }}: {{ pickedPreset.source.labels.join(', ') }}
+              </div>
+              <div v-if="!pickedPreset.verified">{{ t('page.datasource.presets.unverifiedHint') }}</div>
             </div>
-            <div v-if="!pickedPreset.verified">{{ t('page.datasource.presets.unverifiedHint') }}</div>
           </div>
         </NFormItem>
         <NFormItem>
