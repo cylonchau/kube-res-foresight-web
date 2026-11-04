@@ -12,7 +12,6 @@ import {
   NPopconfirm,
   NSelect,
   NSpace,
-  NSwitch,
   NTag,
   useMessage
 } from 'naive-ui';
@@ -833,7 +832,7 @@ onMounted(() => {
                 </IconTooltip>
               </span>
             </template>
-            <NSwitch v-model:value="form.predict_enabled" />
+            <StatusSelect v-model:value="form.predict_enabled" />
           </NFormItem>
           <template v-if="form.predict_enabled">
             <NFormItem>
@@ -1315,7 +1314,7 @@ onMounted(() => {
                 </IconTooltip>
               </span>
             </template>
-            <NSwitch v-model:value="form.oom_weight_enabled" />
+            <StatusSelect v-model:value="form.oom_weight_enabled" />
           </NFormItem>
           <NFormItem v-if="form.oom_weight_enabled">
             <template #label>

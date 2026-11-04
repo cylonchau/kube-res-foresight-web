@@ -25,6 +25,7 @@ import {
 import { useI18n } from 'vue-i18n';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
+import StatusSelect from '@/components/business/status-select.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
@@ -517,7 +518,7 @@ onMounted(() => {
               />
             </NFormItem>
             <NFormItem :label="t('page.assistant.enabled')">
-              <NSwitch :value="form.enabled" @update:value="onEnabled" />
+              <StatusSelect :value="form.enabled" @update:value="onEnabled" />
             </NFormItem>
             <NFormItem>
               <template #label>

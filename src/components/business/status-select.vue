@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NRadioButton, NRadioGroup } from 'naive-ui';
+import { NButton, NButtonGroup } from 'naive-ui';
 import { $t } from '@/locales';
 
 /**
@@ -9,21 +9,22 @@ import { $t } from '@/locales';
 const props = defineProps<{ value: boolean | null | undefined; disabled?: boolean }>();
 const emit = defineEmits<{ 'update:value': [value: boolean] }>();
 
-function change(next: string) {
-  emit('update:value', next === 'on');
+function pick(next: boolean) {
+  if (!props.disabled) emit('update:value', next);
 }
 </script>
 
 <template>
-  <!-- solid: the chosen word is filled, so the stored state is the one thing that stands out (the outline style looked chosen on focus) -->
-  <NRadioGroup
-    :value="props.value ? 'on' : 'off'"
-    button-style="solid"
-    size="small"
-    :disabled="props.disabled"
-    @update:value="change"
-  >
-    <NRadioButton value="on">{{ $t('common.enable') }}</NRadioButton>
-    <NRadioButton value="off">{{ $t('common.disable') }}</NRadioButton>
-  </NRadioGroup>
+  <!--
+ two buttons, the stored state filled with the primary colour and the other one plain: NRadioGroup has no filled style,
+       and its outline looked chosen on focus 
+-->
+  <NButtonGroup size="small">
+    <NButton :type="props.value ? 'primary' : 'default'" :disabled="props.disabled" @click="pick(true)">
+      {{ $t('common.enable') }}
+    </NButton>
+    <NButton :type="props.value ? 'default' : 'primary'" :disabled="props.disabled" @click="pick(false)">
+      {{ $t('common.disable') }}
+    </NButton>
+  </NButtonGroup>
 </template>
