@@ -4,6 +4,7 @@ import { NEmpty, NSpin, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { fetchGetTrainingData } from '@/service/api';
+import { valueAxisFor } from '@/utils/chart-axis';
 import { axisTimeLabel, axisTooltip } from '@/utils/date';
 import { formatMetric } from '@/utils/format';
 
@@ -45,7 +46,14 @@ async function draw() {
       confine: true,
       formatter: axisTooltip((value: unknown) => formatMetric(Number(value), unit))
     },
-    yAxis: { type: 'value', scale: true, name: unit },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      ...valueAxisFor(
+        unit,
+        [...(data.value?.input || []), ...(data.value?.forecast || [])].map(p => p.value)
+      )
+    },
     series: [
       {
         name: t('page.forecast.runs.dataInput'),

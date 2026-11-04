@@ -6,7 +6,8 @@ import TimeRangeField from '@/components/business/time-range-field.vue';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
 import { fetchTestMetricQuery } from '@/service/api';
-import { formatDecimal, formatMetric } from '@/utils/format';
+import { valueAxisFor } from '@/utils/chart-axis';
+import { formatMetric } from '@/utils/format';
 import { gapPairs, withBreaks } from '@/utils/series-gaps';
 
 defineOptions({ name: 'QueryTestResult' });
@@ -68,8 +69,10 @@ async function draw() {
     yAxis: {
       type: 'value',
       scale: true,
-      name: unit.value,
-      axisLabel: { formatter: (value: number) => formatDecimal(value, 3) }
+      ...valueAxisFor(
+        unit.value,
+        points.map(p => p.value)
+      )
     },
     series: [
       {

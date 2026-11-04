@@ -3,7 +3,9 @@ import { computed, watch } from 'vue';
 import { NEmpty } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
+import { valueAxisFor } from '@/utils/chart-axis';
 import { axisTimeLabel, axisTooltip } from '@/utils/date';
+import { formatMetric } from '@/utils/format';
 import { type MetricResult, seriesName } from '@/utils/metric-series';
 
 defineOptions({ name: 'MetricSeriesChart' });
@@ -47,7 +49,15 @@ async function draw() {
   const unit = props.results[0]?.result.unit || '';
   await updateOptions(opts => ({
     ...opts,
-    yAxis: { type: 'value', scale: true, name: unit },
+    tooltip: { trigger: 'axis', formatter: axisTooltip((value: unknown) => formatMetric(Number(value), unit)) },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      ...valueAxisFor(
+        unit,
+        props.results.flatMap(({ result }) => result.series.flatMap(item => item.points.map(point => point.value)))
+      )
+    },
     series: series as never
   }));
 }

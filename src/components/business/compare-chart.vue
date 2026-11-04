@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { axisTimeLabel, formatDateTime } from '@/utils/date';
+import { valueAxisFor } from '@/utils/chart-axis';
 import { formatDecimal, formatMetric } from '@/utils/format';
 import { gapPairs, withBreaks } from '@/utils/series-gaps';
 
@@ -177,6 +178,13 @@ let picks: Array<{ name: string; kind: 'actual' | 'forecast'; axis: number; data
 function pairOf(point: unknown): unknown[] | undefined {
   const value = Array.isArray(point) ? point : (point as { value?: unknown[] })?.value;
   return Array.isArray(value) ? value : undefined;
+}
+
+/** the numbers on the unit axis: a point is a pair, a candle holds open, close, low and high after its time */
+function axisValues() {
+  return picks
+    .filter(line => line.axis === 0)
+    .flatMap(line => line.data.flatMap(point => (pairOf(point) ?? []).slice(1).map(Number)));
 }
 
 async function draw() {
@@ -409,10 +417,9 @@ async function draw() {
       {
         type: 'value',
         scale: true,
-        name: props.unit,
         nameGap: 12,
         nameTextStyle: { align: 'left' },
-        axisLabel: { formatter: (v: number) => formatDecimal(v, 3) }
+        ...valueAxisFor(props.unit, axisValues())
       },
       {
         type: 'value',
