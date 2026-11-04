@@ -116,18 +116,27 @@ function add() {
   rows.value.push({ mappingId: null, weight: 1, enabled: true });
 }
 
-/** The first problem of the rows, as a message, or an empty string when they can be saved. */
-function problem(): string {
+/**
+ * The first problem of the rows, as a message, or an empty string when they can be saved. The module step (0 = follow the
+ * source) is checked against the query step of every enabled template, as the server does: the data of a module is made
+ * from the samples of the query, so it can only be coarser than them, by a whole multiple.
+ */
+function problem(stepSeconds = 0): string {
   const used = new Set<number>();
   for (const row of rows.value) {
     if (!row.mappingId) return $t('page.forecast.moduleMetrics.templateRequired');
+    const template = templateById(row.mappingId);
     if (used.has(row.mappingId)) {
-      return $t('page.forecast.moduleMetrics.templateDuplicate', {
-        name: templateById(row.mappingId)?.name || row.mappingId
-      });
+      return $t('page.forecast.moduleMetrics.templateDuplicate', { name: template?.name || row.mappingId });
     }
     used.add(row.mappingId);
     if (!(row.weight >= 0)) return $t('page.forecast.moduleMetrics.weightInvalid');
+    const query = template?.step_seconds || 0;
+    if (row.enabled && stepSeconds > 0 && query > 0) {
+      const values = { step: stepSeconds, query, name: template?.name || '' };
+      if (stepSeconds < query) return $t('page.forecast.moduleMetrics.stepFiner', values);
+      if (stepSeconds % query !== 0) return $t('page.forecast.moduleMetrics.stepMultiple', values);
+    }
   }
   return '';
 }

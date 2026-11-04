@@ -2274,9 +2274,15 @@ const local = {
         nameDuplicate: '固定周期名称重复：{name}',
         rangeInvalid: '固定周期 {name} 的结束时间必须晚于开始时间',
         valueRequired: '固定周期 {name} 至少要固定副本数、CPU、内存中的一项',
-        saveFailed: '模块已保存，但固定周期没有全部保存成功，请重新打开检查'
+        saveFailed:
+          '模块已保存，但固定周期没有全部保存成功（原因见上一条报错）；窗口里已重新载入实际保存的内容，请核对后再保存'
       },
       moduleMetrics: {
+        saveFailed:
+          '模块已保存，但参与计算的指标没有全部保存成功（原因见上一条报错）；窗口里已重新载入实际保存的内容，请核对后再保存',
+        stepFiner:
+          '模块每 {step} 秒采样一次，比指标模板「{name}」{query} 秒的查询步长更细，数据无法从更粗的样本里得到：请把模块的采样间隔改成 {query} 秒或它的整数倍，或把该模板的查询步长改成 {step} 秒或更细',
+        stepMultiple: '模块的采样间隔（{step} 秒）必须是指标模板「{name}」查询步长（{query} 秒）的整数倍：请改其中一个',
         title: '参与计算的指标',
         preview: '预览',
         empty:

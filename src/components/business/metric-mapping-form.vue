@@ -227,7 +227,7 @@ watch(show, async visible => {
             unit="seconds"
             :min="catalog.min_step_seconds"
             :max="catalog.max_step_seconds"
-            :presets="[60, 300, 900, 3600]"
+            :presets="[15, 30, 60, 300, 900, 1800, 3600]"
           />
         </NFormItem>
         <NFormItem v-if="presetOptions.length">

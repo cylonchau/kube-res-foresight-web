@@ -2382,9 +2382,16 @@ const local = {
         nameDuplicate: 'Duplicate fixed period name: {name}',
         rangeInvalid: 'The end of {name} must be after its start',
         valueRequired: '{name} must pin replicas, CPU or memory',
-        saveFailed: 'The module is saved but not every fixed period was'
+        saveFailed:
+          'The module is saved but not every fixed period was (see the error above); what is stored has been loaded again, so check it and save again'
       },
       moduleMetrics: {
+        saveFailed:
+          'The module is saved but not every metric it uses was (see the error above); what is stored has been loaded again, so check it and save again',
+        stepFiner:
+          'The module samples every {step}s, finer than the {query}s query step of the metric template "{name}", and finer data cannot be made from coarser samples: set the module step to {query}s or a multiple of it, or set the step of that template to {step}s or finer',
+        stepMultiple:
+          'The module step ({step}s) must be a whole multiple of the {query}s query step of the metric template "{name}": change one of them',
         title: 'Metrics used',
         preview: 'Preview',
         empty: 'The module has no metrics yet. Add a metric template; a metric that is not added takes no part.',

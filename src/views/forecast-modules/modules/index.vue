@@ -426,7 +426,9 @@ async function save() {
     return;
   }
   const editorProblem =
-    metricsEditor.value?.problem() || oomMetricsEditor.value?.problem() || periodEditor.value?.problem();
+    metricsEditor.value?.problem(form.step_seconds) ||
+    oomMetricsEditor.value?.problem(form.step_seconds) ||
+    periodEditor.value?.problem();
   if (editorProblem) {
     message.warning(editorProblem);
     return;
@@ -442,13 +444,31 @@ async function save() {
       if (!id && cloneSource.value && data) await copyConfiguration(cloneSource.value.id, data.id);
       cloneSource.value = undefined;
       const savedId = id ?? data?.id;
-      if (savedId && !(await periodEditor.value?.save(savedId))) message.warning(t('page.forecast.periods.saveFailed'));
-      if (savedId && !(await metricsEditor.value?.save(savedId)))
+      // each part says what failed; the success message is only for a save in which every part went through
+      let complete = true;
+      if (savedId && (await periodEditor.value?.save(savedId)) === false) {
+        complete = false;
         message.warning(t('page.forecast.periods.saveFailed'));
-      if (savedId && !(await oomMetricsEditor.value?.save(savedId)))
-        message.warning(t('page.forecast.periods.saveFailed'));
-      visible.value = false;
-      message.success(id ? t('common.modifySuccess') : t('common.addSuccess'));
+      }
+      const metricsSaved = !savedId || (await metricsEditor.value?.save(savedId)) !== false;
+      const oomSaved = !savedId || (await oomMetricsEditor.value?.save(savedId)) !== false;
+      if (!metricsSaved || !oomSaved) {
+        complete = false;
+        message.warning(t('page.forecast.moduleMetrics.saveFailed'));
+      }
+      if (complete) {
+        visible.value = false;
+        message.success(id ? t('common.modifySuccess') : t('common.addSuccess'));
+      } else if (savedId) {
+        // the window stays open. The module exists now, so the next save updates it and cannot make a second one; the rows
+        // are read again from the server, so what is shown is what is stored and a retry cannot repeat what went through
+        if (!id && data) editing.value = data;
+        await Promise.all([
+          periodEditor.value?.load(savedId),
+          metricsEditor.value?.load(savedId),
+          oomMetricsEditor.value?.load(savedId)
+        ]);
+      }
       await load();
     }
   } finally {
@@ -944,7 +964,7 @@ onMounted(() => {
               unit="seconds"
               :min="15"
               :max="86400"
-              :presets="[300, 900, 3600, 86400]"
+              :presets="[15, 30, 60, 300, 900, 1800, 3600, 86400]"
               :zero-label="t('page.forecast.modules.stepFollowSource')"
             />
           </NFormItem>
