@@ -419,6 +419,10 @@ declare namespace Api {
       advice?: 'lower_min' | 'raise_max' | '';
       suggest_min?: number;
       suggest_max?: number;
+      /** the Pod spec in force was kept instead of the computed value: within the change ratio, or a decrease waiting out the hold */
+      held?: 'ratio' | 'hold' | '';
+      /** the change ratio (percent) or the hold (hours) that kept it */
+      held_limit?: number;
     }
 
     interface NeedTotals {

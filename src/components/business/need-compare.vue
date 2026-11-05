@@ -30,6 +30,8 @@ interface Row {
   needed: number;
   recommended: number;
   bound?: string;
+  held?: string;
+  heldLimit?: number;
   limits: string;
 }
 
@@ -61,6 +63,8 @@ const rows = computed<Row[]>(() => {
       needed: n.cpu_milli.needed,
       recommended: n.cpu_milli.recommended,
       bound: n.cpu_milli.bound,
+      held: n.cpu_milli.held,
+      heldLimit: n.cpu_milli.held_limit,
       limits: limitsOf('cpu', n.cpu_milli.min, n.cpu_milli.max)
     },
     {
@@ -70,6 +74,8 @@ const rows = computed<Row[]>(() => {
       needed: n.memory_bytes.needed,
       recommended: n.memory_bytes.recommended,
       bound: n.memory_bytes.bound,
+      held: n.memory_bytes.held,
+      heldLimit: n.memory_bytes.held_limit,
       limits: limitsOf('memory', n.memory_bytes.min, n.memory_bytes.max)
     },
     {
@@ -118,16 +124,24 @@ const columns = computed(() => [
     title: t('page.forecast.need.recommended'),
     key: 'recommended',
     width: 150,
-    render: (row: Row) =>
-      row.bound
-        ? h('span', [
-            text(row.kind, row.recommended),
-            ' ',
-            h(NTag, { size: 'tiny', bordered: false, type: 'warning' }, () =>
-              t(`page.forecast.need.bound_${row.bound}`)
-            )
-          ])
-        : text(row.kind, row.recommended)
+    render: (row: Row) => {
+      const tags = [];
+      if (row.bound) {
+        tags.push(
+          h(NTag, { size: 'tiny', bordered: false, type: 'warning' }, () => t(`page.forecast.need.bound_${row.bound}`))
+        );
+      }
+      // the Pod spec in force was kept: the recommendation is then not what the forecast needs, and says why
+      if (row.held) {
+        tags.push(
+          h(NTag, { size: 'tiny', bordered: false, type: 'info' }, () =>
+            t(`page.forecast.need.held_${row.held}`, { n: row.heldLimit ?? 0 })
+          )
+        );
+      }
+      if (!tags.length) return text(row.kind, row.recommended);
+      return h('span', [text(row.kind, row.recommended), ...tags.flatMap(tag => [' ', tag])]);
+    }
   },
   { title: t('page.forecast.need.diff'), key: 'diff', width: 130, render: (row: Row) => diffText(row) },
   { title: t('page.forecast.need.limits'), key: 'limits', width: 130 }
@@ -195,15 +209,20 @@ async function apply(payload: Api.Forecast.ModulePayload) {
       <div class="flex flex-wrap items-baseline gap-8px">
         <NTag size="small" :bordered="false">{{ t('page.forecast.need.partCurrent') }}</NTag>
         <template v-if="parts.current">
+          <span>{{ t(`page.forecast.need.res_${parts.current.resource}`, parts.current.resource) }}</span>
           <span>{{ amount(parts.current) }}</span>
           <span class="opacity-70">
             {{ t('page.forecast.need.partReplicas', { n: parts.current.replicas }) }}
           </span>
+          <NTag v-if="parts.current.note === 'other_resource'" size="small" :bordered="false" type="warning">
+            {{ t('page.forecast.need.otherResource') }}
+          </NTag>
         </template>
         <span v-else class="opacity-70">{{ t('page.forecast.need.noCurrent') }}</span>
       </div>
       <div class="flex flex-wrap items-baseline gap-8px">
         <NTag size="small" :bordered="false" type="info">{{ t('page.forecast.need.partForecast') }}</NTag>
+        <span>{{ t(`page.forecast.need.res_${parts.forecast.resource}`, parts.forecast.resource) }}</span>
         <span>{{ amount(parts.forecast) }}</span>
         <span class="opacity-70">
           {{ t('page.forecast.need.partReplicas', { n: parts.forecast.replicas }) }} · {{ parts.forecast.algorithm }}
