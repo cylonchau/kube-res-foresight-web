@@ -37,6 +37,8 @@ interface Props {
   emptyReason?: string;
   /** the plot takes the height the parent gives it, instead of `height` */
   fill?: boolean;
+  /** why the actual replica curve is not drawn, when it is known; shown as a note in the toolbar */
+  replicasNote?: string;
 }
 
 /** The point a click landed on: the line it belongs to, its time and value, and for a forecast when it was made. */
@@ -58,7 +60,8 @@ const props = withDefaults(defineProps<Props>(), {
   bucketSeconds: 60,
   loading: false,
   emptyReason: '',
-  fill: false
+  fill: false,
+  replicasNote: ''
 });
 /**
  * The curves the user switched off. null means no choice was made: the first few forecasts are drawn. The page keeps the choice and gives
@@ -540,6 +543,11 @@ watch(
         <span class="chart-hint">{{ t('page.forecast.compare.clickHint') }}</span>
         <IconTooltip v-if="hasGaps" icon="mdi-help-circle" placement="bottom">
           <div class="max-w-320px leading-22px">{{ t('page.forecast.compare.gapLegend') }}</div>
+        </IconTooltip>
+        <IconTooltip v-if="replicasNote" icon="mdi-alert-circle-outline" placement="bottom">
+          <div class="max-w-360px leading-22px">
+            {{ t('page.forecast.compare.replicasNote', { reason: replicasNote }) }}
+          </div>
         </IconTooltip>
         <span class="flex-1"></span>
         <!-- the chart refreshes by itself: no need to press search again to read the newest data -->

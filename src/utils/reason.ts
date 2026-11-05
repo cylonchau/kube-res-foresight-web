@@ -50,6 +50,20 @@ const RULES: Rule[] = [
     /^this metric is read as measured history, not forecast, so no algorithm runs on it$/,
     () => '这个指标按实测历史取值（用于 OOM 等保护），不做预测，所以没有算法曲线'
   ],
+  [
+    /^the module has no enabled replicas metric, so there is no actual replica count to draw$/,
+    () => '模块里没有已启用的「副本数」指标，所以没有实际副本数可画'
+  ],
+  [/^Prometheus returned no replica sample in the range$/, () => 'Prometheus 在这个时间范围内没有返回副本数样本'],
+  [
+    /^.*the dataset step \((\S+)\) is finer than the step of the query \((\S+)\).*$/,
+    m =>
+      `模块的步长（${m[1]}）比这个指标查询的步长（${m[2]}）更细，粗粒度的样本无法拆成更细的网格：请把模块步长改成不小于查询步长，或把该指标模板的查询步长改小`
+  ],
+  [
+    /^.*the dataset step \((\S+)\) is not a whole multiple of the step of the query \((\S+)\).*$/,
+    m => `模块的步长（${m[1]}）不是这个指标查询步长（${m[2]}）的整数倍：请改成整数倍`
+  ],
   [/^(?:\S+: )?no prediction yet$/, () => '还没有预测'],
   [/^no recommendation has been made yet$/, () => '还没有生成推荐'],
   [/^the latest recommendation has expired$/, () => '最新一次推荐已过期'],

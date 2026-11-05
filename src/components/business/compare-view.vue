@@ -410,6 +410,7 @@ onMounted(async () => {
         :bucket-seconds="compare?.bucket_seconds || 60"
         :loading="loading"
         :empty-reason="emptyReason"
+        :replicas-note="reasonText(compare?.actual_replicas_error)"
         @refresh="load"
         @pick="point => (picked = point)"
       />

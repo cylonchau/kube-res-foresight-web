@@ -2036,6 +2036,7 @@ const local = {
       compare: {
         actual: '实际值',
         actualReplicas: '实际副本数',
+        replicasNote: '没有画出实际副本数：{reason}',
         predicted: '预测值',
         predictedAt: '预测时间',
         predictedReplicas: '预测副本数',

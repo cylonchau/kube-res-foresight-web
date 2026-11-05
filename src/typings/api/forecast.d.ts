@@ -830,6 +830,8 @@ declare namespace Api {
       from: string;
       to: string;
       actual_error?: string;
+      /** why there is no actual replica curve: the module has no replica metric, or it could not be read */
+      actual_replicas_error?: string;
       /** every enabled algorithm, with the reason for the ones that have no forecast in the window */
       statuses: AlgorithmStatus[];
     }
