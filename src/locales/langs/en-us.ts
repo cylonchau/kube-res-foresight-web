@@ -2181,7 +2181,7 @@ const local = {
       compare: {
         actual: 'Actual',
         actualReplicas: 'Actual replicas',
-        replicasNote: 'The actual replicas are not drawn: {reason}',
+        replicasNote: 'The replicas are not fully drawn: {reason}',
         predicted: 'Predicted',
         predictedAt: 'predicted at',
         predictedReplicas: 'predicted replicas',

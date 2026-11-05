@@ -86,6 +86,12 @@ const RULES: Rule[] = [
     m =>
       `不具备资格：它学习的周期是 ${m[1]}，历史只有 ${m[2]} 个周期（${m[3]}），至少需要 ${m[4]} 个（${m[5]}）才能参与决策`
   ],
+  [
+    /^the module does not state the (CPU|memory) capacity of one Pod \(dynamic replicas with a Pod (?:CPU|memory) request\)$/,
+    m =>
+      `模块没有写明单个 Pod 的${m[1] === 'CPU' ? 'CPU' : '内存'}（要在模块里选动态副本并填 Pod ${m[1] === 'CPU' ? 'CPU' : '内存'}请求），所以预测值换算不出副本数`
+  ],
+  [/^only a CPU or memory forecast has a replica count$/, () => '只有 CPU 或内存的预测能换算成副本数'],
   [/^(?:\S+: )?no prediction yet$/, () => '还没有预测'],
   [/^no recommendation has been made yet$/, () => '还没有生成推荐'],
   [/^the latest recommendation has expired$/, () => '最新一次推荐已过期'],

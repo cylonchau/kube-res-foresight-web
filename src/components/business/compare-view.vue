@@ -171,6 +171,17 @@ const emptyReason = computed(() => {
 
 const unit = computed(() => compare.value?.unit || '');
 
+/** why a replica count is missing from the chart: the actual one could not be read, or no forecast of this metric gives one */
+const replicasNote = computed(() => {
+  const c = compare.value;
+  if (!c) return '';
+  const notes = [reasonText(c.actual_replicas_error)];
+  const hasForecast = c.algorithms.some(a => a.points.length);
+  const hasPredicted = c.algorithms.some(a => a.points.some(p => p.replicas !== null && p.replicas !== undefined));
+  if (hasForecast && !hasPredicted && c.replica_basis) notes.push(reasonText(c.replica_basis));
+  return notes.filter(Boolean).join('；');
+});
+
 // ---- every enabled algorithm with its state: the ones without a forecast in the range say why
 const pointsOf = computed(() => new Map((compare.value?.algorithms || []).map(a => [a.algorithm_id, a.points.length])));
 const statuses = computed(() => compare.value?.statuses || []);
@@ -432,7 +443,7 @@ onActivated(async () => {
         :bucket-seconds="compare?.bucket_seconds || 60"
         :loading="loading"
         :empty-reason="emptyReason"
-        :replicas-note="reasonText(compare?.actual_replicas_error)"
+        :replicas-note="replicasNote"
         @refresh="load"
         @pick="point => (picked = point)"
       />
