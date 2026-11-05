@@ -438,6 +438,25 @@ declare namespace Api {
       memory_bytes: NeedField;
       total: NeedTotals;
       range_note?: string;
+      /** the replica need taken apart: the load now, the forecast and the margin put on it */
+      parts?: NeedParts;
+    }
+
+    interface NeedPart {
+      resource: string;
+      unit: 'cores' | 'bytes' | 'rps';
+      value: number;
+      /** the replicas this figure alone would need */
+      replicas: number;
+      at?: string;
+      note?: string;
+    }
+
+    interface NeedParts {
+      current?: NeedPart;
+      forecast: NeedPart & { algorithm: string; conservatism?: string };
+      margin: { factor: number; source: 'measured' | 'backtest' | 'headroom' | string; replicas: number };
+      per_pod: number;
     }
 
     /** the answer of GET /modules/:id/need */
@@ -982,6 +1001,8 @@ declare namespace Api {
       status: AlgorithmState;
       reason: string;
       last_run_at?: string;
+      /** set for an algorithm whose forecast is deliberately high ("P90", "peak envelope"): not the load that is expected */
+      conservatism?: string;
     }
 
     interface LeaderboardEntry {

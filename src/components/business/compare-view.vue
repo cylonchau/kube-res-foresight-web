@@ -244,12 +244,17 @@ const legendLabels = computed(() => {
       );
       const wape = wapeOf.value.get(item.algorithm_id);
       const parts = [item.algorithm_id];
+      // a deliberately high forecast (a percentile, an envelope) is a level that is enough most of the time, not what is expected to be used
+      if (item.conservatism) parts.push(t('page.forecast.need.conservative', { what: item.conservatism }));
       if (latest) parts.push(formatMetric(latest.value, unit.value));
       if (wape !== null && wape !== undefined)
         parts.push(
           `WAPE ${formatPercent(wape)} (Σ|${t('page.forecast.compare.predicted')}-${t('page.forecast.compare.actualValue')}| ÷ Σ${t('page.forecast.compare.actualValue')})`
         );
-      out[item.algorithm_id] = { text: parts.join(' · ') };
+      out[item.algorithm_id] = {
+        text: parts.join(' · '),
+        tip: item.conservatism ? t('page.forecast.need.conservativeHelp') : undefined
+      };
     } else {
       out[item.algorithm_id] = {
         text: `${item.algorithm_id} · ${t(`page.forecast.ranking.state_${item.status}`)}`,

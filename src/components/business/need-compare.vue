@@ -148,6 +148,18 @@ const range = computed(() =>
     : null
 );
 
+// ---- the replica need taken apart: the load now, the forecast, the margin put on it
+const parts = computed(() => props.need.parts);
+const amount = (part: { unit: string; value: number }) => {
+  if (part.unit === 'cores') return `${Number(part.value.toFixed(2))} ${t('page.forecast.need.cores')}`;
+  if (part.unit === 'bytes') return formatMemoryBytes(part.value);
+  return `${Number(part.value.toFixed(1))} rps`;
+};
+const marginSource = computed(() => {
+  const source = parts.value?.margin.source ?? '';
+  return t(`page.forecast.need.margin_${source}`, source);
+});
+
 const saving = ref(false);
 async function apply(payload: Api.Forecast.ModulePayload) {
   if (!props.moduleId) return;
@@ -176,6 +188,44 @@ async function apply(payload: Api.Forecast.ModulePayload) {
 
     <NDataTable size="small" :columns="columns" :data="rows" :row-key="(row: Row) => row.key" :scroll-x="780" />
     <div class="text-12px leading-20px opacity-70">{{ t('page.forecast.need.help') }}</div>
+
+    <!-- the replicas follow three different things; they are never shown as one number -->
+    <div v-if="parts" class="flex flex-col gap-6px text-13px">
+      <div class="font-medium">{{ t('page.forecast.need.partsTitle') }}</div>
+      <div class="flex flex-wrap items-baseline gap-8px">
+        <NTag size="small" :bordered="false">{{ t('page.forecast.need.partCurrent') }}</NTag>
+        <template v-if="parts.current">
+          <span>{{ amount(parts.current) }}</span>
+          <span class="opacity-70">
+            {{ t('page.forecast.need.partReplicas', { n: parts.current.replicas }) }}
+          </span>
+        </template>
+        <span v-else class="opacity-70">{{ t('page.forecast.need.noCurrent') }}</span>
+      </div>
+      <div class="flex flex-wrap items-baseline gap-8px">
+        <NTag size="small" :bordered="false" type="info">{{ t('page.forecast.need.partForecast') }}</NTag>
+        <span>{{ amount(parts.forecast) }}</span>
+        <span class="opacity-70">
+          {{ t('page.forecast.need.partReplicas', { n: parts.forecast.replicas }) }} · {{ parts.forecast.algorithm }}
+        </span>
+        <NTag v-if="parts.forecast.conservatism" size="small" :bordered="false" type="warning">
+          {{ t('page.forecast.need.conservative', { what: parts.forecast.conservatism }) }}
+        </NTag>
+      </div>
+      <div v-if="parts.forecast.conservatism" class="text-12px leading-20px opacity-70">
+        {{ t('page.forecast.need.conservativeHelp') }}
+      </div>
+      <div class="flex flex-wrap items-baseline gap-8px">
+        <NTag size="small" :bordered="false" type="success">{{ t('page.forecast.need.partMargin') }}</NTag>
+        <span>× {{ parts.margin.factor.toFixed(2) }}</span>
+        <span class="opacity-70">
+          {{ t('page.forecast.need.partMarginReplicas', { n: parts.margin.replicas, source: marginSource }) }}
+        </span>
+      </div>
+      <div class="text-12px leading-20px opacity-70">
+        {{ t('page.forecast.need.partsHelp', { perPod: Number(parts.per_pod.toPrecision(4)) }) }}
+      </div>
+    </div>
 
     <NAlert v-if="replicas.advice === 'lower_min'" type="warning" :show-icon="false">
       <div class="flex flex-wrap items-center gap-8px">

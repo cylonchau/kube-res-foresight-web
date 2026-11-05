@@ -80,6 +80,12 @@ const RULES: Rule[] = [
     /^the forecast is stale and the last (\d+) cycle\(s\) failed: (.*)$/,
     m => `预测已过期，且最近 ${m[1]} 个周期都失败了：${reasonText(m[2])}`
   ],
+  [
+    // the history holds too few repeats of the cycle a seasonal algorithm learns (see seasonCoverage in the backend)
+    /^not eligible: its cycle is (\S+) and the history holds ([\d.]+) of them \((\S+)\), (\d+) are needed \((\S+)\) before it may decide$/,
+    m =>
+      `不具备资格：它学习的周期是 ${m[1]}，历史只有 ${m[2]} 个周期（${m[3]}），至少需要 ${m[4]} 个（${m[5]}）才能参与决策`
+  ],
   [/^(?:\S+: )?no prediction yet$/, () => '还没有预测'],
   [/^no recommendation has been made yet$/, () => '还没有生成推荐'],
   [/^the latest recommendation has expired$/, () => '最新一次推荐已过期'],

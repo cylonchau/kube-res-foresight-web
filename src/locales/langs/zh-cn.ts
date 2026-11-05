@@ -1779,6 +1779,22 @@ const local = {
       },
       need: {
         title: '需求对比',
+        conservative: '偏保守（{what}）',
+        conservativeHelp:
+          '这条预测故意取得偏高（百分位或峰值包络），是「大多数时候够用的水平」，不是接下来预期会用多少；它也不表示内存 limit 已经安全。',
+        cores: '核',
+        partsTitle: '需求拆开看：当前用量、预测、安全余量',
+        partCurrent: '当前用量',
+        partForecast: '预测',
+        partMargin: '安全余量',
+        partReplicas: '单独需要 {n} 个副本',
+        partMarginReplicas: '多出 {n} 个副本（来源：{source}）',
+        noCurrent: '没有足够新的实测样本',
+        margin_measured: '算法近期的实测低估',
+        margin_backtest: '回测的峰值低估',
+        margin_headroom: '模块的余量系数',
+        partsHelp:
+          '副本数 = 预测峰值 × 余量系数 ÷ 单个 Pod 的承载（{perPod}，已按目标利用率折算）。三项分开看：当前用量是已经发生的，预测是还没发生的，余量是为预测可能偏低留的；不要把它们读成一个数字。',
         modalTitle: '{name} 的资源需求估算',
         noForecast: '还没有可用的预测',
         current: '当前',

@@ -1845,6 +1845,22 @@ const local = {
       },
       need: {
         title: 'Need compared',
+        conservative: 'conservative ({what})',
+        conservativeHelp:
+          'This forecast is deliberately high (a percentile or an envelope of the peaks): a level that is enough most of the time, not what is expected to be used next. It does not make a memory limit safe either.',
+        cores: 'cores',
+        partsTitle: 'The need taken apart: load now, forecast, margin',
+        partCurrent: 'Load now',
+        partForecast: 'Forecast',
+        partMargin: 'Margin',
+        partReplicas: '{n} replicas on its own',
+        partMarginReplicas: 'adds {n} replicas (from: {source})',
+        noCurrent: 'No measured sample is recent enough',
+        margin_measured: 'the recent measured shortfall of the algorithm',
+        margin_backtest: 'the peak shortfall of the backtest',
+        margin_headroom: 'the headroom ratio of the module',
+        partsHelp:
+          'Replicas = forecast peak x margin factor / what one Pod carries ({perPod}, at the target utilization). Read the three apart: the load now has happened, the forecast has not, and the margin is kept in case the forecast is low. They are not one number.',
         modalTitle: 'Resource need of {name}',
         noForecast: 'No usable forecast yet',
         current: 'Now',
