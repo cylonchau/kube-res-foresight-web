@@ -422,7 +422,11 @@ export function fetchBatchDeleteRecords(data: { kind: Api.Forecast.RecordKind; i
   return request<{ done: number }>({ url: `${base}/records/batch-delete`, method: 'post', data });
 }
 
-/** the actual values of a metric from Prometheus next to the forecasts of the algorithms, on one time grid */
+/**
+ * The actual values of a metric from Prometheus next to the forecasts of the algorithms, on one time grid. A long range (30 days) is
+ * read from Prometheus in many pieces and can take minutes, so the request waits longer than the 60 seconds of the others: a little
+ * over the 300 seconds the platform allows it (forecast.pipeline_timeout_seconds), so the platform's own answer comes back first.
+ */
 export function fetchCompareModule(
   moduleId: number,
   params: {
@@ -434,7 +438,12 @@ export function fetchCompareModule(
     predictions?: boolean;
   }
 ) {
-  return request<Api.Forecast.Compare>({ url: `${base}/modules/${moduleId}/compare`, method: 'get', params });
+  return request<Api.Forecast.Compare>({
+    url: `${base}/modules/${moduleId}/compare`,
+    method: 'get',
+    params,
+    timeout: 6 * 60 * 1000
+  });
 }
 
 /** validate a PromQL and run it against its datasource for a short window; nothing is stored */
