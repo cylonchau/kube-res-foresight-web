@@ -1877,6 +1877,7 @@ const local = {
         bound_max: 'cut by the maximum',
         held_ratio: 'spec kept (change within {n}%)',
         held_hold: 'spec kept (a decrease waits {n} h)',
+        floored: 'OOM protection (memory is not given less than what was killed)',
         res_cpu: 'CPU',
         res_memory: 'Memory',
         res_rps: 'Requests',

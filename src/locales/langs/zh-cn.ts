@@ -1811,6 +1811,7 @@ const local = {
         bound_max: '被上限压低',
         held_ratio: '规格保持（变化在 {n}% 内）',
         held_hold: '规格保持（降低要等 {n} 小时）',
+        floored: 'OOM 保护（内存不低于出过 OOM 的值）',
         res_cpu: 'CPU',
         res_memory: '内存',
         res_rps: '请求量',

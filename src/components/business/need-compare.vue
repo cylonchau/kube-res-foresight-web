@@ -32,6 +32,7 @@ interface Row {
   bound?: string;
   held?: string;
   heldLimit?: number;
+  floored?: boolean;
   limits: string;
 }
 
@@ -76,6 +77,7 @@ const rows = computed<Row[]>(() => {
       bound: n.memory_bytes.bound,
       held: n.memory_bytes.held,
       heldLimit: n.memory_bytes.held_limit,
+      floored: n.memory_bytes.floored,
       limits: limitsOf('memory', n.memory_bytes.min, n.memory_bytes.max)
     },
     {
@@ -130,6 +132,9 @@ const columns = computed(() => [
         tags.push(
           h(NTag, { size: 'tiny', bordered: false, type: 'warning' }, () => t(`page.forecast.need.bound_${row.bound}`))
         );
+      }
+      if (row.floored) {
+        tags.push(h(NTag, { size: 'tiny', bordered: false, type: 'error' }, () => t('page.forecast.need.floored')));
       }
       // the Pod spec in force was kept: the recommendation is then not what the forecast needs, and says why
       if (row.held) {

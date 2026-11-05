@@ -425,6 +425,8 @@ declare namespace Api {
       held?: 'ratio' | 'hold' | '';
       /** the change ratio (percent) or the hold (hours) that kept it */
       held_limit?: number;
+      /** the OOM protection raised the value (memory) */
+      floored?: boolean;
     }
 
     interface NeedTotals {
