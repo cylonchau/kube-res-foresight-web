@@ -64,6 +64,22 @@ const RULES: Rule[] = [
     /^.*the dataset step \((\S+)\) is not a whole multiple of the step of the query \((\S+)\).*$/,
     m => `模块的步长（${m[1]}）不是这个指标查询步长（${m[2]}）的整数倍：请改成整数倍`
   ],
+  // why a field fell back to the default (see degradeReason in the backend)
+  [
+    /^no algorithm is baseline or promoted for its current parameters$/,
+    () => '没有算法具备资格：基线算法永远有资格，其余算法要在回测里胜过基线并晋升；当前参数下还没有算法满足'
+  ],
+  [
+    /^every algorithm with a forecast scored below the module minimum, or has not been scored yet$/,
+    () => '所有已有预测的算法评分都低于模块要求的最低分，或还没有评分'
+  ],
+  [/^the newest forecast is older than the module TTL$/, () => '最新的预测已超过模块的有效期'],
+  [/^no forecast has been made yet$/, () => '还没有产生预测'],
+  [/^no usable forecast$/, () => '没有可用的预测'],
+  [
+    /^the forecast is stale and the last (\d+) cycle\(s\) failed: (.*)$/,
+    m => `预测已过期，且最近 ${m[1]} 个周期都失败了：${reasonText(m[2])}`
+  ],
   [/^(?:\S+: )?no prediction yet$/, () => '还没有预测'],
   [/^no recommendation has been made yet$/, () => '还没有生成推荐'],
   [/^the latest recommendation has expired$/, () => '最新一次推荐已过期'],
