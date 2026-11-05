@@ -876,6 +876,7 @@ const local = {
         targetUtilizationHint:
           "Target share of the requests a pod may use (0.1-1). CPU and memory constraints use requests x target as one pod's capacity. The cpu/memory mappings must be workload level (the total of all pods).",
         clone: 'Clone',
+        need: 'Need',
         degraded: 'Degraded',
         failing: 'Failing x{count}',
         runState: 'State',
@@ -1841,6 +1842,37 @@ const local = {
         editTitle: 'Edit metric source',
         addTitle: 'Add metric source',
         deleteConfirm: 'Deleting a source also deletes the history collected for it.'
+      },
+      need: {
+        title: 'Need compared',
+        modalTitle: 'Resource need of {name}',
+        noForecast: 'No usable forecast yet',
+        current: 'Now',
+        needed: 'Needed by the forecast',
+        recommended: 'Recommended',
+        diff: 'Recommended − now',
+        limits: 'Module bounds',
+        same: 'same',
+        bound_min: 'raised by the minimum',
+        bound_max: 'cut by the maximum',
+        row_replicas: 'Replicas',
+        row_cpu: 'CPU per Pod',
+        row_memory: 'Memory per Pod',
+        row_totalCpu: 'Total CPU',
+        row_totalMemory: 'Total memory',
+        help: 'Needed is what the forecast asks for before the minimum and maximum of the module are applied; Recommended is the value after the bounds, the fixed periods and the protections. A total is the replicas times the value of one Pod. The replicas now come from the last report of the operator, the Pod spec now from the Pod request stated in the module.',
+        lowerMin:
+          'The module minimum of {min} replicas is above the {needed} the forecast needs: the recommendation is held at {min}, more than is used.',
+        raiseMax:
+          'The forecast needs {needed} replicas, above the module maximum of {max}: the recommendation is held at {max} and may fall short.',
+        setMin: 'Set the minimum to {n}',
+        setMax: 'Set the maximum to {n}',
+        range: 'By the CPU forecasts of the last 24 hours, {lo} to {hi} replicas are needed.',
+        setBoth: 'Minimum {lo}, maximum {hi}',
+        applied: 'The replica bounds of the module were changed; the next recommendation uses them',
+        failed: 'The estimate failed, try again later',
+        estimateHelp:
+          'A read-only estimate: no recommendation is stored or applied, and it works for a module that is disabled or only observes.'
       },
       scores: {
         dimension: 'Dimension',

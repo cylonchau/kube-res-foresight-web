@@ -406,6 +406,50 @@ declare namespace Api {
       notes?: string[];
     }
 
+    /** one quantity of a module as the forecast needs it, as it was recommended and as it runs now (see forecastsvc.NeedField) */
+    interface NeedField {
+      /** before the module's minimum and maximum; 0 when no forecast gave one */
+      needed: number;
+      recommended: number;
+      current: number;
+      min?: number;
+      max?: number;
+      /** the bound that moved needed to recommended */
+      bound?: 'min' | 'max' | '';
+      advice?: 'lower_min' | 'raise_max' | '';
+      suggest_min?: number;
+      suggest_max?: number;
+    }
+
+    interface NeedTotals {
+      needed_cpu_milli: number;
+      recommended_cpu_milli: number;
+      current_cpu_milli: number;
+      needed_memory_bytes: number;
+      recommended_memory_bytes: number;
+      current_memory_bytes: number;
+    }
+
+    interface NeedDetail {
+      algorithm?: string;
+      basis: 'forecast' | 'none';
+      replicas: NeedField;
+      cpu_milli: NeedField;
+      memory_bytes: NeedField;
+      total: NeedTotals;
+      range_note?: string;
+    }
+
+    /** the answer of GET /modules/:id/need */
+    interface ModuleNeed {
+      need: NeedDetail;
+      algorithm?: string;
+      score?: number;
+      degraded?: Record<string, string>;
+      degrade_notes?: Record<string, string>;
+      valid_until?: string;
+    }
+
     type ModulePayload = Partial<
       Omit<Module, 'id' | 'created_at' | 'updated_at' | 'bypass' | 'bypass_reason' | 'summary' | 'sources'>
     > & { sources?: Array<SourcePayload & { name: string; kind: MetricKind; mapping_id: number }> };

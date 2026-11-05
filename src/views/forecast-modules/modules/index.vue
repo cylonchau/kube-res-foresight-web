@@ -22,6 +22,7 @@ import BatchActions from '@/components/business/batch-actions.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import PromqlTester from '@/components/business/promql-tester.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
+import ModuleNeedModal from '@/components/business/module-need-modal.vue';
 import type { QueryConfig } from '@/components/business/query-test-result.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
@@ -216,6 +217,8 @@ const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
 const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const oomMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const bypassTarget = ref<Api.Forecast.Module>();
+/** the module whose need (replicas, CPU, memory) is being read, before it is configured to act */
+const needTarget = ref<Api.Forecast.Module>();
 const paceFields = ['scaleUpMaxStep', 'scaleDownMaxStep', 'scaleUpCooldown', 'scaleDownCooldown'] as const;
 const paceModel = {
   scaleUpMaxStep: 'scale_up_max_step',
@@ -727,6 +730,7 @@ const columnMap: Record<string, any> = {
       t('common.edit'),
       t('common.delete'),
       t('page.forecast.modules.clone'),
+      t('page.forecast.modules.need'),
       t('page.forecast.modules.resume')
     ]),
     fixed: 'right',
@@ -743,6 +747,7 @@ const columnMap: Record<string, any> = {
           }
         ),
         h(NButton, { size: 'tiny', type: 'info', onClick: () => clone(row) }, () => t('page.forecast.modules.clone')),
+        h(NButton, { size: 'tiny', onClick: () => (needTarget.value = row) }, () => t('page.forecast.modules.need')),
         row.bypass
           ? h(NButton, { size: 'tiny', type: 'success', onClick: () => resume(row) }, () =>
               t('page.forecast.modules.resume')
@@ -1482,6 +1487,14 @@ onMounted(() => {
         </NSpace>
       </template>
     </NModal>
+
+    <!-- what the module needs, read before it is configured to act -->
+    <ModuleNeedModal
+      :module-id="needTarget?.id ?? null"
+      :name="needTarget?.name"
+      @close="needTarget = undefined"
+      @applied="load"
+    />
 
     <!-- step result -->
   </div>

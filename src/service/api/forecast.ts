@@ -201,6 +201,15 @@ export function fetchRecommendModule(moduleId: number) {
   });
 }
 
+/** what the forecasts say a module needs now, read-only: nothing is stored, and a module that may not act yet is answered too */
+export function fetchModuleNeed(moduleId: number) {
+  return request<Api.Forecast.ModuleNeed>({
+    url: `${base}/modules/${moduleId}/need`,
+    method: 'get',
+    timeout: 120 * 1000
+  });
+}
+
 /** every kind of list the audit pages share: server paging, a time window and one whitelisted sort */
 interface ListWindow {
   page: number;

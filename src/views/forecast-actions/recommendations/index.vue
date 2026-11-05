@@ -320,7 +320,7 @@ onMounted(async () => {
         />
       </div>
       <div class="max-h-60vh overflow-auto">
-        <RecommendationExplain v-if="detail" :detail="detail.detail" />
+        <RecommendationExplain v-if="detail" :detail="detail.detail" :module-id="detail.module_id" />
       </div>
     </NModal>
     <SnapshotHistoryModal

@@ -3,6 +3,7 @@ import { computed, h } from 'vue';
 import { NDataTable, NEmpty, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import AheadExplain from '@/components/business/ahead-explain.vue';
+import NeedCompare from '@/components/business/need-compare.vue';
 import ReplicaExplain from '@/components/business/replica-explain.vue';
 import { formatDateTime } from '@/utils/date';
 import { formatCpuMilli, formatMemoryBytes, formatPercent } from '@/utils/format';
@@ -34,6 +35,8 @@ interface Detail {
   borrowed?: Record<string, string>;
   expansion?: Api.Forecast.Expansion;
   ahead?: Api.Forecast.Ahead;
+  /** what the forecast needs before the bounds of the module, next to the recommendation */
+  need?: Api.Forecast.NeedDetail;
   considered?: Array<{ metric: string; algorithm_id: string; eligible: boolean; reason: string; peak?: number }>;
   active_periods?: string[];
   periods?: Array<{
@@ -92,9 +95,11 @@ interface Detail {
 interface Props {
   /** Recommendation detail JSON (forecastsvc.RecommendDetail). */
   detail: string | Record<string, any> | null | undefined;
+  /** the module, so the bounds the need advises changing can be changed from here */
+  moduleId?: number;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { moduleId: undefined });
 const { t } = useI18n();
 
 const parsed = computed<Detail | null>(() => {
@@ -389,6 +394,8 @@ const sourceColumns = computed(() => [
       <NTag size="small" :bordered="false" type="success">{{ parsed.algorithm }}</NTag>
       <span v-if="parsed.score !== undefined">{{ t('page.forecast.scores.score') }} {{ parsed.score.toFixed(2) }}</span>
     </div>
+
+    <NeedCompare v-if="parsed.need" :need="parsed.need" :module-id="moduleId" />
 
     <div v-if="parsed.resource_spec" class="flex flex-col gap-6px">
       <div class="flex flex-wrap items-center gap-8px text-13px">
