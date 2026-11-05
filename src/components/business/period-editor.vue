@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NButton, NDatePicker, NInput, NInputNumber, NTag } from 'naive-ui';
+import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NTimePicker } from 'naive-ui';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import StatusSelect from '@/components/business/status-select.vue';
 import { $t } from '@/locales';
@@ -8,17 +8,27 @@ import { fetchCreatePeriod, fetchDeletePeriod, fetchGetPeriods, fetchUpdatePerio
 import { fromPickerValue, toPickerValue } from '@/utils/date';
 
 /**
- * The fixed periods of one module, edited inside the module form: a row per period with its window, the values it pins
- * (replicas, CPU, memory) and its priority. Rows are saved with the module: removed rows are deleted, changed rows
- * updated, new rows created. Weekly periods made elsewhere (through the API) are kept as they are and only listed.
+ * The time windows of one module, edited inside the module form: a row per window with when it applies (every week on some days between
+ * two times of the day, or once between two instants), what it does to the replicas (fixed number / at least / at most) and the CPU and
+ * memory it pins. Rows are saved with the module: removed rows are deleted, changed rows updated, new rows created.
  */
 const GIB = 1024 ** 3;
+
+type Kind = 'weekly' | 'once';
+type Mode = 'fixed' | 'min' | 'max';
 
 interface Row {
   id?: number;
   name: string;
   enabled: boolean;
+  kind: Kind;
+  /** once: the picker holds the wall clock of UTC+8 */
   range: [number, number] | null;
+  /** weekly: the days (0 = Sunday) and the minutes of the day it starts and ends (an end before the start crosses midnight) */
+  days: number[];
+  startMinute: number;
+  endMinute: number;
+  mode: Mode;
   replicas: number;
   cores: number;
   memoryGib: number;
@@ -26,29 +36,72 @@ interface Row {
 }
 
 const rows = ref<Row[]>([]);
-const weekly = ref<Api.Forecast.Period[]>([]);
 const original = ref<number[]>([]);
 
 const columns = computed(() => [
   { key: 'name', label: $t('page.forecast.periods.col_name'), help: $t('page.forecast.periods.helpName') },
   { key: 'enabled', label: $t('page.forecast.periods.col_enabled'), help: $t('page.forecast.periods.helpEnabled') },
+  { key: 'kind', label: $t('page.forecast.periods.col_kind'), help: $t('page.forecast.periods.helpKind') },
   { key: 'range', label: $t('page.forecast.periods.col_range'), help: $t('page.forecast.periods.helpRange') },
+  { key: 'mode', label: $t('page.forecast.periods.col_mode'), help: $t('page.forecast.periods.helpMode') },
   { key: 'replicas', label: $t('page.forecast.periods.col_replicas'), help: $t('page.forecast.periods.helpReplicas') },
   { key: 'cores', label: $t('page.forecast.periods.col_cores'), help: $t('page.forecast.periods.helpCores') },
   { key: 'memory', label: $t('page.forecast.periods.col_memory'), help: $t('page.forecast.periods.helpMemory') },
   { key: 'priority', label: $t('page.forecast.periods.col_priority'), help: $t('page.forecast.periods.helpPriority') }
 ]);
 
+const kindOptions = computed(() => [
+  { label: $t('page.forecast.periods.kind_weekly'), value: 'weekly' },
+  { label: $t('page.forecast.periods.kind_once'), value: 'once' }
+]);
+const modeOptions = computed(() => [
+  { label: $t('page.forecast.periods.mode_fixed'), value: 'fixed' },
+  { label: $t('page.forecast.periods.mode_min'), value: 'min' },
+  { label: $t('page.forecast.periods.mode_max'), value: 'max' }
+]);
+// bit n of the mask is time.Weekday(n): 0 = Sunday; shown from Monday
+const dayOptions = computed(() => [
+  { label: $t('page.forecast.periods.day_1'), value: 1 },
+  { label: $t('page.forecast.periods.day_2'), value: 2 },
+  { label: $t('page.forecast.periods.day_3'), value: 3 },
+  { label: $t('page.forecast.periods.day_4'), value: 4 },
+  { label: $t('page.forecast.periods.day_5'), value: 5 },
+  { label: $t('page.forecast.periods.day_6'), value: 6 },
+  { label: $t('page.forecast.periods.day_0'), value: 0 }
+]);
+
+/** a minute of the day as the timestamp the time picker holds (only its hour and minute count) */
+const minuteToPicker = (minute: number) => new Date(2000, 0, 1, Math.floor(minute / 60), minute % 60).getTime();
+const pickerToMinute = (value: number | null) => {
+  if (value === null) return 0;
+  const date = new Date(value);
+  return date.getHours() * 60 + date.getMinutes();
+};
+
+function maskOf(days: number[]) {
+  return days.reduce((mask, day) => mask | (1 << day), 0);
+}
+function daysOf(mask: number) {
+  return [0, 1, 2, 3, 4, 5, 6].filter(day => mask & (1 << day));
+}
+
 function fromPeriod(p: Api.Forecast.Period): Row {
+  const once = Boolean(p.abs_start && p.abs_end);
   return {
     id: p.id,
     name: p.name,
     enabled: p.enabled,
-    // the picker holds the wall clock of UTC+8
-    range:
-      p.abs_start && p.abs_end
-        ? [toPickerValue(new Date(p.abs_start).getTime()), toPickerValue(new Date(p.abs_end).getTime())]
-        : null,
+    kind: once ? 'once' : 'weekly',
+    range: once
+      ? [
+          toPickerValue(new Date(p.abs_start as string).getTime()),
+          toPickerValue(new Date(p.abs_end as string).getTime())
+        ]
+      : null,
+    days: once ? [0, 1, 2, 3, 4, 5, 6] : daysOf(p.weekdays),
+    startMinute: once ? 20 * 60 : p.start_minute,
+    endMinute: once ? 3 * 60 : p.end_minute,
+    mode: (p.replica_mode as Mode) || 'fixed',
     replicas: p.replicas,
     cores: p.cpu_milli / 1000,
     memoryGib: p.memory_bytes / GIB,
@@ -59,13 +112,10 @@ function fromPeriod(p: Api.Forecast.Period): Row {
 /** Loads the periods of a module (none for a new one). */
 async function load(moduleId?: number) {
   rows.value = [];
-  weekly.value = [];
   original.value = [];
   if (!moduleId) return;
   const { data } = await fetchGetPeriods(moduleId);
-  const list = data || [];
-  weekly.value = list.filter(p => !(p.abs_start && p.abs_end));
-  rows.value = list.filter(p => p.abs_start && p.abs_end).map(fromPeriod);
+  rows.value = (data || []).map(fromPeriod);
   original.value = rows.value.map(r => r.id as number);
 }
 
@@ -75,7 +125,12 @@ function add() {
   rows.value.push({
     name: $t('page.forecast.periods.defaultName', { n: rows.value.length + 1 }),
     enabled: true,
+    kind: 'weekly',
     range: [toPickerValue(start), toPickerValue(start + 24 * hour)],
+    days: [0, 1, 2, 3, 4, 5, 6],
+    startMinute: 20 * 60,
+    endMinute: 3 * 60,
+    mode: 'min',
     replicas: 0,
     cores: 0,
     memoryGib: 0,
@@ -91,7 +146,13 @@ function problem(): string {
     if (!name) return $t('page.forecast.periods.nameRequired');
     if (names.has(name)) return $t('page.forecast.periods.nameDuplicate', { name });
     names.add(name);
-    if (!row.range || row.range[1] <= row.range[0]) return $t('page.forecast.periods.rangeInvalid', { name });
+    if (row.kind === 'once') {
+      if (!row.range || row.range[1] <= row.range[0]) return $t('page.forecast.periods.rangeInvalid', { name });
+    } else {
+      if (!row.days.length) return $t('page.forecast.periods.daysRequired', { name });
+      if (row.startMinute === row.endMinute) return $t('page.forecast.periods.timeInvalid', { name });
+    }
+    if (row.mode !== 'fixed' && !(row.replicas > 0)) return $t('page.forecast.periods.modeNeedsReplicas', { name });
     if (!(row.replicas > 0 || row.cores > 0 || row.memoryGib > 0))
       return $t('page.forecast.periods.valueRequired', { name });
   }
@@ -99,15 +160,32 @@ function problem(): string {
 }
 
 function payload(row: Row): Api.Forecast.PeriodPayload {
-  return {
+  const base = {
     name: row.name.trim(),
     enabled: row.enabled,
     priority: Math.round(row.priority || 0),
-    abs_start: new Date(fromPickerValue((row.range as [number, number])[0])).toISOString(),
-    abs_end: new Date(fromPickerValue((row.range as [number, number])[1])).toISOString(),
+    replica_mode: row.mode,
     replicas: Math.round(row.replicas || 0),
     cpu_milli: Math.round((row.cores || 0) * 1000),
     memory_bytes: Math.round((row.memoryGib || 0) * GIB)
+  };
+  if (row.kind === 'once') {
+    return {
+      ...base,
+      weekdays: 0,
+      start_minute: 0,
+      end_minute: 0,
+      abs_start: new Date(fromPickerValue((row.range as [number, number])[0])).toISOString(),
+      abs_end: new Date(fromPickerValue((row.range as [number, number])[1])).toISOString()
+    };
+  }
+  return {
+    ...base,
+    weekdays: maskOf(row.days),
+    start_minute: row.startMinute,
+    end_minute: row.endMinute,
+    abs_start: null,
+    abs_end: null
   };
 }
 
@@ -147,15 +225,47 @@ defineExpose({ load, save, problem });
     <div v-for="(row, index) in rows" :key="row.id ?? `new-${index}`" class="period-grid period-row">
       <NInput v-model:value="row.name" size="small" />
       <StatusSelect v-model:value="row.enabled" />
-      <NDatePicker v-model:value="row.range" type="datetimerange" size="small" :clearable="false" />
+      <NSelect v-model:value="row.kind" size="small" :options="kindOptions" />
+      <NDatePicker
+        v-if="row.kind === 'once'"
+        v-model:value="row.range"
+        type="datetimerange"
+        size="small"
+        :clearable="false"
+      />
+      <div v-else class="flex flex-wrap items-center gap-6px">
+        <NSelect
+          v-model:value="row.days"
+          size="small"
+          multiple
+          :max-tag-count="2"
+          :options="dayOptions"
+          class="period-days"
+        />
+        <NTimePicker
+          :value="minuteToPicker(row.startMinute)"
+          size="small"
+          format="HH:mm"
+          :clearable="false"
+          class="period-time"
+          @update:value="(v: number | null) => (row.startMinute = pickerToMinute(v))"
+        />
+        <span>-</span>
+        <NTimePicker
+          :value="minuteToPicker(row.endMinute)"
+          size="small"
+          format="HH:mm"
+          :clearable="false"
+          class="period-time"
+          @update:value="(v: number | null) => (row.endMinute = pickerToMinute(v))"
+        />
+      </div>
+      <NSelect v-model:value="row.mode" size="small" :options="modeOptions" />
       <NInputNumber v-model:value="row.replicas" size="small" :min="0" :precision="0" :show-button="false" />
       <NInputNumber v-model:value="row.cores" size="small" :min="0" :precision="2" :show-button="false" />
       <NInputNumber v-model:value="row.memoryGib" size="small" :min="0" :precision="2" :show-button="false" />
       <NInputNumber v-model:value="row.priority" size="small" :precision="0" :show-button="false" />
       <NButton size="small" quaternary type="error" @click="rows.splice(index, 1)">{{ $t('common.delete') }}</NButton>
-    </div>
-    <div v-for="item in weekly" :key="item.id" class="period-weekly">
-      <NTag size="small" :bordered="false">{{ $t('page.forecast.periods.weeklyKept', { name: item.name }) }}</NTag>
     </div>
     <NButton size="small" dashed class="mt-6px" @click="add">{{ $t('page.forecast.periods.add') }}</NButton>
   </div>
@@ -164,7 +274,7 @@ defineExpose({ load, save, problem });
 <style scoped>
 .period-grid {
   display: grid;
-  grid-template-columns: minmax(110px, 1.2fr) 112px minmax(300px, 2.4fr) 84px 92px 100px 84px 52px;
+  grid-template-columns: minmax(100px, 1fr) 104px 96px minmax(330px, 2.6fr) 92px 76px 84px 92px 72px 52px;
   gap: 8px;
   align-items: center;
 }
@@ -179,7 +289,11 @@ defineExpose({ load, save, problem });
   margin-bottom: 6px;
 }
 
-.period-weekly {
-  margin-bottom: 4px;
+.period-days {
+  width: 150px;
+}
+
+.period-time {
+  width: 84px;
 }
 </style>

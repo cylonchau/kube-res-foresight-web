@@ -52,7 +52,7 @@ function pickVersion(id: number) {
 }
 
 const sourceOptions = computed(() =>
-  ['algorithm', 'fixed_period', 'fallback', 'original', 'bypass', 'oom_floor'].map(value => ({
+  ['algorithm', 'fixed_period', 'fixed_count', 'fallback', 'original', 'bypass', 'oom_floor'].map(value => ({
     label: t(`page.forecast.recommendations.source_${value}`),
     value
   }))

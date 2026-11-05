@@ -186,6 +186,7 @@ function emptyForm() {
     fallback_cpu_milli: 0,
     fallback_memory_mib: 0,
     fallback_replicas: 0,
+    fixed_replicas: 0,
     headroom_ratio: 1,
     limit_cpu_ratio: 0,
     limit_memory_ratio: 0,
@@ -356,6 +357,7 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     fallback_cpu_milli: form.fallback_cpu_milli,
     fallback_memory_bytes: Math.round(form.fallback_memory_mib * MIB),
     fallback_replicas: form.fallback_replicas,
+    fixed_replicas: form.fixed_replicas,
     headroom_ratio: form.headroom_ratio,
     limit_cpu_ratio: form.limit_cpu_ratio,
     limit_memory_ratio: form.limit_memory_ratio,
@@ -1237,6 +1239,17 @@ onMounted(() => {
               </span>
             </template>
             <NInputNumber v-model:value="form.fallback_replicas" :min="0" :precision="0" class="w-full" />
+          </NFormItem>
+          <NFormItem>
+            <template #label>
+              <span class="inline-flex items-center gap-4px">
+                {{ t('page.forecast.modules.fixedReplicas') }}
+                <IconTooltip icon="mdi-help-circle" placement="top">
+                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fixedReplicasHint') }}</div>
+                </IconTooltip>
+              </span>
+            </template>
+            <NInputNumber v-model:value="form.fixed_replicas" :min="0" :precision="0" class="w-full" />
           </NFormItem>
           <NFormItem>
             <template #label>

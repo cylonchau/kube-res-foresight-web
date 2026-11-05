@@ -296,6 +296,8 @@ declare namespace Api {
       fallback_cpu_milli: number;
       fallback_memory_bytes: number;
       fallback_replicas: number;
+      /** 0 = the algorithm decides the replicas; a number keeps the module at that many (time windows can still change it) */
+      fixed_replicas: number;
       headroom_ratio: number;
       pod_capacity_rps: number;
       timezone: string;
@@ -811,6 +813,8 @@ declare namespace Api {
       cpu_milli: number;
       memory_bytes: number;
       replicas: number;
+      /** how replicas acts: fixed number, at least, or at most */
+      replica_mode: 'fixed' | 'min' | 'max';
       remark: string;
     }
 

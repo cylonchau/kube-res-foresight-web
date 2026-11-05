@@ -64,6 +64,18 @@ const RULES: Rule[] = [
     /^.*the dataset step \((\S+)\) is not a whole multiple of the step of the query \((\S+)\).*$/,
     m => `模块的步长（${m[1]}）不是这个指标查询步长（${m[2]}）的整数倍：请改成整数倍`
   ],
+  // the replica count of a fixed count and of the floors and caps of the time windows (see decision.ApplyReplicaWindows)
+  [/^the module keeps a fixed (\d+) replicas$/, m => `模块固定为 ${m[1]} 个副本，不由算法决定`],
+  [/^raised to (\d+) by the window "(.+)" \(at least\)$/, m => `被时间段「${m[2]}」（至少）抬高到 ${m[1]}`],
+  [/^capped at (\d+) by the window "(.+)" \(at most\)$/, m => `被时间段「${m[2]}」（至多）压低到 ${m[1]}`],
+  [
+    /^a cap window is below the floor window "(.+)": the floor wins$/,
+    m => `有「至多」时间段低于「至少」时间段「${m[1]}」，以至少为准`
+  ],
+  [/^capped at the maximum (\d+) of the module$/, m => `被模块的上限 ${m[1]} 压住`],
+  [/^raised to the minimum (\d+) of the module$/, m => `被模块的下限 ${m[1]} 抬高`],
+  [/^raised to the minimum (\d+)$/, m => `被抬高到模块下限 ${m[1]}`],
+  [/^capped at the maximum (\d+)$/, m => `被压到模块上限 ${m[1]}`],
   // why a field fell back to the default (see degradeReason in the backend)
   [
     /^no algorithm is baseline or promoted for its current parameters$/,
@@ -127,12 +139,24 @@ const RULES: Rule[] = [
   ]
 ];
 
+function translateWhole(text: string): string | null {
+  for (const [pattern, translate] of RULES) {
+    const match = text.match(pattern);
+    if (match) return translate(match);
+  }
+  return null;
+}
+
 export function reasonText(text: string | null | undefined): string {
   if (!text) return '';
   const trimmed = text.trim();
-  for (const [pattern, translate] of RULES) {
-    const match = trimmed.match(pattern);
-    if (match) return translate(match);
+  const whole = translateWhole(trimmed);
+  if (whole !== null) return whole;
+  // a reason is often several sentences joined by "; ": translate the ones that are known and keep the rest as they are
+  const parts = trimmed.split('; ');
+  if (parts.length > 1) {
+    const translated = parts.map(translateWhole);
+    if (translated.some(item => item !== null)) return parts.map((part, i) => translated[i] ?? part).join('；');
   }
   return trimmed;
 }

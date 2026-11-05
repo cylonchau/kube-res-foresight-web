@@ -766,6 +766,7 @@ const local = {
         fallbackCpu: 'Degraded default CPU (m)',
         fallbackMemory: 'Degraded default memory (MiB)',
         fallbackReplicas: 'Degraded default replicas',
+        fixedReplicas: 'Fixed replicas',
         headroom: 'Headroom ratio',
         more: 'More',
         sectionPace: 'Replica change pace',
@@ -786,6 +787,8 @@ const local = {
           'A fixed setting of the module: scaling never goes below this replica count; the operator and the recommendations both use it as the floor.',
         maxReplicasHint:
           'A fixed setting of the module: scaling never goes above this replica count; with dynamic expansion it is the starting ceiling and the hard maximum below caps it.',
+        fixedReplicasHint:
+          'When set, the module keeps exactly this many replicas and no algorithm decides them (CPU and memory still follow the forecast); 0 = the algorithm decides. A time window that fixes the count still wins; "at least" and "at most" windows raise or lower it.',
         fallbackReplicasHint:
           'The replica count the operator uses when there is no fresh forecast (model failure, too little data, expired recommendation); it never scales down below the current count because of it. 0 = unset: the current replicas are frozen.',
         limitCpuRatio: 'CPU limit factor',
@@ -1080,6 +1083,7 @@ const local = {
         result_error: 'Error',
         source_bypass: 'bypass',
         source_fixed_period: 'fixed period',
+        source_fixed_count: 'fixed replicas',
         source_algorithm: 'algorithm',
         source_fallback: 'default',
         source_original: 'original',
@@ -2416,11 +2420,31 @@ const local = {
         oomPenalty: 'OOM penalty: the share taken off the score when the replay window had an OOM.'
       },
       periods: {
-        title: 'Fixed periods',
+        title: 'Time windows',
         rules:
-          'Within the window the replicas, CPU and memory are pinned to the values given and the algorithms cannot override them.',
+          'Set the replicas by time window: repeating every week (for example every day 20:00-03:00; an end before the start crosses midnight) or once between two instants. The replicas of a window can be a fixed number (that many, no algorithm), at least (the algorithm still decides but not below it) or at most (not above it). CPU and memory are pinned when filled. When several windows apply, the fixed one of the largest priority wins; the largest "at least" and the smallest "at most" count, and a floor above a cap wins. The module bounds still hold, and a bypass switches windows off. Repeating windows use the zone of the module. When the module has Fixed replicas set, no algorithm decides the replicas and the windows apply on top of it.',
         col_name: 'Name',
         col_enabled: 'State',
+        col_kind: 'Type',
+        col_mode: 'Replicas',
+        helpKind: 'Weekly repeats on the chosen days between two times of the day; Once is one absolute range.',
+        helpMode:
+          'Fixed: that many replicas in the window, no algorithm. At least: the algorithm decides but not below it. At most: the algorithm decides but not above it.',
+        kind_weekly: 'Weekly',
+        kind_once: 'Once',
+        mode_fixed: 'Fixed',
+        mode_min: 'At least',
+        mode_max: 'At most',
+        day_1: 'Mon',
+        day_2: 'Tue',
+        day_3: 'Wed',
+        day_4: 'Thu',
+        day_5: 'Fri',
+        day_6: 'Sat',
+        day_0: 'Sun',
+        daysRequired: 'Window {name} needs at least one day',
+        timeInvalid: 'The start and end of {name} cannot be the same time (an end before the start crosses midnight)',
+        modeNeedsReplicas: '{name} is at least or at most: fill in the replicas',
         col_range: 'Window',
         col_replicas: 'Replicas',
         col_cores: 'CPU (cores)',
@@ -2428,8 +2452,10 @@ const local = {
         col_priority: 'Priority',
         helpName: 'Name of the period.',
         helpEnabled: 'A disabled period is not applied.',
-        helpRange: 'Start and end of the period.',
-        helpReplicas: 'Pinned replicas; 0 does not pin.',
+        helpRange:
+          'Weekly: the days and the times of the day (in the zone of the module; an end before the start crosses midnight, e.g. 20:00-03:00). Once: an absolute range, picked in the browser zone.',
+        helpReplicas:
+          'The replicas, as the mode on the left says; 0 = the window does not touch the replicas (only pins CPU or memory).',
         helpCores: 'Pinned CPU in cores; 0 does not pin.',
         helpMemory: 'Pinned memory in GiB; 0 does not pin.',
         helpPriority: 'Larger wins when periods overlap.',

@@ -48,6 +48,7 @@ interface Detail {
     start?: string;
     end?: string;
     replicas: number;
+    replica_mode?: string;
     cpu_milli: number;
     memory_bytes: number;
   }>;
@@ -324,7 +325,9 @@ const periodColumns = computed(() => [
     minWidth: 220,
     render: (row: NonNullable<Detail['periods']>[number]) =>
       [
-        row.replicas ? `${t('page.forecast.periods.col_replicas')} ${row.replicas}` : '',
+        row.replicas
+          ? `${t('page.forecast.periods.col_replicas')} ${row.replica_mode && row.replica_mode !== 'fixed' ? t(`page.forecast.periods.mode_${row.replica_mode}`) : ''}${row.replicas}`
+          : '',
         row.cpu_milli ? `CPU ${formatCpuMilli(row.cpu_milli)}` : '',
         row.memory_bytes ? `${t('page.forecast.explain.memory')} ${formatMemoryBytes(row.memory_bytes)}` : ''
       ]
