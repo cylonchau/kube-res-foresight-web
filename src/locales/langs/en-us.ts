@@ -1888,6 +1888,8 @@ const local = {
         wasInUse: 'In use then',
         challenger: 'Challenger ×{cycles}',
         windows: 'Windows',
+        eventWindows:
+          '{n} of them are windows where the load rose (the grade is not only the calm of the newest stretch: it also asks whether an algorithm saw the peak coming)',
         weighted: 'Score × weight',
         replicaAccuracy: 'Replica accuracy',
         cpuAccuracy: 'CPU accuracy',

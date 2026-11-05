@@ -1822,6 +1822,7 @@ const local = {
         wasInUse: '当时使用',
         challenger: '挑战中 ×{cycles}',
         windows: '窗口数',
+        eventWindows: '其中 {n} 个是负载上升的窗口（评分不只看最近的平稳时段，也看算法能否预见高峰）',
         weighted: '分数×权重',
         replicaAccuracy: '副本准确度',
         cpuAccuracy: 'CPU 准确度',

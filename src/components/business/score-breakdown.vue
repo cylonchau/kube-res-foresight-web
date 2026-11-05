@@ -15,6 +15,8 @@ const props = withDefaults(defineProps<Props>(), { result: null, score: null });
 const { t } = useI18n();
 const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
 const total = computed(() => props.rows.reduce((sum, row) => sum + row.contribution, 0));
+/** the windows graded because the load rose in them, besides the newest ones */
+const eventWindows = computed(() => (props.result?.details || []).filter(item => item.event).length);
 const level = (value: number) => (value >= 0.85 ? 'good' : value >= 0.6 ? 'fair' : 'poor');
 </script>
 
@@ -46,7 +48,12 @@ const level = (value: number) => (value >= 0.85 ? 'good' : value >= 0.6 ? 'fair'
     </div>
 
     <NDescriptions v-if="result" :column="3" size="small" label-placement="left" bordered>
-      <NDescriptionsItem :label="t('page.forecast.scores.windows')">{{ result.windows }}</NDescriptionsItem>
+      <NDescriptionsItem :label="t('page.forecast.scores.windows')">
+        {{ result.windows }}
+        <span v-if="eventWindows" class="opacity-65">
+          · {{ t('page.forecast.scores.eventWindows', { n: eventWindows }) }}
+        </span>
+      </NDescriptionsItem>
       <NDescriptionsItem :label="t('page.forecast.scores.completeness')">
         {{ percent(result.completeness) }}
       </NDescriptionsItem>

@@ -1198,6 +1198,9 @@ declare namespace Api {
       under_provisioned: boolean;
       oom: number;
       complete: boolean;
+      /** picked because the load rose in it (rise: 0.3 = its peak is 30% above the window before), not because it is one of the newest */
+      event?: boolean;
+      rise?: number;
     }
 
     /** the newest grade of one algorithm of one module on one resource (or the combination) */
