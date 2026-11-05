@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
 import {
   NCard,
   NDataTable,
@@ -358,6 +358,23 @@ onMounted(async () => {
   chartHidden.value = Array.isArray(saved?.hidden) ? saved.hidden : null;
   restored = true;
   // the search is submitted by the list-search plugin when the filters above change
+});
+
+// The page is kept alive in its tab: when it comes back, the metrics of the module may have been changed in the meantime (a metric
+// removed and added again has a new key), so the modules are read again and a module or metric that is gone is replaced, instead of
+// asking for a key that no longer exists.
+onActivated(async () => {
+  if (!restored) return;
+  try {
+    await loadModules();
+  } catch {
+    return;
+  }
+  if (!modules.value.some(item => item.id === search.moduleId)) search.moduleId = modules.value[0]?.id ?? null;
+  if (!metricOptions.value.some(item => item.value === search.metric)) {
+    search.metric = metricOptions.value[0]?.value ?? null;
+  }
+  load();
 });
 </script>
 
