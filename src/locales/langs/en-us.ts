@@ -1689,6 +1689,7 @@ const local = {
         reason_no_eligible_model: 'No promoted algorithm',
         reason_recovering: 'Recovering',
         reason_oom_floor: 'OOM floor',
+        reason_held_last: 'Last result held',
         reason_low_score: 'Score below the minimum',
         reason_short_history: 'History too short',
         reason_predict_timeout: 'Prediction timed out'

@@ -1593,6 +1593,7 @@ const local = {
         reason_no_eligible_model: '没有可用的已晋升算法',
         reason_recovering: '恢复观察中',
         reason_oom_floor: 'OOM 地板',
+        reason_held_last: '沿用上次结果',
         reason_low_score: '评分低于最低分',
         reason_short_history: '历史数据不足',
         reason_predict_timeout: '预测超时',

@@ -1045,6 +1045,7 @@ declare namespace Api {
       | 'stale_prediction'
       | 'no_eligible_model'
       | 'recovering'
+      | 'held_last'
       | 'low_score'
       | 'short_history'
       | 'predict_timeout'
