@@ -1860,11 +1860,14 @@ const local = {
         partReplicas: '{n} replicas on its own',
         partMarginReplicas: 'adds {n} replicas (from: {source})',
         noCurrent: 'No measured sample is recent enough',
+        utilLine:
+          'The {replicas} Pods that run are {now}% full, the target utilization is {target}%: above the target more replicas are needed even if the forecast does not grow.',
+        utilLineBelow: 'The {replicas} Pods that run are {now}% full, the target utilization is {target}%.',
         margin_measured: 'the recent measured shortfall of the algorithm',
         margin_backtest: 'the peak shortfall of the backtest',
         margin_headroom: 'the headroom ratio of the module',
         partsHelp:
-          'Replicas = forecast peak x margin factor / what one Pod carries ({perPod}, at the target utilization). Read the three apart: the load now has happened, the forecast has not, and the margin is kept in case the forecast is low. They are not one number.',
+          'Replicas = forecast peak x margin factor / what one Pod carries ({perPod}: the Pod size times the target utilization {target}%). Read the three apart: the load now has happened, the forecast has not, and the margin is kept in case the forecast is low. They are not one number.',
         modalTitle: 'Resource need of {name}',
         noForecast: 'No usable forecast yet',
         current: 'Now',
@@ -2193,6 +2196,8 @@ const local = {
         actual: 'Actual',
         actualReplicas: 'Actual replicas',
         replicasNote: 'The replicas are not fully drawn: {reason}',
+        replicasHow:
+          'The "predicted replicas" of each forecast point is a rough count: {how}. It is not the formula of the decision: here only the headroom ratio of the module is applied, while the decision uses the recent measured shortfall of the algorithm, several constraints and the look-ahead, so the two can differ by a replica or two.',
         predicted: 'Predicted',
         predictedAt: 'predicted at',
         predictedReplicas: 'predicted replicas',

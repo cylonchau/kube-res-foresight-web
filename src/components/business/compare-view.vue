@@ -171,6 +171,13 @@ const emptyReason = computed(() => {
 
 const unit = computed(() => compare.value?.unit || '');
 
+/** how the replica count of a point is derived, when the chart has them: it is a different, simpler formula than the decision's */
+const replicasHow = computed(() => {
+  const c = compare.value;
+  const hasPredicted = c?.algorithms.some(a => a.points.some(p => p.replicas !== null && p.replicas !== undefined));
+  return c && hasPredicted && c.replica_basis ? reasonText(c.replica_basis) : '';
+});
+
 /** why a replica count is missing from the chart: the actual one could not be read, or no forecast of this metric gives one */
 const replicasNote = computed(() => {
   const c = compare.value;
@@ -444,6 +451,7 @@ onActivated(async () => {
         :loading="loading"
         :empty-reason="emptyReason"
         :replicas-note="replicasNote"
+        :replicas-how="replicasHow"
         @refresh="load"
         @pick="point => (picked = point)"
       />

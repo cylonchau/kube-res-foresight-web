@@ -43,6 +43,21 @@ export function axisTimeLabel(value: number | string) {
   return clock === '00:00' ? `${text.slice(5, 10)}\n${clock}` : clock;
 }
 
+/**
+ * The label of a time axis that knows how long a stretch it shows: over a few days the ticks are days apart, so the date is the label (a bare
+ * "06:00" on every tick says nothing); over one to three days it is the date over the clock; within a day the clock, with the date where a
+ * new day starts.
+ */
+export function axisTimeLabelFor(value: number | string, spanMs: number) {
+  const day = 24 * 3600 * 1000;
+  if (spanMs > 3 * day) return formatDateTime(Number(value)).slice(5, 10);
+  if (spanMs > day * 1.2) {
+    const text = formatDateTime(Number(value));
+    return `${text.slice(5, 10)}\n${text.slice(11, 16)}`;
+  }
+  return axisTimeLabel(value);
+}
+
 interface AxisParam {
   axisValue?: number | string;
   value?: unknown;

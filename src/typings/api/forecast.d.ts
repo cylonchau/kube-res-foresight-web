@@ -465,6 +465,9 @@ declare namespace Api {
       forecast: NeedPart & { algorithm: string; conservatism?: string };
       margin: { factor: number; source: 'measured' | 'backtest' | 'headroom' | string; replicas: number };
       per_pod: number;
+      /** the utilization a Pod is counted at, and how full the running Pods are now (0 = not known) */
+      target_util: number;
+      current_util?: number;
     }
 
     /** the answer of GET /modules/:id/need */

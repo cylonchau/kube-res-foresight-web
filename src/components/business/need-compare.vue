@@ -175,6 +175,15 @@ const amount = (part: { unit: string; value: number }) => {
   if (part.unit === 'bytes') return formatMemoryBytes(part.value);
   return `${Number(part.value.toFixed(1))} rps`;
 };
+/** what one Pod carries, with its unit */
+const perPodText = computed(() =>
+  parts.value ? amount({ unit: parts.value.forecast.unit, value: parts.value.per_pod }) : ''
+);
+/** how full the Pods that run are now, in percent; null when it is not known */
+const utilNow = computed(() => {
+  const util = parts.value?.current_util;
+  return util ? Math.round(util * 100) : null;
+});
 const marginSource = computed(() => {
   const source = parts.value?.margin.source ?? '';
   return t(`page.forecast.need.margin_${source}`, source);
@@ -226,6 +235,20 @@ async function apply(payload: Api.Forecast.ModulePayload) {
         </template>
         <span v-else class="opacity-70">{{ t('page.forecast.need.noCurrent') }}</span>
       </div>
+      <div v-if="utilNow !== null" class="text-12px leading-20px opacity-70">
+        {{
+          t(
+            utilNow > Math.round(parts.target_util * 100)
+              ? 'page.forecast.need.utilLine'
+              : 'page.forecast.need.utilLineBelow',
+            {
+              replicas: replicas.current,
+              now: utilNow,
+              target: Math.round(parts.target_util * 100)
+            }
+          )
+        }}
+      </div>
       <div class="flex flex-wrap items-baseline gap-8px">
         <NTag size="small" :bordered="false" type="info">{{ t('page.forecast.need.partForecast') }}</NTag>
         <span>{{ t(`page.forecast.need.res_${parts.forecast.resource}`, parts.forecast.resource) }}</span>
@@ -248,7 +271,7 @@ async function apply(payload: Api.Forecast.ModulePayload) {
         </span>
       </div>
       <div class="text-12px leading-20px opacity-70">
-        {{ t('page.forecast.need.partsHelp', { perPod: Number(parts.per_pod.toPrecision(4)) }) }}
+        {{ t('page.forecast.need.partsHelp', { perPod: perPodText, target: Math.round(parts.target_util * 100) }) }}
       </div>
     </div>
 

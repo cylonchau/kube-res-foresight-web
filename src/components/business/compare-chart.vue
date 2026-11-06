@@ -4,7 +4,7 @@ import { NButton, NCheckbox, NEmpty, NPopover } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
-import { axisTimeLabel, formatDateTime } from '@/utils/date';
+import { axisTimeLabelFor, formatDateTime } from '@/utils/date';
 import { valueAxisFor } from '@/utils/chart-axis';
 import { formatDecimal, formatMetric } from '@/utils/format';
 import { gapPairs, withBreaks } from '@/utils/series-gaps';
@@ -39,6 +39,8 @@ interface Props {
   fill?: boolean;
   /** why the actual replica curve is not drawn, when it is known; shown as a note in the toolbar */
   replicasNote?: string;
+  /** how the predicted replica count of a point is derived */
+  replicasHow?: string;
 }
 
 /** The point a click landed on: the line it belongs to, its time and value, and for a forecast when it was made. */
@@ -61,7 +63,8 @@ const props = withDefaults(defineProps<Props>(), {
   loading: false,
   emptyReason: '',
   fill: false,
-  replicasNote: ''
+  replicasNote: '',
+  replicasHow: ''
 });
 /**
  * The curves the user switched off. null means no choice was made: the first few forecasts are drawn. The page keeps the choice and gives
@@ -102,6 +105,31 @@ const hasGaps = ref(false);
 const time = (iso: string) => new Date(iso).getTime();
 const stamp = (ms: number) => formatDateTime(ms);
 
+/** the share of the whole range the zoom shows now (1 = all): the labels of the time axis follow what is shown */
+let zoomShare = 1;
+/** how long a stretch the time axis shows: the data range, narrowed by the zoom */
+function visibleSpanMs() {
+  let lo = Infinity;
+  let hi = -Infinity;
+  const see = (ms: number) => {
+    if (Number.isFinite(ms)) {
+      lo = Math.min(lo, ms);
+      hi = Math.max(hi, ms);
+    }
+  };
+  const candles = props.actual?.candles;
+  if (candles?.length) {
+    see(time(candles[0].time));
+    see(time(candles[candles.length - 1].time));
+  }
+  for (const alg of props.algorithms) {
+    if (!alg.points.length) continue;
+    see(time(alg.points[0].time));
+    see(time(alg.points[alg.points.length - 1].time));
+  }
+  return hi > lo ? (hi - lo) * zoomShare : 0;
+}
+
 const { domRef, chart, updateOptions } = useEcharts(
   () =>
     ({
@@ -111,7 +139,10 @@ const { domRef, chart, updateOptions } = useEcharts(
       // no toolbox: the wheel and drag zoom the plot, and the slider below is a thin strip
       // the right axis (replicas) takes room only when there is one: the plot uses the whole width of the card
       grid: [{ left: 56, right: props.actualReplicas?.candles.length ? 56 : 24, top: PLOT_TOP, bottom: 44 }],
-      xAxis: { type: 'time', axisLabel: { formatter: axisTimeLabel } },
+      xAxis: {
+        type: 'time',
+        axisLabel: { formatter: (value: number | string) => axisTimeLabelFor(value, visibleSpanMs()) }
+      },
       yAxis: [
         { type: 'value', scale: true },
         { type: 'value', scale: true, minInterval: 1, splitLine: { show: false } }
@@ -391,6 +422,7 @@ async function draw() {
       formatter: (params: any) => {
         const list = Array.isArray(params) ? params : [params];
         const at = list[0]?.axisValue ?? list[0]?.value?.[0];
+        if (props.lineType !== 'candle') return nearestTooltip(Number(at));
         const rows = [`<b>${stamp(Number(at))}</b>`];
         for (const p of list) {
           // the dashed line over a gap is no value: it is not in the tooltip
@@ -439,6 +471,66 @@ async function draw() {
   }));
 }
 
+/** the point of a line (ordered by time) nearest to `at`, when it lies within the tolerance; a break (no value) is no point */
+function nearestPoint(data: unknown[], at: number, tolerance: number) {
+  let lo = 0;
+  let hi = data.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (Number(pairOf(data[mid])?.[0]) < at) lo = mid + 1;
+    else hi = mid;
+  }
+  let best: { point: unknown; value: unknown[]; distance: number } | null = null;
+  for (let i = Math.max(0, lo - 3); i <= Math.min(data.length - 1, lo + 2); i += 1) {
+    const pair = pairOf(data[i]);
+    if (!pair || pair[1] === null || pair[1] === undefined) continue;
+    const distance = Math.abs(Number(pair[0]) - at);
+    if (distance <= tolerance && (!best || distance < best.distance)) best = { point: data[i], value: pair, distance };
+  }
+  return best;
+}
+
+/**
+ * The tooltip of a line chart: for every drawn line the point nearest to the pointer in time. ECharts lists only the series that have a point
+ * right at the pointer, so with lines on different time grids (the actual values every minute, a forecast every few) most of them dropped
+ * out and the others could hardly be read; here a line is listed whenever it has a point near enough, and the row says nothing else.
+ */
+function nearestTooltip(at: number) {
+  const rows = [`<b>${stamp(at)}</b>`];
+  const dot = (color: string) =>
+    `<span style="display:inline-block;margin-right:4px;border-radius:50%;width:10px;height:10px;background-color:${color}"></span>`;
+  const base = Math.max(props.bucketSeconds, 60) * 1000 * 2;
+  for (const line of picks) {
+    const first = Number(pairOf(line.data[0])?.[0]);
+    const last = Number(pairOf(line.data[line.data.length - 1])?.[0]);
+    const spacing = line.data.length > 1 ? (last - first) / (line.data.length - 1) : 0;
+    const hit = nearestPoint(line.data, at, Math.max(base, spacing * 1.5));
+    if (!hit) continue;
+    const color = entries.value.find(item => item.name === line.name)?.color ?? ACTUAL;
+    const replicas = (hit.point as { replicas?: number | null }).replicas;
+    const rep =
+      line.kind === 'forecast' && replicas !== null && replicas !== undefined
+        ? ` · ${t('page.forecast.compare.predictedReplicas')} ${replicas}`
+        : '';
+    rows.push(`${dot(color)}${line.name}: ${formatMetric(Number(hit.value[1]), props.unit)}${rep}`);
+  }
+  const candles = props.actualReplicas?.candles;
+  const replicasName = t('page.forecast.compare.actualReplicas');
+  if (candles?.length && !isHidden(replicasName)) {
+    // a step line: the count in force at that moment is the last one at or before it
+    let index = -1;
+    for (let lo = 0, hi = candles.length - 1; lo <= hi; ) {
+      const mid = (lo + hi) >> 1;
+      if (time(candles[mid].time) <= at) {
+        index = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    if (index >= 0) rows.push(`${dot(REPLICAS)}${replicasName}: ${formatDecimal(candles[index].close, 0)}`);
+  }
+  return rows.join('<br/>');
+}
+
 /** A click picks the nearest point of the visible lines within a few pixels and tells the page which it was. */
 function pickAt(x: number, y: number) {
   const c = chart.value;
@@ -471,6 +563,13 @@ function pickAt(x: number, y: number) {
 }
 watch(chart, c => {
   c?.getZr().on('click', (e: { offsetX: number; offsetY: number }) => pickAt(e.offsetX, e.offsetY));
+  c?.on('datazoom', (e: unknown) => {
+    const zoom = e as { start?: number; end?: number; batch?: Array<{ start?: number; end?: number }> };
+    const range = zoom.batch?.[0] ?? zoom;
+    if (typeof range.start === 'number' && typeof range.end === 'number') {
+      zoomShare = Math.max(0.001, (range.end - range.start) / 100);
+    }
+  });
 });
 
 // ---- full screen: the chart takes the whole screen, the page behind it is untouched
@@ -543,6 +642,9 @@ watch(
         <span class="chart-hint">{{ t('page.forecast.compare.clickHint') }}</span>
         <IconTooltip v-if="hasGaps" icon="mdi-help-circle" placement="bottom">
           <div class="max-w-320px leading-22px">{{ t('page.forecast.compare.gapLegend') }}</div>
+        </IconTooltip>
+        <IconTooltip v-if="replicasHow" icon="mdi-information-outline" placement="bottom">
+          <div class="max-w-420px leading-22px">{{ t('page.forecast.compare.replicasHow', { how: replicasHow }) }}</div>
         </IconTooltip>
         <IconTooltip v-if="replicasNote" icon="mdi-alert-circle-outline" placement="bottom">
           <div class="max-w-360px leading-22px">

@@ -3,6 +3,7 @@
  * pages show them in Chinese: a known sentence is translated, one that is not known is shown as it is, so nothing is lost.
  */
 import { formatDateTime } from '@/utils/date';
+import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
 
 const MODE: Record<string, string> = { observe: '仅观察', recommend: '仅推荐', admission: '准入', auto: '自动' };
 const METRIC: Record<string, string> = { cpu: 'CPU', memory: '内存', gpu: 'GPU', replicas: '副本数', rps: '请求量' };
@@ -79,6 +80,13 @@ const RULES: Rule[] = [
   [
     /^the fewest and the most Pods the CPU forecasts of (\S+) needed over the last 24 hours, at the Pod CPU request and the target utilization of the module$/,
     m => `按 ${m[1]} 近 24 小时的 CPU 预测，在模块的 Pod CPU 请求和目标利用率下，最少和最多需要的副本数`
+  ],
+  [
+    /^ceil\(forecast x headroom ([\d.]+) \/ \(Pod (CPU|memory) request (\d+)(m| bytes) x target utilization (\d+)%\)\), kept within the module replica bounds$/,
+    m => {
+      const size = m[4] === 'm' ? formatCpuMilli(Number(m[3])) : formatMemoryBytes(Number(m[3]));
+      return `⌈预测值 × 余量系数 ${m[1]} ÷（Pod ${m[2] === 'CPU' ? 'CPU' : '内存'}请求 ${size} × 目标利用率 ${m[5]}%）⌉，再限制在模块的副本上下限内`;
+    }
   ],
   // why a field fell back to the default (see degradeReason in the backend)
   [

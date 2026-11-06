@@ -1794,11 +1794,14 @@ const local = {
         partReplicas: '单独需要 {n} 个副本',
         partMarginReplicas: '多出 {n} 个副本（来源：{source}）',
         noCurrent: '没有足够新的实测样本',
+        utilLine:
+          '现在 {replicas} 个副本的 Pod 已用到 {now}%，目标利用率是 {target}%：超过目标就要多开副本，哪怕预测没有增长。',
+        utilLineBelow: '现在 {replicas} 个副本的 Pod 用到 {now}%，目标利用率是 {target}%。',
         margin_measured: '算法近期的实测低估',
         margin_backtest: '回测的峰值低估',
         margin_headroom: '模块的余量系数',
         partsHelp:
-          '副本数 = 预测峰值 × 余量系数 ÷ 单个 Pod 的承载（{perPod}，已按目标利用率折算）。三项分开看：当前用量是已经发生的，预测是还没发生的，余量是为预测可能偏低留的；不要把它们读成一个数字。',
+          '副本数 = 预测峰值 × 余量系数 ÷ 单个 Pod 的承载（{perPod}，是 Pod 的规格乘目标利用率 {target}%）。三项分开看：当前用量是已经发生的，预测是还没发生的，余量是为预测可能偏低留的；不要把它们读成一个数字。',
         modalTitle: '{name} 的资源需求估算',
         noForecast: '还没有可用的预测',
         current: '当前',
@@ -2095,6 +2098,8 @@ const local = {
         actual: '实际值',
         actualReplicas: '实际副本数',
         replicasNote: '副本数没有画全：{reason}',
+        replicasHow:
+          '图里每个预测点的「预测副本数」是这样粗算的：{how}。它和决策里求副本数的算法不是同一个：这里只乘模块的余量系数，决策用的是该算法近期实测低估的余量，还要看多个约束和提前量，所以两处的数可能差一两个。',
         predicted: '预测值',
         predictedAt: '预测时间',
         predictedReplicas: '预测副本数',
