@@ -76,6 +76,10 @@ const RULES: Rule[] = [
   [/^raised to the minimum (\d+) of the module$/, m => `被模块的下限 ${m[1]} 抬高`],
   [/^raised to the minimum (\d+)$/, m => `被抬高到模块下限 ${m[1]}`],
   [/^capped at the maximum (\d+)$/, m => `被压到模块上限 ${m[1]}`],
+  [
+    /^the fewest and the most Pods the CPU forecasts of (\S+) needed over the last 24 hours, at the Pod CPU request and the target utilization of the module$/,
+    m => `按 ${m[1]} 近 24 小时的 CPU 预测，在模块的 Pod CPU 请求和目标利用率下，最少和最多需要的副本数`
+  ],
   // why a field fell back to the default (see degradeReason in the backend)
   [
     /^no algorithm is baseline or promoted for its current parameters$/,

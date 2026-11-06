@@ -4,6 +4,7 @@ import { NAlert, NButton, NDataTable, NTag, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { fetchUpdateForecastModule } from '@/service/api';
 import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
+import { reasonText } from '@/utils/reason';
 
 defineOptions({ name: 'NeedCompare' });
 
@@ -279,6 +280,6 @@ async function apply(payload: Api.Forecast.ModulePayload) {
         {{ t('page.forecast.need.setBoth', { lo: range.lo, hi: range.hi }) }}
       </NButton>
     </div>
-    <div v-if="need.range_note" class="text-12px leading-20px opacity-70">{{ need.range_note }}</div>
+    <div v-if="need.range_note" class="text-12px leading-20px opacity-70">{{ reasonText(need.range_note) }}</div>
   </div>
 </template>
