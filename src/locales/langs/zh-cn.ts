@@ -1814,6 +1814,9 @@ const local = {
         bound_max: '被上限压低',
         held_ratio: '规格保持（变化在 {n}% 内）',
         held_hold: '规格保持（降低要等 {n} 小时）',
+        held_hold_since: '规格保持（降低要等 {n} 小时，规格从 {since} 起没变）',
+        heldHelp:
+          '「规格保持」：Pod 的 CPU、内存规格一改，新 Pod 就和旧 Pod 不一样，所以平台不让它来回变。预测要求更高就立即调高；要降低，要等当前规格稳定满设定的小时数才降（计时从规格上次变化起算，系统参数 forecast.resource_hold_hours）；变化在设定的比例内（forecast.resource_change_ratio）不动。所以「推荐」可以暂时高于「算法需求」。仅推荐模式下保持的值不会高于模块里填的在跑规格。',
         floored: 'OOM 保护（内存不低于出过 OOM 的值）',
         res_cpu: 'CPU',
         res_memory: '内存',

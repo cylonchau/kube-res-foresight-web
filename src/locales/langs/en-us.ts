@@ -1880,6 +1880,9 @@ const local = {
         bound_max: 'cut by the maximum',
         held_ratio: 'spec kept (change within {n}%)',
         held_hold: 'spec kept (a decrease waits {n} h)',
+        held_hold_since: 'spec kept (a decrease waits {n} h; the spec has not changed since {since})',
+        heldHelp:
+          'Spec kept: when the CPU or memory spec of a Pod changes, new Pods differ from the old ones, so the platform does not let it move back and forth. A higher need is taken at once; a decrease waits until the spec has stood for the set hours (counted from the last change of the spec; system parameter forecast.resource_hold_hours); a change within the set ratio (forecast.resource_change_ratio) is not taken. So the recommendation can be above the need for a while. In recommend mode a kept value is never above the spec the module says runs.',
         floored: 'OOM protection (memory is not given less than what was killed)',
         res_cpu: 'CPU',
         res_memory: 'Memory',

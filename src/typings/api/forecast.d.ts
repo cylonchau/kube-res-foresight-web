@@ -425,6 +425,8 @@ declare namespace Api {
       held?: 'ratio' | 'hold' | '';
       /** the change ratio (percent) or the hold (hours) that kept it */
       held_limit?: number;
+      /** when the spec in force last changed; a decrease waits out the hold from it */
+      held_since?: string;
       /** the OOM protection raised the value (memory) */
       floored?: boolean;
     }

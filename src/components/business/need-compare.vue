@@ -3,6 +3,7 @@ import { computed, h, ref } from 'vue';
 import { NAlert, NButton, NDataTable, NTag, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { fetchUpdateForecastModule } from '@/service/api';
+import { formatDateTime } from '@/utils/date';
 import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
 import { reasonText } from '@/utils/reason';
 
@@ -33,6 +34,7 @@ interface Row {
   bound?: string;
   held?: string;
   heldLimit?: number;
+  heldSince?: string;
   floored?: boolean;
   limits: string;
 }
@@ -67,6 +69,7 @@ const rows = computed<Row[]>(() => {
       bound: n.cpu_milli.bound,
       held: n.cpu_milli.held,
       heldLimit: n.cpu_milli.held_limit,
+      heldSince: n.cpu_milli.held_since,
       limits: limitsOf('cpu', n.cpu_milli.min, n.cpu_milli.max)
     },
     {
@@ -78,6 +81,7 @@ const rows = computed<Row[]>(() => {
       bound: n.memory_bytes.bound,
       held: n.memory_bytes.held,
       heldLimit: n.memory_bytes.held_limit,
+      heldSince: n.memory_bytes.held_since,
       floored: n.memory_bytes.floored,
       limits: limitsOf('memory', n.memory_bytes.min, n.memory_bytes.max)
     },
@@ -141,7 +145,9 @@ const columns = computed(() => [
       if (row.held) {
         tags.push(
           h(NTag, { size: 'tiny', bordered: false, type: 'info' }, () =>
-            t(`page.forecast.need.held_${row.held}`, { n: row.heldLimit ?? 0 })
+            row.held === 'hold' && row.heldSince
+              ? t('page.forecast.need.held_hold_since', { n: row.heldLimit ?? 0, since: formatDateTime(row.heldSince) })
+              : t(`page.forecast.need.held_${row.held}`, { n: row.heldLimit ?? 0 })
           )
         );
       }
@@ -217,6 +223,9 @@ async function apply(payload: Api.Forecast.ModulePayload) {
 
     <NDataTable size="small" :columns="columns" :data="rows" :row-key="(row: Row) => row.key" :scroll-x="780" />
     <div class="text-12px leading-20px opacity-70">{{ t('page.forecast.need.help') }}</div>
+    <div v-if="rows.some(row => row.held)" class="text-12px leading-20px opacity-70">
+      {{ t('page.forecast.need.heldHelp') }}
+    </div>
 
     <!-- the replicas follow three different things; they are never shown as one number -->
     <div v-if="parts" class="flex flex-col gap-6px text-13px">
