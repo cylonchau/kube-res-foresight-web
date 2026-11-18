@@ -210,3 +210,36 @@ export function fetchGetAssistantAudits(params: {
 }) {
   return request<Api.Assistant.AuditList>({ url: `${base}/audit`, method: 'get', params });
 }
+
+/** one question, queued: the answer comes back in a few seconds as a task, which is read until it ends (no request waits for the model) */
+export function fetchAssistantChatAsync(
+  messages: Api.Assistant.Turn[],
+  lang: string,
+  context?: Api.Assistant.PageContext,
+  conversationId?: number
+) {
+  return request<Api.Assistant.AsyncTask>({
+    url: `${base}/chat/async`,
+    method: 'post',
+    data: { messages, lang, context, conversation_id: conversationId },
+    headers: silent
+  });
+}
+
+export function fetchAssistantAsyncTask(id: number) {
+  return request<Api.Assistant.AsyncTask>({ url: `${base}/async/${id}`, method: 'get', headers: silent });
+}
+
+/** what the task reported after the step numbered `after` */
+export function fetchAssistantAsyncEvents(id: number, after: number) {
+  return request<Api.Assistant.AsyncEvent[]>({
+    url: `${base}/async/${id}/events`,
+    method: 'get',
+    params: { after },
+    headers: silent
+  });
+}
+
+export function fetchCancelAssistantAsyncTask(id: number) {
+  return request<Api.Assistant.AsyncTask>({ url: `${base}/async/${id}/cancel`, method: 'post', headers: silent });
+}

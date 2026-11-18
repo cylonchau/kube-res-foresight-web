@@ -53,6 +53,30 @@ declare namespace Api {
       attachments: Attachment[];
     }
 
+    /** a question answered in the background: queued, then running, then one of the three final states */
+    interface AsyncTask {
+      id: number;
+      kind: string;
+      title: string;
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      progress: number;
+      stage: string;
+      error: string;
+      attempts: number;
+      created_at: string;
+      started_at: string | null;
+      finished_at: string | null;
+      /** the answer, once it succeeded */
+      result?: Reply;
+    }
+
+    /** one step a task reported; a tool it read */
+    interface AsyncEvent {
+      seq: number;
+      type: string;
+      data: ToolTrace;
+    }
+
     /** a stored conversation of the signed-in user; no one else can read it */
     interface Conversation {
       id: number;

@@ -2,7 +2,10 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { SetupStoreId } from '@/enum';
 import {
-  fetchAssistantChat,
+  fetchAssistantAsyncEvents,
+  fetchAssistantAsyncTask,
+  fetchAssistantChatAsync,
+  fetchCancelAssistantAsyncTask,
   fetchAssistantSkill,
   fetchAssistantStatus,
   fetchCreateAssistantConversation,
@@ -35,6 +38,29 @@ export const MAX_MESSAGE_CHARS = 4000;
 
 const STORAGE_KEY = 'kube-res-foresight-assistant';
 const CONVERSATION_KEY = 'kube-res-foresight-assistant-conversation';
+const TASK_KEY = 'kube-res-foresight-assistant-task';
+
+function restoreTaskId(): number {
+  try {
+    const id = Number(sessionStorage.getItem(TASK_KEY));
+    return Number.isInteger(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function rememberTask(id: number) {
+  try {
+    if (id) sessionStorage.setItem(TASK_KEY, String(id));
+    else sessionStorage.removeItem(TASK_KEY);
+  } catch {
+    // no storage: a reload forgets the question that was being answered
+  }
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** how long a question may be answered in the background before the page stops waiting for it */
+const MAX_WAIT_MS = 15 * 60 * 1000;
 
 function restoreConversationId(): number {
   try {
@@ -89,6 +115,11 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
   const conversationId = ref(restoreConversationId());
   const conversations = ref<Api.Assistant.Conversation[]>([]);
   const loadingConversations = ref(false);
+  /** what the question being answered is doing now: the tool it just read */
+  const progressNote = ref('');
+  /** the background task answering the question, 0 when there is none */
+  const taskId = ref(0);
+  let cancelAsked = false;
   const status = ref<Api.Assistant.Availability | null>(null);
   /** the window at the top right of the header */
   const panelOpen = ref(false);
@@ -137,6 +168,85 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     conversationId.value = data.id;
     save();
     return { id: data.id };
+  }
+
+  /** reads a background task until it ends: what it reports shows while it works, and its answer (or why there is none) comes back like the answer of a request */
+  async function waitFor(id: number): Promise<{ data: Api.Assistant.Reply | null; error: unknown }> {
+    taskId.value = id;
+    rememberTask(id);
+    const started = Date.now();
+    let seen = 0;
+    let failures = 0;
+    try {
+      while (Date.now() - started < MAX_WAIT_MS) {
+        const [task, events] = await Promise.all([fetchAssistantAsyncTask(id), fetchAssistantAsyncEvents(id, seen)]);
+        if (!task.data) {
+          failures += 1;
+          // a refusal (the task is gone) ends the wait; a network error is tried again a few times
+          if (task.error && ((task.error as any)?.response?.status === 404 || failures >= 5))
+            return { data: null, error: task.error };
+        } else {
+          failures = 0;
+          for (const event of events.data ?? []) {
+            seen = Math.max(seen, event.seq);
+            if (event.type === 'tool' && event.data?.name) {
+              progressNote.value = $t(`page.assistant.tool_${event.data.name}` as App.I18n.I18nKey, event.data.name);
+            }
+          }
+          const state = task.data.status;
+          if (state === 'succeeded' && task.data.result) return { data: task.data.result, error: null };
+          if (state === 'failed')
+            return { data: null, error: new Error(task.data.error || $t('page.assistant.failedUnknown')) };
+          if (state === 'cancelled') return { data: null, error: new Error($t('page.assistant.cancelled')) };
+        }
+        await sleep(1000);
+      }
+      return { data: null, error: new Error($t('page.assistant.waitedTooLong')) };
+    } finally {
+      taskId.value = 0;
+      progressNote.value = '';
+      cancelAsked = false;
+      rememberTask(0);
+    }
+  }
+
+  /** asks one question in the background and waits for its answer */
+  async function askInBackground(conversation: number, content: string) {
+    const { data, error } = await fetchAssistantChatAsync(
+      [{ role: 'user', content }],
+      appStore.locale,
+      currentPage(),
+      conversation
+    );
+    if (!data) return { data: null, error };
+    return waitFor(data.id);
+  }
+
+  /** stops the question that is being answered: the model is told to stop, and the answer is not waited for */
+  async function stop() {
+    if (!taskId.value || cancelAsked) return;
+    cancelAsked = true;
+    await fetchCancelAssistantAsyncTask(taskId.value);
+  }
+
+  /** a question that was being answered when the page was reloaded: its answer is read when it is ready */
+  async function resumePending() {
+    const id = restoreTaskId();
+    if (!id || sending.value) return;
+    sending.value = true;
+    try {
+      const { data, error } = await waitFor(id);
+      if (data)
+        push({
+          role: 'assistant',
+          content: data.content,
+          tools: data.tools ?? [],
+          attachments: data.attachments ?? []
+        });
+      else push({ role: 'assistant', content: reasonOf(error), failed: true });
+    } finally {
+      sending.value = false;
+    }
   }
 
   async function ask(request: (conversation: number) => Promise<{ data: Api.Assistant.Reply | null; error: unknown }>) {
@@ -211,14 +321,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
       return;
     }
     // the platform holds the conversation, so only the question travels; it gives the model the rest from what it stored
-    await ask(conversation =>
-      fetchAssistantChat(
-        [{ role: 'user', content: content.slice(0, MAX_MESSAGE_CHARS) }],
-        appStore.locale,
-        currentPage(),
-        conversation
-      )
-    );
+    await ask(conversation => askInBackground(conversation, content.slice(0, MAX_MESSAGE_CHARS)));
   }
 
   /** the stored conversations of the user, the latest first */
@@ -305,11 +408,14 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     messages.value = [];
     conversationId.value = 0;
     conversations.value = [];
+    taskId.value = 0;
+    progressNote.value = '';
     status.value = null;
     panelOpen.value = false;
     try {
       sessionStorage.removeItem(STORAGE_KEY);
       sessionStorage.removeItem(CONVERSATION_KEY);
+      sessionStorage.removeItem(TASK_KEY);
     } catch {
       // nothing was stored
     }
@@ -326,6 +432,10 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     hasConversation,
     enabled,
     skills,
+    taskId,
+    progressNote,
+    stop,
+    resumePending,
     loadStatus,
     loadConversations,
     openConversation,

@@ -161,6 +161,7 @@ async function commitRename() {
 
 onMounted(async () => {
   await store.loadStatus();
+  store.resumePending();
   await scrollToEnd();
 });
 watch(
@@ -236,7 +237,16 @@ watch(
       <div v-if="store.sending" class="assistant-row is-assistant">
         <div class="assistant-bubble">
           <NSpin size="small" />
-          <span class="ml-6px opacity-70">{{ t('page.assistant.thinking') }}</span>
+          <span class="ml-6px opacity-70">
+            {{
+              store.progressNote
+                ? t('page.assistant.reading', { name: store.progressNote })
+                : t('page.assistant.thinking')
+            }}
+          </span>
+          <NButton v-if="store.taskId" class="ml-8px" size="tiny" quaternary type="warning" @click="store.stop()">
+            {{ t('page.assistant.stop') }}
+          </NButton>
         </div>
       </div>
     </div>
