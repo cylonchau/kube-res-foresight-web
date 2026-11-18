@@ -2,7 +2,9 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { SetupStoreId } from '@/enum';
 import { fetchAssistantChat, fetchAssistantSkill, fetchAssistantStatus } from '@/service/api';
+import { router } from '@/router';
 import { $t } from '@/locales';
+import { pageContextOf } from '@/utils/assistant-context';
 import { useAppStore } from '../app';
 
 /** one message of the conversation as it is shown */
@@ -122,6 +124,13 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     }
   }
 
+  /** where the user is now: the page, and the module its address names; the platform checks the user may see it */
+  function currentPage() {
+    const route = router.currentRoute.value;
+    const key = route.meta?.i18nKey as App.I18n.I18nKey | undefined;
+    return pageContextOf(route, key ? $t(key) : '');
+  }
+
   /** asks one question, or runs the skill the text names; the answer, or the reason there is none, is added to the conversation */
   async function send(text: string) {
     const content = text.trim();
@@ -159,7 +168,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
       .filter(m => !m.failed && !m.local)
       .slice(-MAX_HISTORY)
       .map(m => ({ role: m.role, content: m.content }));
-    await ask(() => fetchAssistantChat(history, appStore.locale));
+    await ask(() => fetchAssistantChat(history, appStore.locale, currentPage()));
   }
 
   /** what is missing for a question to the language model, in the words of the console */

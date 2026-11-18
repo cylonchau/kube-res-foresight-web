@@ -87,6 +87,7 @@ interface Form {
   max_tokens: number | null;
   context_length: number | null;
   max_tool_rounds: number;
+  tool_mode: Api.Assistant.ToolModeChoice;
 }
 
 function emptyForm(): Form {
@@ -107,10 +108,27 @@ function emptyForm(): Form {
     temperature: null,
     max_tokens: null,
     context_length: null,
-    max_tool_rounds: 6
+    max_tool_rounds: 6,
+    tool_mode: 'auto'
   };
 }
 const form = reactive<Form>(emptyForm());
+
+/** the words of a tool mode */
+function toolModeText(mode: string) {
+  return t(`page.assistant.toolMode${mode.charAt(0).toUpperCase()}${mode.slice(1)}` as App.I18n.I18nKey);
+}
+const toolModeOptions = computed(() =>
+  (['auto', 'native', 'text', 'router'] as const).map(value => ({ value, label: toolModeText(value) }))
+);
+/** what asking the connection found, shown under the choice */
+const toolModeFeedback = computed(() => {
+  const found = editing.value?.tool_mode_detected;
+  if (form.tool_mode !== 'auto') return '';
+  return found
+    ? t('page.assistant.toolModeFound', { mode: toolModeText(found) })
+    : t('page.assistant.toolModeNotAsked');
+});
 
 const pagination = reactive({
   page: 1,
@@ -177,10 +195,18 @@ function open(row?: Api.Assistant.Connection) {
       temperature: row.temperature,
       max_tokens: row.max_tokens || null,
       context_length: row.context_length || null,
-      max_tool_rounds: row.max_tool_rounds
+      max_tool_rounds: row.max_tool_rounds,
+      tool_mode: row.tool_mode || 'auto'
     });
     // what was set is shown, not folded away
-    if (row.skip_tls_verify || row.proxy_url || row.headers.length || row.custom_params || row.temperature !== null) {
+    if (
+      row.tool_mode !== 'auto' ||
+      row.skip_tls_verify ||
+      row.proxy_url ||
+      row.headers.length ||
+      row.custom_params ||
+      row.temperature !== null
+    ) {
       advanced.value = ['advanced'];
     }
   }
@@ -268,8 +294,15 @@ async function runTest() {
   try {
     const { data, error } = await fetchTestAssistantConnection(payload());
     if (error || !data) return;
-    if (data.ok) message.success(t('page.assistant.testOk', { ms: data.latency_ms }));
-    else message.error(`${t('page.assistant.testFailed')}: ${data.message}`, { duration: 8000, closable: true });
+    if (data.ok) {
+      message.success(
+        data.tool_mode
+          ? t('page.assistant.testOkMode', { ms: data.latency_ms, mode: toolModeText(data.tool_mode) })
+          : t('page.assistant.testOk', { ms: data.latency_ms })
+      );
+    } else {
+      message.error(`${t('page.assistant.testFailed')}: ${data.message}`, { duration: 8000, closable: true });
+    }
   } finally {
     testing.value = false;
   }
@@ -733,6 +766,17 @@ onMounted(() => {
                   />
                 </NFormItemGi>
               </NGrid>
+              <NFormItem :feedback="toolModeFeedback">
+                <template #label>
+                  <span class="inline-flex items-center gap-4px">
+                    {{ t('page.assistant.toolMode') }}
+                    <IconTooltip icon="mdi-help-circle" placement="top">
+                      <div class="max-w-360px leading-22px">{{ t('page.assistant.toolModeHint') }}</div>
+                    </IconTooltip>
+                  </span>
+                </template>
+                <NSelect v-model:value="form.tool_mode" :options="toolModeOptions" />
+              </NFormItem>
               <NFormItem>
                 <template #label>
                   <span class="inline-flex items-center gap-4px">

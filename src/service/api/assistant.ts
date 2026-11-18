@@ -10,12 +10,12 @@ export function fetchAssistantStatus() {
   return request<Api.Assistant.Availability>({ url: `${base}/status`, method: 'get', headers: silent });
 }
 
-/** one question: the conversation so far, the last message being the question; a language model may take a while to answer */
-export function fetchAssistantChat(messages: Api.Assistant.Turn[], lang: string) {
+/** one question: the conversation so far, the last message being the question, and the page the user is on; a language model may take a while to answer */
+export function fetchAssistantChat(messages: Api.Assistant.Turn[], lang: string, context?: Api.Assistant.PageContext) {
   return request<Api.Assistant.Reply>({
     url: `${base}/chat`,
     method: 'post',
-    data: { messages, lang },
+    data: { messages, lang, context },
     headers: { ...silent, 'X-Long-Request': '1' }
   });
 }

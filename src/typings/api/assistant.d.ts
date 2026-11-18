@@ -53,6 +53,20 @@ declare namespace Api {
       attachments: Attachment[];
     }
 
+    /** how the assistant gets data through a connection: native (the model calls the tools), text (the model writes a JSON plan the platform checks and runs), router (the platform reads by rules and the model explains) */
+    type ToolMode = 'native' | 'text' | 'router';
+    type ToolModeChoice = 'auto' | ToolMode;
+
+    /** where the user is when they ask: the platform checks that the user may see the object, and tells the model what it is */
+    interface PageContext {
+      page: string;
+      title: string;
+      module_id?: number;
+      namespace?: string;
+      workload?: string;
+      pod?: string;
+    }
+
     /** a custom header of the requests to a language model; the value of a stored one is the mask */
     interface Header {
       key: string;
@@ -82,6 +96,11 @@ declare namespace Api {
       max_tokens: number;
       context_length: number;
       max_tool_rounds: number;
+      /** what the administrator chose: auto asks the connection once and keeps the answer */
+      tool_mode: ToolModeChoice;
+      /** what asking the connection found; empty before it was asked */
+      tool_mode_detected: ToolMode | '';
+      tool_mode_checked_at: string | null;
     }
 
     /** the form of a language model; the key is sent only when it is set or changed */
@@ -104,6 +123,7 @@ declare namespace Api {
       max_tokens: number;
       context_length: number;
       max_tool_rounds: number;
+      tool_mode: ToolModeChoice;
     }
 
     interface ConnectionOption {
@@ -117,6 +137,9 @@ declare namespace Api {
       ok: boolean;
       latency_ms: number;
       message: string;
+      /** how the service handles tools; absent when it could not be asked */
+      tool_mode?: ToolMode;
+      tool_mode_detail?: string;
     }
 
     interface ConnectionList {

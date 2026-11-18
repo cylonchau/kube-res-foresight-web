@@ -635,6 +635,16 @@ const local = {
       maxToolRounds: 'Reads per question',
       maxToolRoundsHint:
         'How many times the language model may ask the platform for data while it answers one question; past it, it must answer with what it has (1-12).',
+      toolMode: 'Tool mode',
+      toolModeHint:
+        'How the assistant gets data through this connection. Auto asks the connection once and keeps the answer. Native: the model calls the tools itself (OpenAI tool calling). Text: the model writes a JSON plan, which the platform checks and runs; for a service that ignores tools, such as the proxy of a command line agent. Router: the platform reads by rules from the question and the model only explains; for a service that cannot follow a plan. In every mode only read-only tools run, and only those the user may use.',
+      toolModeAuto: 'Auto (ask the connection)',
+      toolModeNative: 'Native tool calling',
+      toolModeText: 'Text plan (JSON)',
+      toolModeRouter: 'Rule router',
+      toolModeFound: 'Found by asking the connection: {mode}',
+      toolModeNotAsked: 'Not asked yet: it is asked at the first question, or press the test button.',
+      testOkMode: 'The connection works ({ms} ms). Tool mode: {mode}',
       addTitle: 'Add an LLM configuration',
       editTitle: 'Edit the LLM configuration',
       test: 'Test connection',
