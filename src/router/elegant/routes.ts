@@ -49,6 +49,24 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'ai-config_audit',
+        path: '/ai-config/audit',
+        component: 'view.ai-config_audit',
+        meta: {
+          title: 'ai-config_audit',
+          i18nKey: 'route.ai-config_audit'
+        }
+      },
+      {
+        name: 'ai-config_chat',
+        path: '/ai-config/chat',
+        component: 'view.ai-config_chat',
+        meta: {
+          title: 'ai-config_chat',
+          i18nKey: 'route.ai-config_chat'
+        }
+      },
+      {
         name: 'ai-config_llm',
         path: '/ai-config/llm',
         component: 'view.ai-config_llm',

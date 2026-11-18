@@ -11,6 +11,8 @@ import { renderMiniMarkdown } from '@/utils/mini-markdown';
 
 defineOptions({ name: 'AssistantChat' });
 
+withDefaults(defineProps<{ showHistory?: boolean }>(), { showHistory: true });
+
 /**
  * The conversation with the assistant in the window at the top right of the header: the messages, the tools each answer was read with,
  * the files it made available, the box to ask in, and the commands (skills) typed with a slash: "/report", "/export", ...
@@ -268,7 +270,14 @@ watch(
           <NButton size="tiny" quaternary :disabled="!store.hasConversation || store.sending" @click="store.clear()">
             {{ t('page.assistant.clear') }}
           </NButton>
-          <NPopover v-model:show="historyOpen" trigger="click" placement="top-start" :width="320" scrollable>
+          <NPopover
+            v-if="showHistory"
+            v-model:show="historyOpen"
+            trigger="click"
+            placement="top-start"
+            :width="320"
+            scrollable
+          >
             <template #trigger>
               <NButton size="tiny" quaternary :disabled="store.sending">{{ t('page.assistant.history') }}</NButton>
             </template>

@@ -196,3 +196,17 @@ export function fetchRenameAssistantConversation(id: number, title: string) {
 export function fetchDeleteAssistantConversation(id: number) {
   return request<string>({ url: `${base}/conversations/${id}`, method: 'delete', headers: silent });
 }
+
+/** the audit of the questions put to the assistant (for the administrators who hold the menu AI audit) */
+export function fetchGetAssistantAudits(params: {
+  page: number;
+  page_size: number;
+  keyword?: string;
+  status?: 'success' | 'failed';
+  source?: 'chat' | 'skill' | 'task';
+  refused?: 'true';
+  from?: string;
+  to?: string;
+}) {
+  return request<Api.Assistant.AuditList>({ url: `${base}/audit`, method: 'get', params });
+}

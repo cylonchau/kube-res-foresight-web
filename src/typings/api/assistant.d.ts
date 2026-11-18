@@ -84,6 +84,34 @@ declare namespace Api {
       messages: StoredMessage[];
     }
 
+    /** one record of the audit: a question put to a language model. It holds no question, answer or tool result. */
+    interface AuditRow {
+      id: number;
+      created_at: string;
+      user_id: number;
+      user_name: string;
+      source: 'chat' | 'skill' | 'task';
+      conversation_id: number;
+      page: string;
+      connection_id: number;
+      model: string;
+      tool_mode: ToolMode | '';
+      status: 'success' | 'failed';
+      error: string;
+      duration_ms: number;
+      llm_calls: number;
+      prompt_tokens: number;
+      completion_tokens: number;
+      tools: { name: string; ok: boolean }[];
+      /** tools the model asked for that the user may not use */
+      refused: string[];
+    }
+
+    interface AuditList {
+      list: AuditRow[];
+      total: number;
+    }
+
     /** how the assistant gets data through a connection: native (the model calls the tools), text (the model writes a JSON plan the platform checks and runs), router (the platform reads by rules and the model explains) */
     type ToolMode = 'native' | 'text' | 'router';
     type ToolModeChoice = 'auto' | ToolMode;

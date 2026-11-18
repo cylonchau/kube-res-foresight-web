@@ -169,6 +169,8 @@ const routeMap: RouteMap = {
   "ai-config": "/ai-config",
   "ai-config_llm": "/ai-config/llm",
   "ai-config_skill": "/ai-config/skill",
+  "ai-config_audit": "/ai-config/audit",
+  "ai-config_chat": "/ai-config/chat",
   "ai-config_task": "/ai-config/task",
   "authorization": "/authorization",
   "authorization_menu": "/authorization/menu",
