@@ -53,6 +53,37 @@ declare namespace Api {
       attachments: Attachment[];
     }
 
+    /** a stored conversation of the signed-in user; no one else can read it */
+    interface Conversation {
+      id: number;
+      created_at: string;
+      updated_at: string;
+      /** the first question, until the user renames it */
+      title: string;
+      message_count: number;
+    }
+
+    interface ConversationList {
+      list: Conversation[];
+      total: number;
+    }
+
+    /** one message of a stored conversation as it was shown */
+    interface StoredMessage {
+      id: number;
+      created_at: string;
+      role: 'user' | 'assistant';
+      content: string;
+      failed: boolean;
+      tools: ToolTrace[];
+      attachments: Attachment[];
+    }
+
+    interface ConversationDetail {
+      conversation: Conversation;
+      messages: StoredMessage[];
+    }
+
     /** how the assistant gets data through a connection: native (the model calls the tools), text (the model writes a JSON plan the platform checks and runs), router (the platform reads by rules and the model explains) */
     type ToolMode = 'native' | 'text' | 'router';
     type ToolModeChoice = 'auto' | ToolMode;

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { NButton, NInput, NSpin, NTag, useThemeVars } from 'naive-ui';
+import { NButton, NInput, NPopconfirm, NPopover, NSpin, NTag, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { router } from '@/router';
 import { useRouterPush } from '@/hooks/common/router';
 import { downloadAssistantFile } from '@/service/api';
 import { MAX_MESSAGE_CHARS, argHint, skillTitle, useAssistantStore } from '@/store/modules/assistant';
+import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
 
 defineOptions({ name: 'AssistantChat' });
@@ -22,6 +23,10 @@ const draft = ref('');
 const scroller = ref<HTMLElement | null>(null);
 const downloading = ref('');
 const highlighted = ref(0);
+/** the history of conversations: the list is read each time it opens */
+const historyOpen = ref(false);
+const renaming = ref(0);
+const renameText = ref('');
 
 const ready = computed(() => store.status?.ready === true);
 const canConfigure = computed(() => router.hasRoute('ai-config_llm'));
@@ -127,6 +132,29 @@ async function download(file: Api.Assistant.Attachment) {
   } finally {
     downloading.value = '';
   }
+}
+
+watch(historyOpen, open => {
+  if (open) store.loadConversations();
+  else renaming.value = 0;
+});
+
+async function openConversation(id: number) {
+  await store.openConversation(id);
+  historyOpen.value = false;
+  await scrollToEnd();
+}
+
+function startRename(conversation: Api.Assistant.Conversation) {
+  renaming.value = conversation.id;
+  renameText.value = conversation.title;
+}
+
+async function commitRename() {
+  const id = renaming.value;
+  const title = renameText.value.trim();
+  renaming.value = 0;
+  if (id && title) await store.renameConversation(id, title);
 }
 
 onMounted(async () => {
@@ -236,9 +264,58 @@ watch(
         @keydown="onKeydown"
       />
       <div class="mt-6px flex items-center justify-between gap-8px">
-        <NButton size="tiny" quaternary :disabled="!store.hasConversation || store.sending" @click="store.clear()">
-          {{ t('page.assistant.clear') }}
-        </NButton>
+        <span class="inline-flex items-center gap-4px">
+          <NButton size="tiny" quaternary :disabled="!store.hasConversation || store.sending" @click="store.clear()">
+            {{ t('page.assistant.clear') }}
+          </NButton>
+          <NPopover v-model:show="historyOpen" trigger="click" placement="top-start" :width="320" scrollable>
+            <template #trigger>
+              <NButton size="tiny" quaternary :disabled="store.sending">{{ t('page.assistant.history') }}</NButton>
+            </template>
+            <div class="assistant-history">
+              <div class="mb-6px text-12px opacity-60">{{ t('page.assistant.historyHint') }}</div>
+              <NSpin v-if="store.loadingConversations && !store.conversations.length" size="small" />
+              <div v-else-if="!store.conversations.length" class="py-8px text-12px opacity-70">
+                {{ t('page.assistant.historyEmpty') }}
+              </div>
+              <div
+                v-for="conversation in store.conversations"
+                :key="conversation.id"
+                class="assistant-history-row"
+                :class="{ 'is-current': conversation.id === store.conversationId }"
+              >
+                <NInput
+                  v-if="renaming === conversation.id"
+                  v-model:value="renameText"
+                  size="tiny"
+                  :maxlength="60"
+                  autofocus
+                  @keydown.enter="commitRename"
+                  @keydown.esc="renaming = 0"
+                  @blur="commitRename"
+                />
+                <template v-else>
+                  <div class="assistant-history-title" @click="openConversation(conversation.id)">
+                    <div class="truncate">{{ conversation.title || t('page.assistant.untitled') }}</div>
+                    <div class="text-11px opacity-60">
+                      {{ formatDateTime(conversation.updated_at) }} ·
+                      {{ t('page.assistant.messageCount', { n: conversation.message_count }) }}
+                    </div>
+                  </div>
+                  <NButton size="tiny" quaternary @click="startRename(conversation)">
+                    {{ t('page.assistant.rename') }}
+                  </NButton>
+                  <NPopconfirm @positive-click="store.removeConversation(conversation.id)">
+                    <template #trigger>
+                      <NButton size="tiny" quaternary type="error">{{ t('common.delete') }}</NButton>
+                    </template>
+                    {{ t('page.assistant.deleteConversation') }}
+                  </NPopconfirm>
+                </template>
+              </div>
+            </div>
+          </NPopover>
+        </span>
         <NButton size="small" type="primary" :loading="store.sending" :disabled="!draft.trim()" @click="send()">
           {{ t('page.assistant.send') }}
         </NButton>
@@ -248,6 +325,34 @@ watch(
 </template>
 
 <style scoped>
+.assistant-history {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.assistant-history-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.assistant-history-row:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.assistant-history-row.is-current {
+  background: color-mix(in srgb, var(--assistant-primary, #3b82f6) 14%, transparent);
+}
+
+.assistant-history-title {
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+  font-size: 13px;
+}
+
 .assistant-row {
   display: flex;
   margin-bottom: 10px;

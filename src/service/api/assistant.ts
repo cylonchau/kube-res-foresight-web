@@ -11,21 +11,26 @@ export function fetchAssistantStatus() {
 }
 
 /** one question: the conversation so far, the last message being the question, and the page the user is on; a language model may take a while to answer */
-export function fetchAssistantChat(messages: Api.Assistant.Turn[], lang: string, context?: Api.Assistant.PageContext) {
+export function fetchAssistantChat(
+  messages: Api.Assistant.Turn[],
+  lang: string,
+  context?: Api.Assistant.PageContext,
+  conversationId?: number
+) {
   return request<Api.Assistant.Reply>({
     url: `${base}/chat`,
     method: 'post',
-    data: { messages, lang, context },
+    data: { messages, lang, context, conversation_id: conversationId },
     headers: { ...silent, 'X-Long-Request': '1' }
   });
 }
 
 /** a skill of the chat (/report, /export, ...) with what was typed after it */
-export function fetchAssistantSkill(name: string, args: string, lang: string) {
+export function fetchAssistantSkill(name: string, args: string, lang: string, conversationId?: number) {
   return request<Api.Assistant.Reply>({
     url: `${base}/skill`,
     method: 'post',
-    data: { name, args, lang },
+    data: { name, args, lang, conversation_id: conversationId },
     headers: { ...silent, 'X-Long-Request': '1' }
   });
 }
@@ -154,4 +159,40 @@ export async function downloadAssistantFile(file: Pick<Api.Assistant.Attachment,
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** the stored conversations of the signed-in user, the latest first */
+export function fetchGetAssistantConversations(params: { page: number; page_size: number; keyword?: string }) {
+  return request<Api.Assistant.ConversationList>({
+    url: `${base}/conversations`,
+    method: 'get',
+    params,
+    headers: silent
+  });
+}
+
+/** an empty conversation to ask the questions in */
+export function fetchCreateAssistantConversation(title?: string) {
+  return request<Api.Assistant.Conversation>({
+    url: `${base}/conversations`,
+    method: 'post',
+    data: { title },
+    headers: silent
+  });
+}
+
+export function fetchGetAssistantConversation(id: number) {
+  return request<Api.Assistant.ConversationDetail>({
+    url: `${base}/conversations/${id}`,
+    method: 'get',
+    headers: silent
+  });
+}
+
+export function fetchRenameAssistantConversation(id: number, title: string) {
+  return request<string>({ url: `${base}/conversations/${id}`, method: 'put', data: { title }, headers: silent });
+}
+
+export function fetchDeleteAssistantConversation(id: number) {
+  return request<string>({ url: `${base}/conversations/${id}`, method: 'delete', headers: silent });
 }

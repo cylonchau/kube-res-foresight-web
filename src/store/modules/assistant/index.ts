@@ -1,7 +1,16 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { SetupStoreId } from '@/enum';
-import { fetchAssistantChat, fetchAssistantSkill, fetchAssistantStatus } from '@/service/api';
+import {
+  fetchAssistantChat,
+  fetchAssistantSkill,
+  fetchAssistantStatus,
+  fetchCreateAssistantConversation,
+  fetchDeleteAssistantConversation,
+  fetchGetAssistantConversation,
+  fetchGetAssistantConversations,
+  fetchRenameAssistantConversation
+} from '@/service/api';
 import { router } from '@/router';
 import { $t } from '@/locales';
 import { pageContextOf } from '@/utils/assistant-context';
@@ -25,6 +34,16 @@ export const MAX_HISTORY = 40;
 export const MAX_MESSAGE_CHARS = 4000;
 
 const STORAGE_KEY = 'kube-res-foresight-assistant';
+const CONVERSATION_KEY = 'kube-res-foresight-assistant-conversation';
+
+function restoreConversationId(): number {
+  try {
+    const id = Number(sessionStorage.getItem(CONVERSATION_KEY));
+    return Number.isInteger(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+}
 
 function restore(): ChatMessage[] {
   try {
@@ -58,13 +77,18 @@ export function parseCommand(text: string): { name: string; args: string } | nul
 }
 
 /**
- * The conversation with the assistant, in the window at the top right of the header. It lives in this browser tab (a reload keeps it, a
- * new tab or a new login starts again) and the platform stores none of it.
+ * The conversation with the assistant, in the window at the top right of the header. The platform keeps every conversation of the signed-in
+ * user (only they can read it, and it is deleted after the retention set in the system parameters); this browser tab remembers which one is
+ * open, so a reload carries on, and the history list opens any other.
  */
 export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
   const appStore = useAppStore();
   const messages = ref<ChatMessage[]>(restore());
   const sending = ref(false);
+  /** the stored conversation the questions are asked in; 0 until the first question makes one */
+  const conversationId = ref(restoreConversationId());
+  const conversations = ref<Api.Assistant.Conversation[]>([]);
+  const loadingConversations = ref(false);
   const status = ref<Api.Assistant.Availability | null>(null);
   /** the window at the top right of the header */
   const panelOpen = ref(false);
@@ -78,6 +102,8 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
   function save() {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages.value.slice(-MAX_HISTORY * 2)));
+      if (conversationId.value) sessionStorage.setItem(CONVERSATION_KEY, String(conversationId.value));
+      else sessionStorage.removeItem(CONVERSATION_KEY);
     } catch {
       // no storage (a private window): the conversation lasts as long as the page
     }
@@ -103,10 +129,25 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     return (error as any)?.response?.data?.msg || (error as any)?.message || $t('page.assistant.failedUnknown');
   }
 
-  async function ask(request: () => Promise<{ data: Api.Assistant.Reply | null; error: unknown }>) {
+  /** the stored conversation the question is asked in: the open one, or a new one made now; 0 with the reason when it could not be made */
+  async function ensureConversation(): Promise<{ id: number; error?: unknown }> {
+    if (conversationId.value) return { id: conversationId.value };
+    const { data, error } = await fetchCreateAssistantConversation();
+    if (!data) return { id: 0, error };
+    conversationId.value = data.id;
+    save();
+    return { id: data.id };
+  }
+
+  async function ask(request: (conversation: number) => Promise<{ data: Api.Assistant.Reply | null; error: unknown }>) {
     sending.value = true;
     try {
-      const { data, error } = await request();
+      const conversation = await ensureConversation();
+      if (!conversation.id) {
+        push({ role: 'assistant', content: reasonOf(conversation.error), failed: true });
+        return;
+      }
+      const { data, error } = await request(conversation.id);
       if (data) {
         push({
           role: 'assistant',
@@ -117,6 +158,11 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
         return;
       }
       push({ role: 'assistant', content: reasonOf(error), failed: true });
+      // the conversation is gone (deleted elsewhere, or past its retention): the next question starts a new one
+      if ((error as any)?.response?.status === 404) {
+        conversationId.value = 0;
+        save();
+      }
       // a refusal because the assistant was switched off or its model changed: the window should say so, not wait for a reload
       if ((error as any)?.response?.status === 409) await loadStatus();
     } finally {
@@ -157,18 +203,77 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
         push({ role: 'assistant', content: notReadyText(), failed: true, local: true });
         return;
       }
-      await ask(() => fetchAssistantSkill(command.name, command.args, appStore.locale));
+      await ask(conversation => fetchAssistantSkill(command.name, command.args, appStore.locale, conversation));
       return;
     }
     if (!status.value?.ready) {
       push({ role: 'assistant', content: notReadyText(), failed: true, local: true });
       return;
     }
-    const history = messages.value
-      .filter(m => !m.failed && !m.local)
-      .slice(-MAX_HISTORY)
-      .map(m => ({ role: m.role, content: m.content }));
-    await ask(() => fetchAssistantChat(history, appStore.locale, currentPage()));
+    // the platform holds the conversation, so only the question travels; it gives the model the rest from what it stored
+    await ask(conversation =>
+      fetchAssistantChat(
+        [{ role: 'user', content: content.slice(0, MAX_MESSAGE_CHARS) }],
+        appStore.locale,
+        currentPage(),
+        conversation
+      )
+    );
+  }
+
+  /** the stored conversations of the user, the latest first */
+  async function loadConversations() {
+    loadingConversations.value = true;
+    try {
+      const { data } = await fetchGetAssistantConversations({ page: 1, page_size: 200 });
+      if (data) {
+        conversations.value = data.list ?? [];
+      }
+    } finally {
+      loadingConversations.value = false;
+    }
+  }
+
+  /** puts a stored conversation in the window */
+  async function openConversation(id: number) {
+    if (sending.value) return;
+    const { data, error } = await fetchGetAssistantConversation(id);
+    if (!data) {
+      window.$message?.error(reasonOf(error));
+      await loadConversations();
+      return;
+    }
+    conversationId.value = id;
+    messages.value = data.messages.map(m => ({
+      id: nextId++,
+      role: m.role,
+      content: m.content,
+      tools: m.tools,
+      attachments: m.attachments,
+      failed: m.failed
+    }));
+    save();
+  }
+
+  async function renameConversation(id: number, title: string) {
+    const { error } = await fetchRenameAssistantConversation(id, title);
+    if (error) {
+      window.$message?.error(reasonOf(error));
+      return false;
+    }
+    await loadConversations();
+    return true;
+  }
+
+  async function removeConversation(id: number) {
+    const { error } = await fetchDeleteAssistantConversation(id);
+    if (error) {
+      window.$message?.error(reasonOf(error));
+      return false;
+    }
+    if (id === conversationId.value) clear();
+    await loadConversations();
+    return true;
   }
 
   /** what is missing for a question to the language model, in the words of the console */
@@ -188,22 +293,46 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     return `${$t('page.assistant.helpTitle')}\n${lines.join('\n')}`;
   }
 
+  /** a new conversation: the one that was open stays stored and is in the history */
   function clear() {
     messages.value = [];
+    conversationId.value = 0;
     save();
   }
 
   /** a new login is a new conversation: nothing is kept for the next person at this browser */
   function reset() {
     messages.value = [];
+    conversationId.value = 0;
+    conversations.value = [];
     status.value = null;
     panelOpen.value = false;
     try {
       sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(CONVERSATION_KEY);
     } catch {
       // nothing was stored
     }
   }
 
-  return { messages, sending, status, panelOpen, hasConversation, enabled, skills, loadStatus, send, clear, reset };
+  return {
+    messages,
+    sending,
+    status,
+    panelOpen,
+    conversationId,
+    conversations,
+    loadingConversations,
+    hasConversation,
+    enabled,
+    skills,
+    loadStatus,
+    loadConversations,
+    openConversation,
+    renameConversation,
+    removeConversation,
+    send,
+    clear,
+    reset
+  };
 });
