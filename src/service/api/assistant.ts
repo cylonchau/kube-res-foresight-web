@@ -16,8 +16,7 @@ export function fetchAssistantChat(messages: Api.Assistant.Turn[], lang: string)
     url: `${base}/chat`,
     method: 'post',
     data: { messages, lang },
-    timeout: 5 * 60 * 1000,
-    headers: silent
+    headers: { ...silent, 'X-Long-Request': '1' }
   });
 }
 
@@ -27,8 +26,7 @@ export function fetchAssistantSkill(name: string, args: string, lang: string) {
     url: `${base}/skill`,
     method: 'post',
     data: { name, args, lang },
-    timeout: 5 * 60 * 1000,
-    headers: silent
+    headers: { ...silent, 'X-Long-Request': '1' }
   });
 }
 

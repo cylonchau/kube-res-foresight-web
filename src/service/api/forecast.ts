@@ -2,6 +2,9 @@ import { request } from '../request';
 
 const base = '/api/v1';
 
+/** a request that is known to take long (a pipeline step, a preview, a score): it waits for the gateway timeout plus 10 seconds, not for the ordinary time */
+const LONG_REQUEST = { 'X-Long-Request': '1' };
+
 export function fetchGetForecastModules(params?: Api.Forecast.ModuleSearchParams) {
   return request<Api.Forecast.ModuleList>({ url: `${base}/modules`, method: 'get', params });
 }
@@ -170,34 +173,49 @@ export function fetchGetModuleHistory(
 }
 
 export function fetchCollectModule(moduleId: number) {
-  return request<Api.Forecast.CollectResult[]>({ url: `${base}/modules/${moduleId}/collect`, method: 'post' });
+  return request<Api.Forecast.CollectResult[]>({
+    url: `${base}/modules/${moduleId}/collect`,
+    method: 'post',
+    headers: LONG_REQUEST
+  });
 }
 
 /** every enabled algorithm forecasts every forecast source of the module */
 export function fetchPredictModule(moduleId: number) {
-  return request<Api.Forecast.PredictOutcome[]>({ url: `${base}/modules/${moduleId}/predict`, method: 'post' });
+  return request<Api.Forecast.PredictOutcome[]>({
+    url: `${base}/modules/${moduleId}/predict`,
+    method: 'post',
+    headers: LONG_REQUEST
+  });
 }
 
 /** collect, then predict */
 export function fetchRunModule(moduleId: number) {
-  return request({ url: `${base}/modules/${moduleId}/run`, method: 'post' });
+  return request({ url: `${base}/modules/${moduleId}/run`, method: 'post', headers: LONG_REQUEST });
 }
 
 export function fetchBacktestModule(moduleId: number, data: { metric: string; cutoffs?: number }) {
-  return request<Api.Forecast.BacktestRun[]>({ url: `${base}/modules/${moduleId}/backtest`, method: 'post', data });
+  return request<Api.Forecast.BacktestRun[]>({
+    url: `${base}/modules/${moduleId}/backtest`,
+    method: 'post',
+    data,
+    headers: LONG_REQUEST
+  });
 }
 
 export function fetchEvaluateModule(moduleId: number) {
   return request<Array<{ metric: string; evaluated: number; pending: number }>>({
     url: `${base}/modules/${moduleId}/evaluate`,
-    method: 'post'
+    method: 'post',
+    headers: LONG_REQUEST
   });
 }
 
 export function fetchRecommendModule(moduleId: number) {
   return request<{ recommendation: Api.Forecast.Recommendation; detail: unknown }>({
     url: `${base}/modules/${moduleId}/recommend`,
-    method: 'post'
+    method: 'post',
+    headers: LONG_REQUEST
   });
 }
 
@@ -302,8 +320,18 @@ export function fetchGetModuleEffectReport(id: number, sinceHours?: number) {
 }
 
 /** replay the recent past with the saved setting and with a change; nothing is stored */
-export function fetchPreviewModuleChange(id: number, data: Api.Forecast.PreviewChange & { since_hours?: number }) {
-  return request<Api.Forecast.PreviewReport>({ url: `${base}/modules/${id}/change-preview`, method: 'post', data });
+export function fetchPreviewModuleChange(
+  id: number,
+  data: Api.Forecast.PreviewChange & { since_hours?: number },
+  signal?: AbortSignal
+) {
+  return request<Api.Forecast.PreviewReport>({
+    url: `${base}/modules/${id}/change-preview`,
+    method: 'post',
+    data,
+    headers: LONG_REQUEST,
+    signal
+  });
 }
 
 /** the home page over the last hours (24 by default, at most 720) */
@@ -377,8 +405,13 @@ export function fetchGetModuleTrace(moduleId: number, algorithm: string, source?
   });
 }
 
-export function fetchScoreModule(moduleId: number) {
-  return request<Api.Forecast.AlgorithmScore[]>({ url: `${base}/modules/${moduleId}/score`, method: 'post' });
+export function fetchScoreModule(moduleId: number, signal?: AbortSignal) {
+  return request<Api.Forecast.AlgorithmScore[]>({
+    url: `${base}/modules/${moduleId}/score`,
+    method: 'post',
+    headers: LONG_REQUEST,
+    signal
+  });
 }
 
 export function fetchGetRanking(moduleId: number) {
@@ -432,9 +465,11 @@ export function fetchBatchDeleteRecords(data: { kind: Api.Forecast.RecordKind; i
 }
 
 /**
- * The actual values of a metric from Prometheus next to the forecasts of the algorithms, on one time grid. A long range (30 days) is
- * read from Prometheus in many pieces and can take minutes, so the request waits longer than the 60 seconds of the others: a little
- * over the 300 seconds the platform allows it (forecast.pipeline_timeout_seconds), so the platform's own answer comes back first.
+ * The actual values of a metric from Prometheus next to the forecasts of the algorithms, on one time grid. The two are read apart so that each
+ * is drawn when it arrives: `predictions: false` asks for the actual values only, `actual: false` for the forecasts only (with the
+ * `bucket_seconds` of the first answer, so they fall on the same grid). A long range (30 days) is read from Prometheus in many pieces and can
+ * take long, so the request waits for the gateway timeout plus 10 seconds (see service/request/settings.ts), after which the platform's own answer
+ * has come back. `silent` leaves the failure to the caller, which shows it where it belongs.
  */
 export function fetchCompareModule(
   moduleId: number,
@@ -445,17 +480,65 @@ export function fetchCompareModule(
     algorithms?: string;
     max_points?: number;
     predictions?: boolean;
-  }
+    actual?: boolean;
+    bucket_seconds?: number;
+  },
+  options?: { silent?: boolean }
 ) {
   return request<Api.Forecast.Compare>({
     url: `${base}/modules/${moduleId}/compare`,
     method: 'get',
     params,
-    timeout: 6 * 60 * 1000
+    headers: options?.silent ? { ...LONG_REQUEST, 'X-Silent-Error': '1' } : LONG_REQUEST
   });
 }
 
 /** validate a PromQL and run it against its datasource for a short window; nothing is stored */
 export function fetchTestMetricQuery(data: Api.Forecast.QueryTestRequest) {
-  return request<Api.Forecast.QueryTestResult>({ url: `${base}/metric-queries/test`, method: 'post', data });
+  return request<Api.Forecast.QueryTestResult>({
+    url: `${base}/metric-queries/test`,
+    method: 'post',
+    data,
+    headers: LONG_REQUEST
+  });
+}
+
+/** the price rules of the cost */
+export function fetchGetCostPrices() {
+  return request<{ list: Api.Forecast.CostPriceRule[]; total: number }>({ url: `${base}/cost/prices`, method: 'get' });
+}
+
+export function fetchCreateCostPrice(data: Api.Forecast.CostPriceRulePayload) {
+  return request<Api.Forecast.CostPriceRule>({ url: `${base}/cost/prices`, method: 'post', data });
+}
+
+export function fetchUpdateCostPrice(id: number, data: Api.Forecast.CostPriceRulePayload) {
+  return request<Api.Forecast.CostPriceRule>({ url: `${base}/cost/prices/${id}`, method: 'put', data });
+}
+
+export function fetchDeleteCostPrice(id: number) {
+  return request({ url: `${base}/cost/prices/${id}`, method: 'delete' });
+}
+
+/** what the cluster costs now (read from kube-state-metrics of the data source; 0 = the one of the system parameter) */
+export function fetchGetCostOverview(datasourceId?: number) {
+  return request<Api.Forecast.CostOverview>({
+    url: `${base}/cost/overview`,
+    method: 'get',
+    params: { datasource_id: datasourceId }
+  });
+}
+
+/** what the workloads request against what they used, what could be given back, and what that is worth */
+export function fetchGetCostModules(windowDays?: number, datasourceId?: number) {
+  return request<Api.Forecast.CostModules>({
+    url: `${base}/cost/modules`,
+    method: 'get',
+    params: { window_days: windowDays, datasource_id: datasourceId }
+  });
+}
+
+/** how many nodes could be emptied now and with the candidates of a level; nothing is changed */
+export function fetchSimulateCost(data: { datasource_id?: number; level: string; window_days?: number }) {
+  return request<Api.Forecast.CostSimulation>({ url: `${base}/cost/simulate`, method: 'post', data });
 }

@@ -7,6 +7,15 @@ const local = {
     updateCancel: 'Later'
   },
   common: {
+    requestTimeout:
+      'The request did not finish in {seconds} seconds and is no longer waited for (request {id}). For a page with a lot of data, narrow the time range, or try again later.',
+    requestNetwork:
+      'The connection was lost and the platform was not reached (request {id}). Check the network and try again.',
+    requestGateway:
+      'The gateway answered {status} without an answer of the platform (request {id}). The platform may be restarting or rolling out, or the operation took longer than the gateway allows; try again later, or ask an administrator to check System > System parameters > HTTP and timeouts.',
+    requestId: 'request {id}',
+    requestCancelled: 'Cancelled',
+    requestElapsed: 'Waited {seconds} s',
     fields: {
       id: 'ID',
       created_at: 'Created at',
@@ -2026,6 +2035,127 @@ const local = {
         indicator_reach_over_lead: 'Forecast reach / lead',
         indicator_decision_wait_seconds: 'Decision wait'
       },
+      cost: {
+        title: 'Cost and waste',
+        testNote:
+          'The money here is an estimate made from the price rules you typed in, not a bill. Until the node count really goes down, "could be given back" is only expected, not money saved. The data is read from kube-state-metrics; these calculations were verified on synthetic data only, not on a real cluster or a real bill.',
+        datasource: 'Cluster data source',
+        datasourceHelp:
+          'A Prometheus data source that scrapes kube-state-metrics, used to read the nodes and the requests of the Pods. It can also be fixed in the system parameter cost.datasource_id.',
+        pickDatasource: 'Pick a data source to read the cluster and work out the cost.',
+        window: 'Window of the use',
+        days: '{n} days',
+        level: 'Candidate level',
+        levelHelp:
+          'Aggressive: the recommendation of the platform (the safe value). Balanced: the P99 use of a Pod plus a margin. Conservative: the highest use plus a margin. No level is below the safe value or above the request now.',
+        level_aggressive: 'Aggressive (safe value)',
+        level_balanced: 'Balanced (P99 + margin)',
+        level_conservative: 'Conservative (highest use + margin)',
+        coreWord: 'cores',
+        prices: 'Price rules',
+        pricesHelp:
+          'Each rule says what an hour of a kind of node costs. A node no rule matches is "unpriced" and is never counted as free. The money is an estimate of the prices you type in, not a bill.',
+        simulate: 'Simulate emptying nodes',
+        snapshotAt: 'Snapshot at {at}',
+        overview: 'Cluster cost',
+        overviewHelp:
+          'The price of each node is shared among the workloads by the requests of the Pods on it: a part of the price by CPU requests, the rest by memory requests. What no request takes is the idle cost.',
+        counts: '{nodes} nodes, {pods} Pods, {rules} enabled price rules',
+        assumption:
+          'Assumption: {cpu}% of a node price is put on CPU and the rest on memory; a month is {hours} hours. Both are assumptions, not measurements.',
+        noPricedNodes: 'No node is matched by a price rule, so there is no money. Add a price rule first.',
+        monthly: 'Estimated a month',
+        hour: 'hour',
+        allocated: 'Taken by requests (a month)',
+        idleCost: 'Idle cost (a month)',
+        idleCostHelp:
+          'The part of the node prices that no Pod request takes. It is a result of scheduling and packing, not the waste of one workload.',
+        unitPrices: 'Unit price (average of the nodes)',
+        coreHour: 'Per core-hour',
+        gibHour: 'Per GiB-hour',
+        topWorkloads: 'Workloads that cost most ({currency})',
+        unpriced: '{n} nodes have no price',
+        snapshot_node_labels_not_exported:
+          'The node labels were not read: a price rule by label cannot match. Allow the labels in kube-state-metrics, or match by node name.',
+        snapshot_nodes_without_a_price:
+          'Some nodes are matched by no price rule: they are not counted as free, and not in the money.',
+        snapshot_pods_on_unknown_nodes: 'Some Pods run on nodes the snapshot does not have; they are not counted.',
+        waste: 'What the workloads could give back',
+        wasteHelp:
+          'The request of each Pod against what it used. The "safe value" is the platform\'s own recommendation (only one from an algorithm, with the OOM protection); what is above it could be given back. A workload with no recommendation yet shows its use and no figure to give back.',
+        money_no_cluster: 'No data source is chosen, or the cluster cannot be read: the amounts of resource, no money.',
+        money_no_price_rules: 'There is no price rule yet: the amounts of resource, no money.',
+        money_no_priced_nodes: 'No node is matched by a price rule: the amounts of resource, no money.',
+        noModules: 'There is no enabled module.',
+        workload: 'Workload',
+        pods: 'Pods',
+        replicas: 'Replicas',
+        memory: 'Memory',
+        cpuRequests: 'CPU requests',
+        memoryRequests: 'Memory requests',
+        request: 'Request',
+        safe: 'Safe',
+        idle: 'Idle',
+        external: 'Another controller owns the replicas',
+        surplusMonthly: 'Could be given back (a month)',
+        surplusMonthlyHelp:
+          'What the request has above the safe value x the replicas x the unit price x the hours of a month. It is expected: it becomes money saved only when the node count really goes down.',
+        detail: 'Detail',
+        value: 'Candidate',
+        savingPerPod: 'Given back per Pod',
+        savingMonthly: 'A month (expected)',
+        max: 'Highest',
+        points: '{n} samples',
+        candidateHelp:
+          'The candidates are between the safe value and the request now, never below the recommendation of the platform. Balanced and conservative add a {margin}% margin to the P99 or the highest use (system parameter cost.candidate_margin_percent). Nothing is changed here.',
+        note_no_request: 'The module does not say what one Pod requests, so nothing can be compared',
+        note_too_few_samples: 'Too few samples',
+        note_no_usage_series: 'There is no use series that can be read',
+        note_no_replicas_series: 'A workload-total series needs a replicas series to be turned into the use of one Pod',
+        note_no_recommendation: 'The platform has no recommendation from an algorithm yet, so there is no safe value',
+        note_current_not_above_safe: 'The request is not above the safe value: nothing to give back',
+        note_current_below_safe: 'The request is below the safe value: that is a risk, not a saving',
+        note_external_hpa:
+          'Another controller (HPA/KEDA) lately competed for the replicas: no candidate for this target',
+        simulating: 'Reading the cluster and simulating...',
+        simCaveat:
+          'This is an estimate, neither an upper nor a lower bound: the constraints listed below are not simulated and can only leave fewer nodes to empty than shown, while the greedy packing can also leave a node that a better packing would empty. It is not what Karpenter or the cluster autoscaler would do, and it executes nothing.',
+        simNow: 'With the requests as they are',
+        simWith: 'With the "{level}" candidates',
+        simNodes: 'Nodes',
+        simReleased: 'Emptied',
+        simPods: 'Pods changed',
+        simSaving: 'A month (expected; nodes in brackets)',
+        simUnpriced: 'Unpriced',
+        simChanges: 'Workloads whose requests were lowered',
+        simNoChanges: 'No workload has a candidate of this level, so the two runs are the same.',
+        simBlocked: 'Nodes that stayed',
+        simUnmodeled: 'Constraints that are not simulated',
+        blocked_pod_without_controller: 'a Pod has no controller: moving it would lose it',
+        blocked_no_room: 'a Pod fits on none of the other nodes',
+        unmodeled_node_selector_and_affinity: 'nodeSelector and affinity',
+        unmodeled_topology_spread: 'Topology spread and zones',
+        unmodeled_disruption_budgets: 'PodDisruptionBudgets',
+        unmodeled_tolerations: 'Pod tolerations (approximated by the taints of the node the Pod is on)',
+        unmodeled_storage_binding: 'Storage binding',
+        unmodeled_pod_overhead_and_init: 'Init containers and Pod overhead',
+        unmodeled_provisioner_replacement:
+          'Karpenter or the autoscaler may replace a node by a cheaper one instead of removing it',
+        ruleName: 'Name',
+        ruleMatch: 'Nodes it matches',
+        ruleHourly: 'Price an hour',
+        rulePriority: 'Priority',
+        priorityHelp:
+          'When several rules match a node, the higher priority wins; on a tie a name match beats a label match beats all nodes, then the older rule.',
+        ruleEnabled: 'Enabled',
+        match_all: 'All nodes',
+        match_label: 'By label',
+        match_name: 'By node name',
+        labelKey: 'Label key',
+        labelValue: 'Label value (empty: any value)',
+        namePattern: 'Node name (may have *)',
+        currency: 'Currency code'
+      },
       effect: {
         title: 'Forecast effect report',
         pickModule: 'Pick a module to see how its forecasts have done lately.',
@@ -2227,6 +2357,10 @@ const local = {
         gapNote:
           'The forecast of {algorithm} breaks off at {count} places: no run covered those times (the platform was not running, or there was no fresh data)',
         actualError: 'Could not read Prometheus: {error}',
+        forecastsLoading: 'Reading the forecasts... the actual values are drawn.',
+        forecastsError: 'The forecasts could not be read; the actual values are drawn: {error}',
+        forecastsFailed: 'The forecasts could not be read',
+        forecastsRetry: 'Ask for the forecasts again',
         candle: 'Candles',
         line: 'Line',
         algorithms: 'Algorithms',
@@ -2928,7 +3062,9 @@ const local = {
         notify: 'Notifications',
         ldap: 'LDAP sign-in',
         forecast: 'Forecast and resources',
-        operator: 'Operator settings'
+        operator: 'Operator settings',
+        assistant: 'AI assistant',
+        http: 'HTTP and timeouts'
       },
       email: {
         test: 'Send test mail',

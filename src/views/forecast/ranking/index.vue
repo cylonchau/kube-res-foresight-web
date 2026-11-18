@@ -8,6 +8,7 @@ import ListSearchCard from '@/components/business/list-search-card.vue';
 import RankList from '@/components/business/rank-list.vue';
 import ScoreBreakdown from '@/components/business/score-breakdown.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
+import { useCancellableRequest, wasCancelled } from '@/hooks/business/use-cancellable-request';
 import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
 import { fetchGetHistoryRankings, fetchGetMetricScores, fetchGetRanking, fetchScoreModule } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
@@ -43,6 +44,7 @@ const metricScores = ref<Api.Forecast.MetricScores | null>(null);
 const history = ref<Api.Forecast.HistoryRanking[]>([]);
 const loading = ref(false);
 const scoring = ref(false);
+const scoringWait = useCancellableRequest();
 const detailKey = ref<string | null>(null);
 const checkedMain = ref<string[]>([]);
 
@@ -72,13 +74,20 @@ async function load() {
 async function scoreNow() {
   if (!search.moduleId) return;
   scoring.value = true;
+  // a replay of every algorithm over the recent windows can take most of a minute: it shows the seconds and can be stopped
+  const signal = scoringWait.begin();
   try {
-    const { error } = await fetchScoreModule(search.moduleId);
+    const { error } = await fetchScoreModule(search.moduleId, signal);
+    if (error && wasCancelled(error)) {
+      message.info(t('common.requestCancelled'));
+      return;
+    }
     if (!error) {
       message.success(t('page.forecast.scores.scored'));
       await load();
     }
   } finally {
+    scoringWait.end();
     scoring.value = false;
   }
 }
@@ -296,6 +305,12 @@ onMounted(async () => {
         <NButton size="small" type="primary" :loading="scoring" :disabled="!search.moduleId" @click="scoreNow">
           {{ t('page.forecast.scores.scoreNow') }}
         </NButton>
+        <template v-if="scoring">
+          <NButton size="small" type="warning" secondary @click="scoringWait.cancel">{{ t('common.cancel') }}</NButton>
+          <span class="text-12px opacity-65">
+            {{ t('common.requestElapsed', { seconds: scoringWait.elapsed.value }) }}
+          </span>
+        </template>
       </template>
       <template #summary>
         <div class="flex flex-wrap items-center gap-x-16px gap-y-4px text-13px">

@@ -4,6 +4,7 @@ import { NAlert, NButton, NFormItemGi, NGrid, NInputNumber, NModal, NSelect, NSp
 import { useI18n } from 'vue-i18n';
 import AlgorithmParamsEditor from '@/components/advanced/algorithm-params-editor.vue';
 import HelpLabel from '@/components/common/help-label.vue';
+import { useCancellableRequest, wasCancelled } from '@/hooks/business/use-cancellable-request';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { fetchGetAlgorithms, fetchPreviewModuleChange } from '@/service/api';
 import { axisTimeLabel, axisTooltip, formatDateTime } from '@/utils/date';
@@ -19,6 +20,7 @@ const props = defineProps<{ show: boolean; moduleId: number | null; algorithm?: 
 const emit = defineEmits<{ 'update:show': [value: boolean] }>();
 const { t } = useI18n();
 const message = useMessage();
+const waiting = useCancellableRequest();
 
 const HOURS = [6, 24, 72, 168];
 const hourOptions = computed(() =>
@@ -94,9 +96,15 @@ async function run() {
   running.value = true;
   failure.value = '';
   report.value = null;
+  // a replay of a week can take most of a minute: the seconds it has taken are shown and it can be stopped
+  const signal = waiting.begin();
   try {
-    const { data, error } = await fetchPreviewModuleChange(props.moduleId, body);
+    const { data, error } = await fetchPreviewModuleChange(props.moduleId, body, signal);
     if (error) {
+      if (wasCancelled(error)) {
+        message.info(t('common.requestCancelled'));
+        return;
+      }
       failure.value =
         (error as { response?: { data?: { msg?: string } }; message?: string }).response?.data?.msg ||
         error.message ||
@@ -107,6 +115,7 @@ async function run() {
     await nextTick();
     draw();
   } finally {
+    waiting.end();
     running.value = false;
   }
 }
@@ -318,6 +327,10 @@ watch(() => t('page.forecast.preview.seriesNeed'), draw);
         {{ running ? t('page.forecast.preview.running') : t('page.forecast.preview.run') }}
       </NButton>
       <NButton size="small" :disabled="running" @click="reset">{{ t('page.forecast.preview.reset') }}</NButton>
+      <template v-if="running">
+        <NButton size="small" type="warning" secondary @click="waiting.cancel">{{ t('common.cancel') }}</NButton>
+        <span class="text-12px opacity-65">{{ t('common.requestElapsed', { seconds: waiting.elapsed.value }) }}</span>
+      </template>
     </div>
 
     <NAlert v-if="failure" type="error" :title="t('page.forecast.preview.failed')" class="mb-12px">

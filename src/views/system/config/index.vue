@@ -100,6 +100,7 @@ function getModuleTagType(key: string): 'default' | 'primary' | 'info' | 'succes
     operator: 'success',
     assistant: 'info',
     ui: 'primary',
+    http: 'warning',
     notify: 'warning'
   };
   return types[categoryOf(key)] || 'default';
@@ -143,23 +144,15 @@ const columnMap: Record<string, any> = {
   config_name: {
     title: t('page.system.columns.configName', '参数名称'),
     key: 'config_name',
-    width: 220,
+    width: 140,
     resizable: true,
     ellipsis: { tooltip: true },
+    // only the category tag: the key has its own column, and the name is the same words as the key
     render(row: Api.System.Config) {
       return h(
-        NSpace,
-        { align: 'center', size: 6 },
-        {
-          default: () => [
-            h(
-              NTag,
-              { size: 'tiny', type: getModuleTagType(row.config_key), bordered: false, round: true },
-              { default: () => getModuleLabel(row.config_key) }
-            ),
-            h('span', { class: 'font-medium' }, nameOf(row))
-          ]
-        }
+        NTag,
+        { size: 'tiny', type: getModuleTagType(row.config_key), bordered: false, round: true },
+        { default: () => getModuleLabel(row.config_key) }
       );
     }
   },

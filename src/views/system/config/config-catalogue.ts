@@ -1,4 +1,4 @@
-export type ConfigCategory = 'auth' | 'ldap' | 'forecast' | 'operator' | 'assistant' | 'ui' | 'notify';
+export type ConfigCategory = 'auth' | 'ldap' | 'forecast' | 'operator' | 'assistant' | 'ui' | 'http' | 'notify';
 export const CONFIG_CATEGORIES: ConfigCategory[] = [
   'auth',
   'ldap',
@@ -6,6 +6,7 @@ export const CONFIG_CATEGORIES: ConfigCategory[] = [
   'operator',
   'assistant',
   'ui',
+  'http',
   'notify'
 ];
 export function categoryOf(key: string): ConfigCategory {
@@ -14,6 +15,7 @@ export function categoryOf(key: string): ConfigCategory {
   if (key.startsWith('operator.')) return 'operator';
   if (key.startsWith('assistant.')) return 'assistant';
   if (key.startsWith('ui.')) return 'ui';
+  if (key.startsWith('http.')) return 'http';
   if (key.startsWith('notify.')) return 'notify';
   return 'auth';
 }

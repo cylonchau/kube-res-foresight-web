@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
 import {
+  NAlert,
+  NButton,
   NCard,
   NDataTable,
   NDescriptions,
@@ -68,21 +70,74 @@ const metricOptions = computed(() =>
     .map(source => ({ label: source.name, value: source.key }))
 );
 
+/** the forecasts are read apart from the actual values: while they are on their way, and why they could not be read */
+const forecastsLoading = ref(false);
+const forecastsError = ref('');
+let loadSeq = 0;
+
+interface Asked {
+  moduleId: number;
+  params: { metric: string; from?: string; to?: string; algorithms?: string };
+}
+let asked: Asked | null = null;
+
+function failureOf(error: unknown) {
+  const e = error as { response?: { data?: { msg?: string } }; message?: string } | null;
+  return e?.response?.data?.msg || e?.message || '';
+}
+
+/**
+ * One page, two reads: the actual values come from Prometheus and the forecasts from the database, and either can be slow or fail. The actual
+ * values are asked for first and drawn at once; the forecasts are asked for apart and added when they arrive, so a slow or failing read of the
+ * forecasts leaves the actual values on the screen and says why, with a button to ask again, instead of failing the whole page.
+ */
 async function load() {
   if (!search.moduleId || !search.metric || !search.range) {
     compare.value = null;
     return;
   }
+  const seq = ++loadSeq;
+  const algorithms = search.algorithms.join(',') || undefined;
+  asked = { moduleId: search.moduleId, params: { metric: search.metric, ...rangeParams(search.range), algorithms } };
   loading.value = true;
+  forecastsLoading.value = false;
+  forecastsError.value = '';
   try {
-    const { data, error } = await fetchCompareModule(search.moduleId, {
-      metric: search.metric,
-      ...rangeParams(search.range),
-      algorithms: search.algorithms.join(',') || undefined
-    });
-    compare.value = error ? null : data;
+    const first = await fetchCompareModule(asked.moduleId, { ...asked.params, predictions: false });
+    if (seq !== loadSeq) return;
+    compare.value = first.error ? null : first.data;
   } finally {
-    loading.value = false;
+    if (seq === loadSeq) loading.value = false;
+  }
+  if (seq === loadSeq) await loadForecasts(seq);
+}
+
+async function loadForecasts(seq = loadSeq) {
+  if (!asked) return;
+  forecastsLoading.value = true;
+  forecastsError.value = '';
+  try {
+    const { data, error } = await fetchCompareModule(
+      asked.moduleId,
+      { ...asked.params, actual: false, bucket_seconds: compare.value?.bucket_seconds || undefined },
+      { silent: true }
+    );
+    if (seq !== loadSeq) return;
+    if (error || !data) {
+      forecastsError.value = failureOf(error) || t('page.forecast.compare.forecastsFailed');
+      return;
+    }
+    // added to what is on the screen: the same grid, so the lines meet
+    const current = compare.value ?? { ...data, actual: null, actual_replicas: null };
+    compare.value = {
+      ...current,
+      algorithms: data.algorithms,
+      statuses: data.statuses,
+      replica_basis: data.replica_basis,
+      bucket_seconds: current.bucket_seconds || data.bucket_seconds
+    };
+  } finally {
+    if (seq === loadSeq) forecastsLoading.value = false;
   }
 }
 
@@ -430,6 +485,19 @@ onActivated(async () => {
         <TimeRangeField v-model="search.range" />
       </NFormItemGi>
     </ListSearchCard>
+
+    <!-- the forecasts are read apart from the actual values: this line says where they are, and why they could not be read -->
+    <NAlert v-if="forecastsError" type="warning" :show-icon="false" class="rounded-12px">
+      <div class="flex flex-wrap items-center justify-between gap-8px">
+        <span>{{ t('page.forecast.compare.forecastsError', { error: forecastsError }) }}</span>
+        <NButton size="tiny" secondary @click="loadForecasts()">
+          {{ t('page.forecast.compare.forecastsRetry') }}
+        </NButton>
+      </div>
+    </NAlert>
+    <div v-else-if="forecastsLoading" class="px-8px text-12px opacity-65">
+      {{ t('page.forecast.compare.forecastsLoading') }}
+    </div>
 
     <!-- the chart is the page: it takes all the height that is left -->
     <NCard

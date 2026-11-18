@@ -912,6 +912,8 @@ declare namespace Api {
       actual_replicas_error?: string;
       /** every enabled algorithm, with the reason for the ones that have no forecast in the window */
       statuses: AlgorithmStatus[];
+      /** how long each read took in milliseconds (actual_ms, replicas_ms, predictions_ms): a slow chart says which read was slow */
+      timings_ms?: Record<string, number>;
     }
 
     interface QueryTestRequest {
@@ -1681,6 +1683,155 @@ declare namespace Api {
       to?: string;
       step?: number;
       max_points?: number;
+    }
+    /** a price rule of the cost: what an hour of the nodes it matches costs (an estimate typed in, never read from a bill) */
+    interface CostPriceRule {
+      id: number;
+      name: string;
+      match_kind: 'all' | 'label' | 'name';
+      label_key: string;
+      label_value: string;
+      name_pattern: string;
+      hourly_price: number;
+      currency: string;
+      priority: number;
+      enabled: boolean;
+      remark: string;
+    }
+
+    type CostPriceRulePayload = Partial<Omit<CostPriceRule, 'id'>> & { name: string };
+
+    interface CostNode {
+      node: string;
+      priced: boolean;
+      rule?: string;
+      currency?: string;
+      hourly: number;
+      allocated: number;
+      idle: number;
+      pods: number;
+      note?: string;
+    }
+
+    interface CostWorkload {
+      namespace: string;
+      kind: string;
+      workload: string;
+      pods: number;
+      cpu_milli: number;
+      memory_bytes: number;
+      hourly: number;
+    }
+
+    /** the cost in one currency: amounts of two currencies are never added */
+    interface CostCurrency {
+      currency: string;
+      hourly: number;
+      allocated: number;
+      idle: number;
+      idle_share: number;
+      monthly: number;
+      cpu_core_hour: number;
+      memory_gib_hour: number;
+      nodes: CostNode[];
+      workloads: CostWorkload[];
+    }
+
+    /** what the cluster costs now, read from kube-state-metrics */
+    interface CostOverview {
+      datasource: { id: number; name: string };
+      at: string;
+      nodes: number;
+      pods: number;
+      notes: string[];
+      cpu_share_percent: number;
+      hours_per_month: number;
+      rules: number;
+      allocation: { currencies: CostCurrency[]; unpriced: CostNode[]; notes?: string[] };
+    }
+
+    interface CostUsage {
+      points: number;
+      p50: number;
+      p95: number;
+      p99: number;
+      max: number;
+    }
+
+    interface CostCandidate {
+      level: 'aggressive' | 'balanced' | 'conservative';
+      value: number;
+      saving: number;
+      monthly_saving: number;
+    }
+
+    /** one resource of one workload; CPU in cores, memory in bytes, per Pod */
+    interface CostResource {
+      resource: 'cpu' | 'memory';
+      request: number;
+      safe: number;
+      usage: CostUsage;
+      utilization: number;
+      idle: boolean;
+      surplus: number;
+      enough: boolean;
+      note?: string;
+      candidates: CostCandidate[];
+      candidate_note?: string;
+      surplus_monthly: number;
+    }
+
+    interface CostModule {
+      module_id: number;
+      name: string;
+      namespace: string;
+      workload_kind: string;
+      workload: string;
+      replicas: number;
+      external: boolean;
+      cpu: CostResource | null;
+      memory: CostResource | null;
+    }
+
+    interface CostModules {
+      window_days: number;
+      currency: string;
+      money_note?: string;
+      cpu_core_hour: number;
+      memory_gib_hour: number;
+      idle_percent: number;
+      margin_percent: number;
+      modules: CostModule[];
+    }
+
+    interface CostSimResult {
+      nodes_before: number;
+      nodes_after: number;
+      pods_changed: number;
+      released: string[];
+      blocked: { node: string; reason: string; pod?: string }[];
+      savings: { currency: string; nodes: number; hourly: number; monthly: number }[];
+      unpriced_released: number;
+      unmodeled: string[];
+    }
+
+    interface CostSimulation {
+      datasource: { id: number; name: string };
+      at: string;
+      level: string;
+      window_days: number;
+      notes: string[];
+      changes: {
+        module_id: number;
+        name: string;
+        namespace: string;
+        kind: string;
+        workload: string;
+        cpu_milli: number;
+        memory_bytes: number;
+      }[];
+      now: CostSimResult;
+      with: CostSimResult;
     }
   }
 
