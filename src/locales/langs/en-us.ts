@@ -370,7 +370,7 @@ const local = {
     datasource_connections: 'Data source connections',
     system: 'System Management',
     system_config: 'System Parameters',
-    system_diagnostics: 'Database diagnostics',
+    system_diagnostics: 'System diagnostics',
     'system_login-log': 'Login Logs',
     'system_operation-log': 'Operation Logs',
     system_task: 'Task Definition',
@@ -732,7 +732,63 @@ const local = {
       noData: 'This module has no source of CPU or memory use'
     },
     diagnostics: {
-      title: 'Database diagnostics',
+      title: 'System diagnostics',
+      refresh: 'Refresh',
+      window: 'Range',
+      hoursOption: 'Last {n} hours',
+      diagnosis: 'Diagnosis',
+      noFindings: 'Nothing that needs attention was found in this time',
+      baseline: 'Time baseline of every route',
+      baselineHint:
+        'A percentile is the upper edge of the histogram bucket it falls in: "at most". The platform itself is whatever is not the database or Prometheus.',
+      route: 'Route',
+      requests: 'Requests',
+      avg: 'Average',
+      max: 'Slowest',
+      stops: 'Stopped by platform',
+      gaveUp: 'Given up on',
+      errors5xx: '5xx',
+      layer: 'Time is mostly in',
+      share: 'Database / Prometheus',
+      examples: 'Slowest request ids',
+      layers: { database: 'the database', prometheus: 'Prometheus', handler: 'the platform own work' },
+      runs: 'Runs of the process',
+      instance: 'Instance',
+      started: 'Started',
+      lastSeen: 'Last heartbeat',
+      ended: 'How it ended',
+      alive: 'running',
+      gracefulEnd: 'told to stop and exited',
+      killedEnd: 'vanished without writing a stop',
+      memory: 'Memory at the last time / container limit',
+      noLimit: 'no limit',
+      level: { critical: 'Serious', warning: 'Notice', info: 'Info' },
+      finding: {
+        no_data:
+          'Only {requests} requests so far, too few to conclude anything: use the pages for a while and come back.',
+        platform_timeouts:
+          '{route}: the platform itself stopped {count} requests (of {requests}) at its {budget_s} s limit, which is the 504 with a reason on the page. The time is mostly in {layer} (database {db_share}%, Prometheus {prom_share}%), P95 at most {p95} s.',
+        over_half_gateway:
+          '{route}: P95 at most {p95} s and the slowest {max} s, more than half of the gateway timeout ({gateway_s} s): slow requests turn into a 504 at the gateway. The time is mostly in {layer} (database {db_share}%, Prometheus {prom_share}%; about {db_calls} statements and {prom_calls} Prometheus queries per request).',
+        slow_route:
+          '{route}: the slowest took {max} s, more than half of the gateway timeout ({gateway_s} s); P95 at most {p95} s. The time is mostly in {layer}.',
+        abandoned:
+          '{route}: {count} requests (of {requests}) were given up on by the other side (the browser or the gateway) before the answer.',
+        abandoned_at_limit:
+          '{route}: {count} requests (of {requests}) were given up on, one of them at {took} s, which is where the 60 s request limit of the browser or the default 60 s read timeout of a gateway is: look for the request in the gateway log.',
+        server_errors:
+          '{route}: {count} requests (of {requests}) ended in a 5xx (not the platform stopping at its time limit).',
+        many_statements:
+          '{route}: {db_calls} database statements per request on average: the number of statements is itself where the time goes.',
+        restart_killed:
+          '{count} runs of the process vanished without writing a stop (killed, crashed or lost with the node; an out-of-memory kill is the usual cause), the last about {last}. Requests in flight at that time are a 502.',
+        memory_near_limit:
+          '{instance} had {sys} of memory at its last heartbeat, above 85% of its container limit of {limit}: most likely killed for memory ({at}).',
+        restart_graceful:
+          '{count} runs of the process were told to stop and exited (a rolling update, a restart after a failed probe, or a deletion).',
+        pool_waiting:
+          'Statements waited for a connection {waits} times, {wait_ms} ms in all (pool size {max_open}): the pool is too small for the load, which slows every page together.'
+      },
       pool: 'Connection pool of this process',
       poolWaiting:
         'Statements have waited for a connection: the pool is too small for the load. Raise the pool size (Helm: database.postgresMaxOpenConnection or maxOpenConnection) while the database server still has connections to spare.',
