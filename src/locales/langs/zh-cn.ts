@@ -740,8 +740,11 @@ const local = {
       skillKeywordPlaceholder: '命令、标题或描述',
       confirmBatchDeleteSkills: '确认删除选中的 Skill？内置的会被保留（只能禁用）。',
       audit: {
-        hint: '每个发给语言模型的问题一条记录。记录里没有问题、回答和工具结果：只能看到助手怎么被使用，看不到用户说了什么。',
-        keywordPlaceholder: '用户或模型',
+        question: '问题',
+        answer: '回答',
+        view: '查看',
+        conversation: '对话内容',
+        keywordPlaceholder: '用户、模型或问题',
         time: '时间',
         user: '用户',
         source: '来源',

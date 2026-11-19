@@ -61,6 +61,8 @@ function rememberTask(id: number) {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 /** how long a question may be answered in the background before the page stops waiting for it */
 const MAX_WAIT_MS = 15 * 60 * 1000;
+/** how often a running question is read: fast enough that the written text follows the model */
+const POLL_MS = 400;
 
 function restoreConversationId(): number {
   try {
@@ -119,6 +121,8 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
   const progressNote = ref('');
   /** the steps of the question being answered, as they happen: a tool that is running, and the ones that are done with what they returned */
   const liveSteps = ref<Api.Assistant.ToolTrace[]>([]);
+  /** the answer as far as it is written, while the model is still writing it (shown growing, like the output of a command line agent) */
+  const liveText = ref('');
   /** whether the page and the object the user is looking at go with the question (the platform checks the user may see them) */
   const attachContext = ref(true);
   /** the background task answering the question, 0 when there is none */
@@ -181,9 +185,17 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     const started = Date.now();
     let seen = 0;
     let failures = 0;
+    let tick = 0;
     try {
       while (Date.now() - started < MAX_WAIT_MS) {
-        const [task, events] = await Promise.all([fetchAssistantAsyncTask(id), fetchAssistantAsyncEvents(id, seen)]);
+        // the text is read four times a second, the steps every other time: a written answer should not arrive in jumps
+        tick += 1;
+        const [task, events] = await Promise.all([
+          fetchAssistantAsyncTask(id),
+          tick % 2 === 1
+            ? fetchAssistantAsyncEvents(id, seen)
+            : Promise.resolve({ data: [] as Api.Assistant.AsyncEvent[] })
+        ]);
         if (!task.data) {
           failures += 1;
           // a refusal (the task is gone) ends the wait; a network error is tried again a few times
@@ -191,6 +203,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
             return { data: null, error: task.error };
         } else {
           failures = 0;
+          liveText.value = task.data.partial ?? '';
           for (const event of events.data ?? []) {
             seen = Math.max(seen, event.seq);
             if (event.type === 'tool_start' && event.data?.name) {
@@ -209,13 +222,14 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
             return { data: null, error: new Error(task.data.error || $t('page.assistant.failedUnknown')) };
           if (state === 'cancelled') return { data: null, error: new Error($t('page.assistant.cancelled')) };
         }
-        await sleep(1000);
+        await sleep(POLL_MS);
       }
       return { data: null, error: new Error($t('page.assistant.waitedTooLong')) };
     } finally {
       taskId.value = 0;
       progressNote.value = '';
       liveSteps.value = [];
+      liveText.value = '';
       cancelAsked = false;
       rememberTask(0);
     }
@@ -455,6 +469,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     taskId,
     progressNote,
     liveSteps,
+    liveText,
     attachContext,
     pageContext,
     regenerate,
