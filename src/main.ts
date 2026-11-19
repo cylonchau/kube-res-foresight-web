@@ -8,7 +8,8 @@ import {
   setupIconifyOffline,
   setupListSearchAutoSubmit,
   setupLoading,
-  setupNProgress
+  setupNProgress,
+  setupTruncatedTitle
 } from './plugins';
 import { setupStore } from './store';
 import { setupRouter } from './router';
@@ -36,6 +37,9 @@ async function setupApp() {
 
   // every list page's search form submits itself when a condition changes
   setupListSearchAutoSubmit(app);
+
+  // a text that a select cuts with an ellipsis is shown whole when the pointer is over it
+  setupTruncatedTitle();
 
   setupAppVersionNotification();
 

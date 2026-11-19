@@ -4,3 +4,4 @@ export * from './iconify';
 export * from './dayjs';
 export * from './app';
 export * from './list-search';
+export * from './truncated-title';
