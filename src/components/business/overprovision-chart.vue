@@ -16,9 +16,13 @@ defineOptions({ name: 'OverprovisionChart' });
 interface Props {
   chart: Api.Overprovision.Chart | null | undefined;
   height?: number;
+  /** the limit of the Pod, drawn as a line when it is known */
+  limit?: number;
+  /** the P90, P95 and P99 of the use over the window, drawn as thin lines */
+  quantiles?: { p90: number; p95: number; p99: number };
 }
 
-const props = withDefaults(defineProps<Props>(), { height: 220 });
+const props = withDefaults(defineProps<Props>(), { height: 220, limit: 0, quantiles: undefined });
 const { t, locale } = useI18n();
 
 const unit = computed(() => (props.chart?.resource === 'memory' ? 'bytes' : 'cores'));
@@ -58,7 +62,20 @@ async function draw() {
       yAxis: c.suggested,
       name: t('page.overprovision.chartSuggested'),
       lineStyle: { color: '#18a058', type: 'dashed' }
-    }
+    },
+    (props.limit ?? 0) > 0 && {
+      yAxis: props.limit,
+      name: t('page.overprovision.limit'),
+      lineStyle: { color: '#f0a020', type: 'dashed' }
+    },
+    ...(props.quantiles
+      ? (['p90', 'p95', 'p99'] as const).map(key => ({
+          yAxis: props.quantiles![key],
+          name: key.toUpperCase(),
+          lineStyle: { color: '#909399', type: 'dotted', width: 1 },
+          label: { position: 'insideStartTop', fontSize: 10 }
+        }))
+      : [])
   ].filter(Boolean);
   const series = [
     line(t('page.overprovision.chartUsage'), c.value, {
@@ -70,7 +87,7 @@ async function draw() {
     line(c.ma_labels[1], c.ma15, { lineStyle: { width: 1 } }),
     line(c.ma_labels[2], c.ma25, { lineStyle: { width: 1 } })
   ];
-  const all = [...c.value, c.request, c.suggested].filter(v => Number.isFinite(v) && v > 0);
+  const all = [...c.value, c.request, c.suggested, props.limit ?? 0].filter(v => Number.isFinite(v) && v > 0);
   await updateOptions(opts => ({
     ...opts,
     tooltip: {
@@ -89,7 +106,7 @@ async function draw() {
   }));
 }
 
-watch(() => props.chart, draw, { deep: false, flush: 'post' });
+watch(() => [props.chart, props.limit, props.quantiles], draw, { flush: 'post' });
 watch(locale, draw);
 onMounted(draw);
 </script>

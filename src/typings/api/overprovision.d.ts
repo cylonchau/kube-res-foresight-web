@@ -11,6 +11,7 @@ declare namespace Api {
     interface Usage {
       points: number;
       p50: number;
+      p90: number;
       p95: number;
       p99: number;
       max: number;
@@ -22,6 +23,8 @@ declare namespace Api {
       window_minutes: number;
       request: number;
       limit: number;
+      /** where the limit comes from: a metric of the module, the module ratio of admission, or empty when not known */
+      limit_from: 'metric' | 'module' | '';
       usage: Usage;
       /** over all the Pods together; absent when it could not be made */
       total?: Usage;
@@ -54,14 +57,18 @@ declare namespace Api {
       replicas: number;
       request: number;
       limit: number;
+      /** where the limit comes from: a metric of the module, the module ratio of admission, or empty when not known */
+      limit_from: 'metric' | 'module' | '';
       points: number;
       expected_points: number;
       coverage: number;
       p50: number;
+      p90: number;
       p95: number;
       p99: number;
       max: number;
       total_p50: number;
+      total_p90: number;
       total_p95: number;
       total_p99: number;
       total_max: number;
@@ -160,6 +167,37 @@ declare namespace Api {
       jvm?: JVM;
       charts?: Chart[];
       history: Stored[];
+      metrics: MetricStat[];
+    }
+
+    /** another metric the module has set up (container, JVM, throttling, OOM ...), over the window */
+    interface MetricStat {
+      key: string;
+      name: string;
+      kind: string;
+      group: 'container' | 'jvm' | 'throttle' | 'oom' | 'other';
+      level: string;
+      unit: string;
+      points: number;
+      latest: number;
+      p50: number;
+      p90: number;
+      p95: number;
+      p99: number;
+      max: number;
+    }
+
+    /** what the cluster has to give and has given out, read live from kube-state-metrics */
+    interface Cluster {
+      datasource: { id: number; name: string };
+      at: string;
+      nodes: number;
+      pods: number;
+      allocatable_cpu: number;
+      allocatable_memory: number;
+      requested_cpu: number;
+      requested_memory: number;
+      notes: string[];
     }
 
     interface RunResult {

@@ -21,3 +21,14 @@ export function fetchRunOverprovision(moduleId?: number) {
 export function fetchGetModuleOverprovision(id: number, params: { window?: string; from?: string; to?: string }) {
   return request<Api.Overprovision.Detail>({ url: `${base}/modules/${id}/overprovision`, method: 'get', params });
 }
+
+/** what the cluster of the data source of a module has to give and has given out (nodes, allocatable, the requests of the Running Pods), read live */
+export function fetchGetOverprovisionCluster(moduleId: number) {
+  // a cluster that cannot be read is told on the page, in its place, and not by a message over everything
+  return request<Api.Overprovision.Cluster>({
+    url: `${base}/overprovision/cluster`,
+    method: 'get',
+    params: { module_id: moduleId },
+    headers: { 'X-Silent-Error': '1' }
+  });
+}
