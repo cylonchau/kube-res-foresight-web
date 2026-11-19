@@ -52,6 +52,7 @@ declare module "@elegant-router/types" {
     "forecast-results_evaluations": "/forecast-results/evaluations";
     "forecast-results_history": "/forecast-results/history";
     "forecast-results_leaderboard": "/forecast-results/leaderboard";
+    "forecast-results_overprovision": "/forecast-results/overprovision";
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat|otp-login)?";
     "monitoring": "/monitoring";
@@ -157,6 +158,7 @@ declare module "@elegant-router/types" {
     | "forecast-results_evaluations"
     | "forecast-results_history"
     | "forecast-results_leaderboard"
+    | "forecast-results_overprovision"
     | "forecast_algorithms"
     | "forecast_models"
     | "forecast_ranking"

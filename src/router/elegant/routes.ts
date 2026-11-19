@@ -338,6 +338,15 @@ export const generatedRoutes: GeneratedRoute[] = [
           title: 'forecast-results_leaderboard',
           i18nKey: 'route.forecast-results_leaderboard'
         }
+      },
+      {
+        name: 'forecast-results_overprovision',
+        path: '/forecast-results/overprovision',
+        component: 'view.forecast-results_overprovision',
+        meta: {
+          title: 'forecast-results_overprovision',
+          i18nKey: 'route.forecast-results_overprovision'
+        }
       }
     ]
   },
