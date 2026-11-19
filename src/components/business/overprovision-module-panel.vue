@@ -22,6 +22,10 @@ interface Props {
   loading: boolean;
   /** pod: the request and the use of one Pod; total: all the replicas together */
   basis: 'pod' | 'total';
+  /** the quantiles as the Prometheus data source computed them now; null while they are asked or when it did not answer */
+  prom: Api.Overprovision.PromStats | null;
+  promLoading: boolean;
+  promError: string;
   ai: {
     running: boolean;
     live: string;
@@ -107,7 +111,11 @@ const useTiles = computed<Tile[]>(() => {
   const tiles: Tile[] = [];
   for (const { resource, result: r } of results.value) {
     const name = resName(resource);
-    const used = props.basis === 'total' && r.total ? r.total.p95 : r.usage.p95;
+    const live = promQuantiles(resource);
+    const stored = props.basis === 'total' && r.total ? r.total.p95 : r.usage.p95;
+    const used = live
+      ? ((props.basis === 'total' ? (live.total ?? live.pod)?.p95 : (live.pod ?? live.total)?.p95) ?? stored)
+      : stored;
     const request = r.request * times.value;
     const left = request - used;
     tiles.push({
@@ -143,24 +151,56 @@ const useTiles = computed<Tile[]>(() => {
 });
 
 /** the quantiles of every resource, of one Pod and of all the replicas: the P90, the P95 and the P99 are always there */
-const quantileRows = computed(() =>
+interface QRow {
+  key: string;
+  label: string;
+  resource: string;
+  u: { p50: number; p90: number; p95: number; p99: number; max: number; points?: number };
+}
+const promMetric = (kind: string) => props.prom?.metrics.find(m => m.kind === kind && !m.error) ?? null;
+/** the quantiles Prometheus answered for the CPU or the memory of the module, or null */
+function promQuantiles(resource: string) {
+  const m = promMetric(resource);
+  return m && (m.pod || m.total) ? { pod: m.pod, total: m.total } : null;
+}
+const quantilesFromPrometheus = computed(() => results.value.some(item => promQuantiles(item.resource)));
+const quantileRows = computed<QRow[]>(() =>
   results.value.flatMap(({ resource, result: r }) => {
-    const rows = [{ key: `${resource}-pod`, label: `${resName(resource)} · ${p('podUsage')}`, resource, u: r.usage }];
-    if (r.total)
-      rows.push({ key: `${resource}-all`, label: `${resName(resource)} · ${p('totalUsage')}`, resource, u: r.total });
+    const live = promQuantiles(resource);
+    const rows: QRow[] = [];
+    const pod = live ? live.pod : r.usage;
+    const total = live ? live.total : r.total;
+    if (pod) rows.push({ key: `${resource}-pod`, label: `${resName(resource)} · ${p('podUsage')}`, resource, u: pod });
+    if (total)
+      rows.push({ key: `${resource}-all`, label: `${resName(resource)} · ${p('totalUsage')}`, resource, u: total });
     return rows;
   })
 );
+/** the P90, P95 and P99 of one Pod the chart draws: Prometheus' when it answered, the stored samples' when not */
+function chartQuantiles(resource: string, r: Api.Overprovision.Result) {
+  const live = promQuantiles(resource);
+  const q = live?.pod ?? r.usage;
+  return { p90: q.p90, p95: q.p95, p99: q.p99 };
+}
+const promQueries = computed(() => (props.prom?.metrics ?? []).filter(m => m.query));
 
 const chartOf = (resource: string) => props.detail?.charts?.find(chart => chart.resource === resource) ?? null;
 
 // ---- the other metrics the module has set up
 
 const GROUPS = ['container', 'jvm', 'throttle', 'oom', 'other'] as const;
+/** the other metrics with their quantiles from Prometheus when it answered, from the stored samples when not (the latest value is the stored one) */
+const metricItems = computed(() =>
+  (props.detail?.metrics ?? []).map(m => {
+    const live = props.prom?.metrics.find(item => item.key === m.key && !item.error);
+    const q = live ? (live.pod ?? live.total) : undefined;
+    return q
+      ? { ...m, p90: q.p90, p95: q.p95, p99: q.p99, max: q.max, points: m.points || 1, live: true }
+      : { ...m, live: false };
+  })
+);
 const metricGroups = computed(() =>
-  GROUPS.map(group => ({ group, items: (props.detail?.metrics ?? []).filter(m => m.group === group) })).filter(
-    g => g.items.length
-  )
+  GROUPS.map(group => ({ group, items: metricItems.value.filter(m => m.group === group) })).filter(g => g.items.length)
 );
 function metricValue(m: Api.Overprovision.MetricStat, value: number) {
   switch (m.unit.toLowerCase()) {
@@ -230,12 +270,24 @@ const clusterTiles = computed<Tile[]>(() => {
       value: formatCores(c.requested_cpu, 1),
       sub: rate(c.requested_cpu, c.allocatable_cpu)
     },
+    {
+      key: 'usedCpu',
+      label: p('clusterUsedCpu'),
+      value: c.used_cpu > 0 ? formatCores(c.used_cpu, 1) : '-',
+      sub: c.used_cpu > 0 ? rate(c.used_cpu, c.allocatable_cpu) : undefined
+    },
     { key: 'allocMem', label: p('clusterAllocMem'), value: formatBytes(c.allocatable_memory, 1) },
     {
       key: 'reqMem',
       label: p('clusterRequestedMem'),
       value: formatBytes(c.requested_memory, 1),
       sub: rate(c.requested_memory, c.allocatable_memory)
+    },
+    {
+      key: 'usedMem',
+      label: p('clusterUsedMem'),
+      value: c.used_memory > 0 ? formatBytes(c.used_memory, 1) : '-',
+      sub: c.used_memory > 0 ? rate(c.used_memory, c.allocatable_memory) : undefined
     }
   ];
 });
@@ -297,6 +349,17 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
         </div>
       </div>
 
+      <div v-if="quantileRows.length" class="flex flex-wrap items-center gap-8px text-12px">
+        <NTag size="tiny" :bordered="false" :type="quantilesFromPrometheus ? 'success' : 'warning'">
+          {{ quantilesFromPrometheus ? p('promSource') : p('promSourceStored') }}
+        </NTag>
+        <HelpLabel :label="p('promQueries')" :help="p('promHelp')" class="opacity-70" />
+        <span v-if="promLoading" class="opacity-70">{{ p('promLoading') }}</span>
+        <span v-else-if="promError" class="opacity-70">{{ p('promFailed') }}: {{ promError }}</span>
+        <span v-else-if="prom" class="opacity-70">
+          {{ prom.datasource.name }} · {{ prom.window }} / {{ prom.step }}
+        </span>
+      </div>
       <NTable v-if="quantileRows.length" size="small" :bordered="true" :single-line="false" class="quantiles text-12px">
         <thead>
           <tr>
@@ -317,7 +380,7 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
             <td class="key">{{ fmt(row.resource, row.u.p95) }}</td>
             <td class="key">{{ fmt(row.resource, row.u.p99) }}</td>
             <td>{{ fmt(row.resource, row.u.max) }}</td>
-            <td>{{ row.u.points }}</td>
+            <td>{{ row.u.points ?? '-' }}</td>
           </tr>
         </tbody>
       </NTable>
@@ -333,12 +396,21 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
             :chart="chartOf(item.resource)"
             :height="170"
             :limit="item.result.limit"
-            :quantiles="{ p90: item.result.usage.p90, p95: item.result.usage.p95, p99: item.result.usage.p99 }"
+            :quantiles="chartQuantiles(item.resource, item.result)"
           />
         </div>
       </div>
 
       <NCollapse v-if="results.length" arrow-placement="right">
+        <NCollapseItem v-if="promQueries.length" :title="p('promQueries')" name="promql">
+          <div class="flex-col gap-8px text-12px">
+            <div v-for="m in promQueries" :key="m.key">
+              <div class="font-medium">{{ m.name }}</div>
+              <code class="break-all opacity-80">{{ m.example || m.query }}</code>
+              <div v-if="m.error" class="text-[#d03050]">{{ m.error }}</div>
+            </div>
+          </div>
+        </NCollapseItem>
         <NCollapseItem :title="p('reasons')" name="reasons">
           <div class="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-12px text-12px">
             <div v-for="item in results" :key="item.resource" class="flex-col gap-4px">
@@ -428,6 +500,16 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
         </div>
         <div v-else-if="clusterLoading" class="text-12px opacity-70">…</div>
         <div v-else-if="clusterError" class="text-12px opacity-70">{{ clusterError }}</div>
+        <NCollapse v-if="cluster?.queries.length" arrow-placement="right">
+          <NCollapseItem :title="p('clusterQueries')" name="clusterql">
+            <div class="flex-col gap-4px text-12px">
+              <div v-for="q in cluster.queries" :key="q.name">
+                <span class="opacity-70">{{ q.name }}</span>
+                <code class="ml-6px break-all opacity-80">{{ q.query }}</code>
+              </div>
+            </div>
+          </NCollapseItem>
+        </NCollapse>
         <ul v-if="cluster?.notes.length" class="m-0 pl-18px text-12px leading-20px opacity-70">
           <li v-for="note in cluster.notes" :key="note">{{ note }}</li>
         </ul>

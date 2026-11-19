@@ -32,3 +32,13 @@ export function fetchGetOverprovisionCluster(moduleId: number) {
     headers: { 'X-Silent-Error': '1' }
   });
 }
+
+/** the P50, P90, P95, P99 and the maximum of the metrics of a module, asked of the Prometheus data source now (quantile_over_time over the PromQL of its mappings) */
+export function fetchGetModulePrometheus(id: number, params: { window?: string; from?: string; to?: string }) {
+  return request<Api.Overprovision.PromStats>({
+    url: `${base}/modules/${id}/overprovision/prometheus`,
+    method: 'get',
+    params,
+    headers: { 'X-Silent-Error': '1', 'X-Long-Request': '1' }
+  });
+}

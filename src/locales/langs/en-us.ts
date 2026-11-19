@@ -707,7 +707,17 @@ const local = {
       metricEmpty: 'set up, no data in the window',
       sectionCluster: 'Cluster',
       clusterHelp:
-        'The cluster of the data source of this module: the nodes, what they can allocate in CPU and memory, and the sum of what the Running Pods request. Read live from kube-state-metrics and not stored; a data source without these metrics shows that it cannot be read.',
+        'The cluster of the data source (Prometheus) of this module: the nodes, what they can allocate in CPU and memory, the sum of what the Running Pods request, and what the containers use. Every figure is the answer of Prometheus now and is not stored; the queries that were sent are listed below, to be checked in Grafana. A figure it cannot answer comes with the reason.',
+      promSource: 'Source: Prometheus (asked now)',
+      promSourceStored: 'Source: the samples the platform stored (Prometheus did not answer)',
+      promHelp:
+        'Every quantile is asked of Prometheus now: for the PromQL you wrote in the metric mapping of this module, the quantile_over_time (P50, P90, P95, P99) and the max_over_time over the window. One Pod is the same query divided by the ready replicas of the same moment, all replicas is the query as it is.',
+      promQueries: 'Queries (PromQL)',
+      promLoading: 'Asking Prometheus...',
+      promFailed: 'Prometheus did not answer',
+      clusterUsedCpu: 'CPU in use',
+      clusterUsedMem: 'Memory in use',
+      clusterQueries: 'Queries of the cluster (PromQL)',
       clusterUnavailable: 'The cluster could not be read',
       clusterNodes: 'Nodes',
       clusterAllocCpu: 'Allocatable CPU',
