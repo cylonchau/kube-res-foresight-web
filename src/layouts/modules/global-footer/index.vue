@@ -4,7 +4,7 @@ const currentYear = new Date().getFullYear();
 </script>
 
 <template>
-  <DarkModeContainer class="h-full flex-center">
+  <DarkModeContainer class="h-full flex-center text-12px opacity-70">
     <span>Copyright &copy; {{ currentYear }} kube-res-foresight</span>
   </DarkModeContainer>
 </template>
