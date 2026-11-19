@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { NButton, NFormItemGi, NModal, NSelect, NTag, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
@@ -8,9 +8,10 @@ import ListSearchCard from '@/components/business/list-search-card.vue';
 import RankList from '@/components/business/rank-list.vue';
 import ScoreBreakdown from '@/components/business/score-breakdown.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
-import { useCancellableRequest, wasCancelled } from '@/hooks/business/use-cancellable-request';
+import { useBackgroundTask } from '@/hooks/business/use-background-task';
 import { lastHours, rangeParams, useForecastModules } from '@/hooks/business/use-forecast-modules';
-import { fetchGetHistoryRankings, fetchGetMetricScores, fetchGetRanking, fetchScoreModule } from '@/service/api';
+import { fetchGetHistoryRankings, fetchGetMetricScores, fetchGetRanking } from '@/service/api';
+import { submitModuleStep } from '@/service/api/async-step';
 import { formatDateTime } from '@/utils/date';
 import { formatDecimal, formatPercent } from '@/utils/format';
 import { reasonText } from '@/utils/reason';
@@ -43,8 +44,20 @@ const metricScores = ref<Api.Forecast.MetricScores | null>(null);
 /** the evaluations of the range, newest 30: the history an algorithm is compared with in its detail */
 const history = ref<Api.Forecast.HistoryRanking[]>([]);
 const loading = ref(false);
-const scoring = ref(false);
-const scoringWait = useCancellableRequest();
+// the scoring runs as a background task of the platform: it shows how far it is, and closing the page does not lose it
+const scoreTask = useBackgroundTask<Api.Forecast.AlgorithmScore[]>({
+  storageKey: () => (search.moduleId ? `score:${search.moduleId}` : null)
+});
+const scoring = computed(() => scoreTask.state.active);
+const scoringStage = computed(() => {
+  const task = scoreTask.state.task;
+  if (!task) return '';
+  if (task.status === 'queued' && task.attempts > 0)
+    return t('page.forecast.scores.waitingRetry', { n: task.attempts, max: task.max_attempts });
+  const part = task.partial_result;
+  const base = task.stage || t('page.forecast.scores.scoring');
+  return part?.total ? `${base} (${part.done}/${part.total})` : base;
+});
 const detailKey = ref<string | null>(null);
 const checkedMain = ref<string[]>([]);
 
@@ -56,16 +69,25 @@ async function load() {
     return;
   }
   loading.value = true;
+  checkedMain.value = [];
+  const moduleId = search.moduleId;
+  // each part is drawn when it arrives, and one that is slow or fails takes none of the others with it
+  const stale = () => search.moduleId !== moduleId;
   try {
-    const [current, measured, past] = await Promise.all([
-      fetchGetRanking(search.moduleId),
-      fetchGetMetricScores(search.moduleId, rangeParams(search.range)),
-      fetchGetHistoryRankings({ module_id: search.moduleId, ...rangeParams(search.range), page: 1, page_size: 30 })
+    await Promise.allSettled([
+      fetchGetRanking(moduleId).then(({ data }) => {
+        if (!stale()) ranking.value = data || null;
+        loading.value = false;
+      }),
+      fetchGetMetricScores(moduleId, rangeParams(search.range)).then(({ data }) => {
+        if (!stale()) metricScores.value = data || null;
+      }),
+      fetchGetHistoryRankings({ module_id: moduleId, ...rangeParams(search.range), page: 1, page_size: 30 }).then(
+        ({ data }) => {
+          if (!stale()) history.value = data?.list || [];
+        }
+      )
     ]);
-    ranking.value = current.data || null;
-    metricScores.value = measured.data || null;
-    history.value = past.data?.list || [];
-    checkedMain.value = [];
   } finally {
     loading.value = false;
   }
@@ -73,23 +95,45 @@ async function load() {
 
 async function scoreNow() {
   if (!search.moduleId) return;
-  scoring.value = true;
-  // a replay of every algorithm over the recent windows can take most of a minute: it shows the seconds and can be stopped
-  const signal = scoringWait.begin();
-  try {
-    const { error } = await fetchScoreModule(search.moduleId, signal);
-    if (error && wasCancelled(error)) {
-      message.info(t('common.requestCancelled'));
-      return;
-    }
-    if (!error) {
-      message.success(t('page.forecast.scores.scored'));
-      await load();
-    }
-  } finally {
-    scoringWait.end();
-    scoring.value = false;
+  const moduleId = search.moduleId;
+  await scoreTask.start(() => submitModuleStep(moduleId, 'score') as never);
+  finishScoring();
+}
+
+/** the scoring ended: what it did is said and the ranking is read again */
+async function finishScoring() {
+  const state = scoreTask.state;
+  if (state.error) {
+    message.error(state.error);
+    return;
   }
+  if (state.task?.status === 'cancelled') {
+    message.info(t('common.requestCancelled'));
+    return;
+  }
+  if (state.result) {
+    message.success(t('page.forecast.scores.scored'));
+    await load();
+  }
+}
+
+/** a scoring that was running when the page was left is followed on, and its end is told like any other */
+async function resumeScoring() {
+  if (await scoreTask.resume()) {
+    await waitUntilIdle();
+    await finishScoring();
+  }
+}
+
+function waitUntilIdle() {
+  return new Promise<void>(resolve => {
+    const timer = setInterval(() => {
+      if (!scoreTask.state.active) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 500);
+  });
 }
 
 const rows = computed(() => ranking.value?.list || []);
@@ -251,7 +295,17 @@ onMounted(async () => {
   await loadModules();
   const fromRoute = Number(route.query.module_id);
   search.moduleId = modules.value.find(item => item.id === fromRoute)?.id ?? modules.value[0]?.id ?? null;
+  void resumeScoring();
 });
+
+// another module has its own scoring: the one that was followed goes on without this page, and is found again when its module is picked
+watch(
+  () => search.moduleId,
+  () => {
+    scoreTask.reset();
+    void resumeScoring();
+  }
+);
 </script>
 
 <template>
@@ -306,10 +360,16 @@ onMounted(async () => {
           {{ t('page.forecast.scores.scoreNow') }}
         </NButton>
         <template v-if="scoring">
-          <NButton size="small" type="warning" secondary @click="scoringWait.cancel">{{ t('common.cancel') }}</NButton>
-          <span class="text-12px opacity-65">
-            {{ t('common.requestElapsed', { seconds: scoringWait.elapsed.value }) }}
-          </span>
+          <NButton
+            size="small"
+            type="warning"
+            secondary
+            :disabled="scoreTask.state.task?.status === 'cancelling'"
+            @click="scoreTask.cancel"
+          >
+            {{ t('common.cancel') }}
+          </NButton>
+          <span class="text-12px opacity-65">{{ scoringStage }}</span>
         </template>
       </template>
       <template #summary>

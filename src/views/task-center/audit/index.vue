@@ -21,6 +21,7 @@ import {
 import { useI18n } from 'vue-i18n';
 import { fetchBatchResetJobs, fetchGetJobTypes, fetchGetJobs, fetchResetJob } from '@/service/api/system';
 import { useLoading } from '@sa/hooks';
+import { useCappedTotal } from '@/utils/list-notice';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
@@ -58,7 +59,9 @@ function jobTypeLabel(value: string) {
   return value;
 }
 
+const { capped, prefix } = useCappedTotal();
 const pagination = reactive({
+  prefix,
   page: 1,
   pageSize: getAdaptivePageSize(),
   showSizePicker: true,
@@ -94,6 +97,7 @@ async function getTableData() {
   if (data) {
     tableData.value = data.list;
     pagination.itemCount = data.total;
+    capped.value = Boolean(data.total_capped);
   }
   endLoading();
 }

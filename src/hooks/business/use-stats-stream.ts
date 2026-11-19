@@ -2,7 +2,7 @@ import { onBeforeUnmount, onMounted } from 'vue';
 import { useAuthStream } from './use-auth-stream';
 
 /** Topics the backend can announce changes of (see statsTopics in handle_stats_stream.go). */
-export type StatsTopic = 'tasks';
+export type StatsTopic = 'tasks' | 'async';
 
 interface StatsMessage {
   type: string;

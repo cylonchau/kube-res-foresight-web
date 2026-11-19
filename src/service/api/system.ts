@@ -1,3 +1,4 @@
+import { saysSearchWindow } from '@/utils/list-notice';
 import { request } from '../request';
 
 /**
@@ -142,11 +143,13 @@ export function fetchUpdateTask(id: number, data: Partial<Api.System.Task>) {
  * @param params Filters (page, pageSize, job_type, etc.)
  */
 export function fetchGetJobs(params?: any) {
-  return request<Api.System.JobList>({
-    url: '/api/v1/jobs',
-    method: 'get',
-    params
-  });
+  return saysSearchWindow(
+    request<Api.System.JobList>({
+      url: '/api/v1/jobs',
+      method: 'get',
+      params
+    })
+  );
 }
 
 /**
@@ -154,11 +157,13 @@ export function fetchGetJobs(params?: any) {
  * @param params Filters (page, page_size, client_type, keyword, status, start_time, end_time)
  */
 export function fetchGetOperationLogs(params?: any) {
-  return request<Api.System.OperationLogList>({
-    url: '/api/v1/operation-logs',
-    method: 'get',
-    params
-  });
+  return saysSearchWindow(
+    request<Api.System.OperationLogList>({
+      url: '/api/v1/operation-logs',
+      method: 'get',
+      params
+    })
+  );
 }
 
 /**
@@ -166,7 +171,7 @@ export function fetchGetOperationLogs(params?: any) {
  * @param params Filters (page, page_size, username, client_ip, result, reason, method, start_time, end_time, sort_by, sort_order)
  */
 export function fetchGetLoginLogs(params?: any) {
-  return request<Api.System.LoginLogList>({ url: '/api/v1/login-logs', method: 'get', params });
+  return saysSearchWindow(request<Api.System.LoginLogList>({ url: '/api/v1/login-logs', method: 'get', params }));
 }
 
 /** Permanently deletes every operation log entry. */

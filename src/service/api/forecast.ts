@@ -1,5 +1,6 @@
 import { runModuleStep } from './async-step';
 import { $t } from '@/locales';
+import { saysSearchWindow } from '@/utils/list-notice';
 import { request } from '../request';
 
 const base = '/api/v1';
@@ -317,11 +318,12 @@ export function fetchGetModuleDelayReport(id: number, sinceHours?: number) {
 }
 
 /** what the forecasts of a module were worth over the last hours (24 by default, at most 720) */
-export function fetchGetModuleEffectReport(id: number, sinceHours?: number) {
+/** the report of a module over the last hours; parts asks for some of it (delay, usage, capacity, tuning), the whole of it when none is named */
+export function fetchGetModuleEffectReport(id: number, sinceHours?: number, parts?: string[]) {
   return request<Api.Forecast.EffectReport>({
     url: `${base}/modules/${id}/effect-report`,
     method: 'get',
-    params: { since_hours: sinceHours }
+    params: { since_hours: sinceHours, parts: parts?.join(',') }
   });
 }
 
@@ -545,18 +547,7 @@ export function fetchSimulateCost(data: { datasource_id?: number; level: string;
   return request<Api.Forecast.CostSimulation>({ url: `${base}/cost/simulate`, method: 'post', data });
 }
 
-/**
- * A text search that names no time range reads the last days only (the platform sets how many: a text cannot use an index, a time can). The
- * list says how far it read, so a search that finds nothing is not taken for "there is nothing".
- */
-async function saysWindow<T extends { search_window_days?: number }>(
-  pending: Promise<{ data: T | null; error: unknown }>
-) {
-  const result = await pending;
-  const days = result.data?.search_window_days;
-  if (days) window.$message?.info($t('page.forecast.searchWindow', { days }), { duration: 6000 });
-  return result;
-}
+const saysWindow = saysSearchWindow;
 
 /** the counts of a summary read the last hours when the request names no start; the page says how many */
 async function saysSummaryWindow(pending: Promise<{ data: Api.Forecast.TrainingSummary | null; error: unknown }>) {

@@ -20,6 +20,7 @@ import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { fetchGetLoginLogs } from '@/service/api/system';
 import { formatDateTime } from '@/utils/date';
+import { useCappedTotal } from '@/utils/list-notice';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { useTableSort } from '@/hooks/business/use-table-sort';
@@ -52,7 +53,9 @@ const methodOptions = computed(() =>
   ['password', 'ldap', 'otp'].map(key => ({ label: t(`page.loginLog.methods.${key}`), value: key }))
 );
 
+const { capped, prefix } = useCappedTotal();
 const pagination = reactive({
+  prefix,
   page: 1,
   pageSize: getAdaptivePageSize(),
   itemCount: 0,
@@ -98,6 +101,7 @@ async function load() {
   if (data) {
     rows.value = data.list || [];
     pagination.itemCount = data.total || 0;
+    capped.value = Boolean(data.total_capped);
   }
 }
 

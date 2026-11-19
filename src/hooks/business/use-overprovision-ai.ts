@@ -122,6 +122,10 @@ export function useOverprovisionAi() {
             return;
           }
           if (task.status === 'cancelled') return;
+          if (task.status === 'expired') {
+            state.error = 'expired';
+            return;
+          }
         }
         if (cancelled) return;
         await sleep(POLL_MS);

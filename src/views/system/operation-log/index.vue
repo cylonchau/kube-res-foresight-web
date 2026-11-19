@@ -23,6 +23,7 @@ import TableHeaderOperation from '@/components/advanced/table-header-operation.v
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import { fetchClearOperationLogs, fetchGetOperationLogs } from '@/service/api/system';
 import { formatDateTime } from '@/utils/date';
+import { useCappedTotal } from '@/utils/list-notice';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import TimeRangeField from '@/components/business/time-range-field.vue';
@@ -59,7 +60,9 @@ const statusOptions = computed(() => [
   { label: t('page.operationLog.statusFailed'), value: 'failed' }
 ]);
 
+const { capped, prefix } = useCappedTotal();
 const pagination = reactive({
+  prefix,
   page: 1,
   pageSize: getAdaptivePageSize(),
   itemCount: 0,
@@ -97,6 +100,7 @@ async function load() {
   if (data) {
     rows.value = data.list || [];
     pagination.itemCount = data.total || 0;
+    capped.value = Boolean(data.total_capped);
   }
 }
 

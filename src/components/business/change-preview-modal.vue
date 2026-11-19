@@ -1,12 +1,25 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue';
-import { NAlert, NButton, NFormItemGi, NGrid, NInputNumber, NModal, NSelect, NSpin, useMessage } from 'naive-ui';
+import {
+  NAlert,
+  NButton,
+  NFormItemGi,
+  NGrid,
+  NInputNumber,
+  NModal,
+  NProgress,
+  NSelect,
+  NSpin,
+  NTag,
+  useMessage
+} from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import AlgorithmParamsEditor from '@/components/advanced/algorithm-params-editor.vue';
 import HelpLabel from '@/components/common/help-label.vue';
-import { useCancellableRequest, wasCancelled } from '@/hooks/business/use-cancellable-request';
+import { useBackgroundTask } from '@/hooks/business/use-background-task';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
-import { fetchGetAlgorithms, fetchPreviewModuleChange } from '@/service/api';
+import { fetchGetAlgorithms } from '@/service/api';
+import { submitModulePreview } from '@/service/api/async-step';
 import { axisTimeLabel, axisTooltip, formatDateTime } from '@/utils/date';
 import { formatDecimal, formatPercent } from '@/utils/format';
 
@@ -18,9 +31,12 @@ defineOptions({ name: 'ChangePreviewModal' });
  */
 const props = defineProps<{ show: boolean; moduleId: number | null; algorithm?: string }>();
 const emit = defineEmits<{ 'update:show': [value: boolean] }>();
-const { t } = useI18n();
+const { t, te } = useI18n();
 const message = useMessage();
-const waiting = useCancellableRequest();
+// the replay runs as a background task of the platform: it is not held to the gateway timeout, and closing this window does not lose it
+const preview = useBackgroundTask<Api.Forecast.PreviewReport>({
+  storageKey: () => (props.moduleId ? `preview:${props.moduleId}` : null)
+});
 
 const HOURS = [6, 24, 72, 168];
 const hourOptions = computed(() =>
@@ -66,9 +82,38 @@ watch(target, value => {
   form.params = { ...baseline };
 });
 
-const running = ref(false);
-const failure = ref('');
+const running = computed(() => preview.state.active);
+const failure = computed(() => preview.state.error);
 const report = ref<Api.Forecast.PreviewReport | null>(null);
+
+watch(
+  () => preview.state.result,
+  async value => {
+    if (!value) return;
+    report.value = value;
+    await nextTick();
+    draw();
+  }
+);
+
+/** the stage the task reports ("preview: saved setting") in the language of the page */
+function stageLabel(stage: string) {
+  const name = stage.replace(/^preview: /, '').replace(/ /g, '_');
+  const key = `page.forecast.preview.stage_${name}`;
+  return te(key) ? t(key) : stage;
+}
+
+const task = computed(() => preview.state.task);
+/** the task waits for another attempt: a failure that can be tried again put it back */
+const waitingToRetry = computed(() => task.value?.status === 'queued' && (task.value?.attempts ?? 0) > 0);
+const canRetry = computed(
+  () => !running.value && (task.value?.status === 'failed' || task.value?.status === 'cancelled')
+);
+
+function backToTheTask() {
+  report.value = null;
+  return preview.retry();
+}
 
 const paramsChanged = computed(() => JSON.stringify(form.params) !== JSON.stringify(baseline));
 function payload(): Api.Forecast.PreviewChange & { since_hours: number } {
@@ -93,38 +138,16 @@ async function run() {
     message.warning(t('page.forecast.preview.nothing'));
     return;
   }
-  running.value = true;
-  failure.value = '';
   report.value = null;
-  // a replay of a week can take most of a minute: the seconds it has taken are shown and it can be stopped
-  const signal = waiting.begin();
-  try {
-    const { data, error } = await fetchPreviewModuleChange(props.moduleId, body, signal);
-    if (error) {
-      if (wasCancelled(error)) {
-        message.info(t('common.requestCancelled'));
-        return;
-      }
-      failure.value =
-        (error as { response?: { data?: { msg?: string } }; message?: string }).response?.data?.msg ||
-        error.message ||
-        '';
-      return;
-    }
-    report.value = data ?? null;
-    await nextTick();
-    draw();
-  } finally {
-    waiting.end();
-    running.value = false;
-  }
+  const moduleId = props.moduleId;
+  await preview.start(() => submitModulePreview(moduleId, body) as never);
 }
 
 function reset() {
   Object.assign(form, blank());
   form.params = { ...baseline };
   report.value = null;
-  failure.value = '';
+  preview.reset();
 }
 
 watch(
@@ -132,7 +155,8 @@ watch(
   async value => {
     if (!value) return;
     report.value = null;
-    failure.value = '';
+    // a replay that was running when this window was closed is followed on
+    void preview.resume();
     if (!algorithms.value.length) {
       const { data } = await fetchGetAlgorithms({ page: 1, page_size: 200 });
       algorithms.value = data?.list || [];
@@ -328,13 +352,51 @@ watch(() => t('page.forecast.preview.seriesNeed'), draw);
       </NButton>
       <NButton size="small" :disabled="running" @click="reset">{{ t('page.forecast.preview.reset') }}</NButton>
       <template v-if="running">
-        <NButton size="small" type="warning" secondary @click="waiting.cancel">{{ t('common.cancel') }}</NButton>
-        <span class="text-12px opacity-65">{{ t('common.requestElapsed', { seconds: waiting.elapsed.value }) }}</span>
+        <NButton
+          size="small"
+          type="warning"
+          secondary
+          :disabled="task?.status === 'cancelling'"
+          @click="preview.cancel"
+        >
+          {{ task?.status === 'cancelling' ? t('page.forecast.preview.cancelling') : t('common.cancel') }}
+        </NButton>
       </template>
+      <NButton v-if="canRetry" size="small" secondary @click="backToTheTask">
+        {{ t('page.forecast.preview.retry') }}
+      </NButton>
+    </div>
+
+    <div v-if="running && task" class="mb-12px">
+      <NProgress
+        type="line"
+        :percentage="Math.max(task.progress, 3)"
+        :show-indicator="false"
+        :processing="task.status === 'running'"
+        :height="8"
+      />
+      <div class="mt-4px flex flex-wrap items-center gap-8px text-12px opacity-75">
+        <span v-if="waitingToRetry">
+          {{ t('page.forecast.preview.waitingRetry', { n: task.attempts, max: task.max_attempts }) }}
+          <template v-if="task.error">: {{ task.error }}</template>
+        </span>
+        <span v-else-if="task.status === 'queued'">{{ t('page.forecast.preview.queued') }}</span>
+        <span v-else>{{ stageLabel(task.stage) || t('page.forecast.preview.running') }}</span>
+        <NTag v-if="task.attempts > 1 && !waitingToRetry" size="tiny" :bordered="false" type="warning">
+          {{ t('page.forecast.preview.attempt', { n: task.attempts, max: task.max_attempts }) }}
+        </NTag>
+        <span>{{ t('page.forecast.preview.keepsRunning') }}</span>
+      </div>
     </div>
 
     <NAlert v-if="failure" type="error" :title="t('page.forecast.preview.failed')" class="mb-12px">
       {{ failure }}
+      <div v-if="task?.trace_id" class="mt-4px text-12px opacity-70">
+        {{ t('page.forecast.preview.trace') }}: {{ task.trace_id }}
+      </div>
+    </NAlert>
+    <NAlert v-else-if="report && task?.from_cache" type="info" :show-icon="false" class="mb-12px">
+      {{ t('page.forecast.preview.fromCache') }}
     </NAlert>
 
     <NSpin :show="running">

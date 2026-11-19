@@ -57,23 +57,45 @@ declare namespace Api {
       attachments: Attachment[];
     }
 
-    /** a question answered in the background: queued, then running, then one of the three final states */
-    interface AsyncTask {
+    /**
+     * Work that runs in the background: queued, running (cancelling once a stop was asked for), then succeeded, failed or cancelled; a result that is old
+     * enough is expired. A failure that can be tried again puts the task back to queued with the time of the next attempt.
+     */
+    type AsyncStatus = 'queued' | 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
+
+    interface AsyncTask<R = Reply> {
       id: number;
       kind: string;
       title: string;
-      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      status: AsyncStatus;
       progress: number;
       stage: string;
       error: string;
       attempts: number;
+      /** how many times the task is run for a failure that can be tried again */
+      max_attempts: number;
+      /** the last failure was one that trying again may mend */
+      retryable: boolean;
+      /** while the task waits for its next attempt: when it starts */
+      next_run_at?: string;
+      /** the last time the worker said it was alive */
+      heartbeat_at?: string;
+      expires_at?: string;
       created_at: string;
       started_at: string | null;
       finished_at: string | null;
       /** the answer as far as it is written, while the task runs */
       partial?: string;
-      /** the answer, once it succeeded */
-      result?: Reply;
+      /** what the task has done so far; it is there while the task runs and when it failed or was cancelled */
+      has_partial: boolean;
+      partial_result?: { stage: string; done: number; total: number; result: unknown };
+      /** the result is one that was worked out before, not for this task */
+      from_cache: boolean;
+      error_code?: string;
+      /** the request id of the request that queued it: the same id is in the log of the gateway and the operation log */
+      trace_id?: string;
+      /** the result, once it succeeded */
+      result?: R;
     }
 
     /** one step a task reported; a tool it read */

@@ -216,6 +216,10 @@ declare namespace Api {
     interface JobList {
       list: Job[];
       total: number;
+      /** the total was counted up to a bound and reached it: it is a floor */
+      total_capped?: boolean;
+      /** a text search that named no time range read the last days only */
+      search_window_days?: number;
     }
 
     /** one operation log entry — a mutating admin/API request, see model.OperationLog */
@@ -257,6 +261,10 @@ declare namespace Api {
     interface LoginLogList {
       list: LoginLog[];
       total: number;
+      /** the total was counted up to a bound and reached it: it is a floor */
+      total_capped?: boolean;
+      /** a text search that named no time range read the last days only */
+      search_window_days?: number;
       page: number;
       pageSize: number;
     }
@@ -265,6 +273,10 @@ declare namespace Api {
     interface OperationLogList {
       list: OperationLog[];
       total: number;
+      /** the total was counted up to a bound and reached it: it is a floor */
+      total_capped?: boolean;
+      /** a text search that named no time range read the last days only */
+      search_window_days?: number;
       page: number;
       pageSize: number;
     }
