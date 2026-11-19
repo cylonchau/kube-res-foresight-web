@@ -114,7 +114,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
   __selection__: {
     type: 'selection',
     align: 'center',
-    width: 48,
+    width: 42,
     resizable: true
   },
   id: {
@@ -260,7 +260,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.Role>[number
         }
       }
 
-      return h(NSpace, { justify: 'center', size: 6 }, { default: () => actions });
+      return h(NSpace, { justify: 'center', size: 6, wrap: false }, { default: () => actions });
     }
   }
 };
