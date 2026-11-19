@@ -761,8 +761,11 @@ const local = {
       skillKeywordPlaceholder: 'Command, title or description',
       confirmBatchDeleteSkills: 'Delete the selected skills? Built-in ones are kept (they can only be switched off).',
       audit: {
-        hint: 'One record for each question put to a language model. A record holds no question, answer or tool result: it shows how the assistant is used, never what a user said.',
-        keywordPlaceholder: 'User or model',
+        question: 'Question',
+        answer: 'Answer',
+        view: 'View',
+        conversation: 'Conversation',
+        keywordPlaceholder: 'User, model or question',
         time: 'Time',
         user: 'User',
         source: 'From',

@@ -70,6 +70,8 @@ declare namespace Api {
       created_at: string;
       started_at: string | null;
       finished_at: string | null;
+      /** the answer as far as it is written, while the task runs */
+      partial?: string;
       /** the answer, once it succeeded */
       result?: Reply;
     }
@@ -135,6 +137,12 @@ declare namespace Api {
       tools: { name: string; ok: boolean }[];
       /** tools the model asked for that the user may not use */
       refused: string[];
+      /** the start of the question, for the list */
+      question_preview: string;
+      /** the conversation, only when one record is opened */
+      question?: string;
+      answer?: string;
+      steps?: ToolTrace[];
     }
 
     interface AuditList {

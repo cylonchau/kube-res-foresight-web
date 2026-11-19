@@ -243,3 +243,8 @@ export function fetchAssistantAsyncEvents(id: number, after: number) {
 export function fetchCancelAssistantAsyncTask(id: number) {
   return request<Api.Assistant.AsyncTask>({ url: `${base}/async/${id}/cancel`, method: 'post', headers: silent });
 }
+
+/** one audit record with its conversation: the question, the answer, the steps with what each tool returned */
+export function fetchGetAssistantAudit(id: number) {
+  return request<Api.Assistant.AuditRow>({ url: `${base}/audit/${id}`, method: 'get' });
+}

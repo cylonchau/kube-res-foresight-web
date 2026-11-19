@@ -162,6 +162,12 @@ async function download(file: Api.Assistant.Attachment) {
   }
 }
 
+// the text grows while the model writes: the window follows it
+watch(
+  () => store.liveText,
+  () => scrollToEnd()
+);
+
 watch(historyOpen, open => {
   if (open) store.loadConversations();
   else renaming.value = 0;
@@ -278,7 +284,7 @@ watch(
       <div v-if="store.sending" class="assistant-row is-assistant">
         <div class="assistant-bubble">
           <NSpin size="small" />
-          <span class="ml-6px opacity-70">
+          <span v-if="!store.liveText" class="ml-6px opacity-70">
             {{
               store.progressNote
                 ? t('page.assistant.reading', { name: store.progressNote })
@@ -289,6 +295,13 @@ watch(
             {{ t('page.assistant.stop') }}
           </NButton>
           <AssistantSteps :steps="store.liveSteps" />
+          <!-- eslint-disable vue/no-v-html -- escaped first: see utils/mini-markdown -->
+          <div
+            v-if="store.liveText"
+            class="assistant-md assistant-live"
+            v-html="renderMiniMarkdown(store.liveText)"
+          ></div>
+          <!-- eslint-enable vue/no-v-html -->
         </div>
       </div>
     </div>
@@ -401,6 +414,18 @@ watch(
 </template>
 
 <style scoped>
+.assistant-live::after {
+  content: '|';
+  margin-left: 1px;
+  animation: assistant-blink 1s steps(2, start) infinite;
+}
+
+@keyframes assistant-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
 .assistant-context {
   display: flex;
   align-items: center;

@@ -5,6 +5,8 @@ import {
   NCard,
   NCollapse,
   NCollapseItem,
+  NDrawer,
+  NDrawerContent,
   NDatePicker,
   NForm,
   NFormItemGi,
@@ -19,7 +21,9 @@ import { useI18n } from 'vue-i18n';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
-import { fetchGetAssistantAudits } from '@/service/api';
+import { fetchGetAssistantAudit, fetchGetAssistantAudits } from '@/service/api';
+import AssistantSteps from '@/components/business/assistant-steps.vue';
+import { renderMiniMarkdown } from '@/utils/mini-markdown';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
@@ -27,13 +31,31 @@ defineOptions({ name: 'AiConfigAudit' });
 
 /**
  * The audit of the AI assistant: one record for each question put to a language model, with who asked, from which page, which model and mode
- * answered, which tools were read and which were refused, how long it took and the tokens it used. A record holds no question, answer or tool
- * result: an administrator sees how the assistant is used, never what a user said to it.
+ * answered, the start of the question, which tools were read and which were refused, how long it took and the tokens it used. A record is opened
+ * to read the whole conversation: the question, the answer, and the steps with what each tool returned.
  */
 const PAGE_CODE = 'ai_config_audit';
 const { t } = useI18n();
 const loading = ref(false);
 const rows = ref<Api.Assistant.AuditRow[]>([]);
+
+/** the record that is open: the whole conversation */
+const opened = ref<Api.Assistant.AuditRow | null>(null);
+const drawer = ref(false);
+const opening = ref(0);
+
+async function open(row: Api.Assistant.AuditRow) {
+  opening.value = row.id;
+  try {
+    const { data } = await fetchGetAssistantAudit(row.id);
+    if (data) {
+      opened.value = data;
+      drawer.value = true;
+    }
+  } finally {
+    opening.value = 0;
+  }
+}
 
 const searchParams = reactive<{
   keyword: string;
@@ -207,6 +229,24 @@ const columnMap: Record<string, any> = {
           )
         : '-'
   },
+  question: {
+    title: t('page.assistant.audit.question'),
+    key: 'question_preview',
+    width: 320,
+    ellipsis: { tooltip: true },
+    render: (row: Api.Assistant.AuditRow) => row.question_preview || '-'
+  },
+  actions: {
+    title: t('common.operate'),
+    key: 'actions',
+    width: 90,
+    fixed: 'right',
+    align: 'center',
+    render: (row: Api.Assistant.AuditRow) =>
+      h(NButton, { size: 'tiny', type: 'primary', loading: opening.value === row.id, onClick: () => open(row) }, () =>
+        t('page.assistant.audit.view')
+      )
+  },
   error: {
     title: t('page.assistant.audit.error'),
     key: 'error',
@@ -232,14 +272,13 @@ const {
     'created_at',
     'user_name',
     'source',
-    'page',
+    'question',
     'model',
-    'redacted',
     'status',
     'duration_ms',
-    'tokens',
     'tools',
-    'refused'
+    'refused',
+    'actions'
   ]
 });
 
@@ -330,7 +369,6 @@ onMounted(() => {
           :show-delete="false"
           @refresh="load"
         />
-        <div class="mb-8px text-12px opacity-60">{{ t('page.assistant.audit.hint') }}</div>
         <div class="flex-1 overflow-hidden">
           <ExpandableDataTable
             v-model:columns="tableColumns"
@@ -349,5 +387,53 @@ onMounted(() => {
         </div>
       </div>
     </NCard>
+
+    <NDrawer v-model:show="drawer" :width="720" placement="right">
+      <NDrawerContent :title="t('page.assistant.audit.conversation')" closable :native-scrollbar="false">
+        <div v-if="opened" class="audit-conversation">
+          <div class="audit-meta">
+            {{ opened.user_name || '-' }} · {{ formatDateTime(opened.created_at) }} · {{ opened.model }} ·
+            {{ opened.page || '-' }}
+          </div>
+          <div class="audit-label">{{ t('page.assistant.audit.question') }}</div>
+          <div class="audit-question">{{ opened.question || '-' }}</div>
+          <div class="audit-label">{{ t('page.assistant.audit.answer') }}</div>
+          <div v-if="opened.error" class="audit-error">{{ opened.error }}</div>
+          <!-- eslint-disable-next-line vue/no-v-html -- escaped first: see utils/mini-markdown -->
+          <div v-else-if="opened.answer" class="assistant-md" v-html="renderMiniMarkdown(opened.answer)"></div>
+          <div v-else class="opacity-60">-</div>
+          <AssistantSteps v-if="opened.steps?.length" :steps="opened.steps" />
+          <div v-if="opened.refused.length" class="audit-label">
+            {{ t('page.assistant.audit.refused') }}: {{ opened.refused.join(', ') }}
+          </div>
+        </div>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>
+
+<style scoped>
+.audit-meta {
+  font-size: 12px;
+  opacity: 0.65;
+  margin-bottom: 12px;
+}
+
+.audit-label {
+  font-size: 12px;
+  opacity: 0.6;
+  margin: 12px 0 4px;
+}
+
+.audit-question {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.audit-error {
+  color: rgb(208, 48, 80);
+}
+</style>
