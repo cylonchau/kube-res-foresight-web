@@ -345,6 +345,8 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     render: row => {
       const actions: VNodeChild[] = [];
       const rowButtons = getButtonsByPosition('row');
+      // the order of the buttons is the same as on the role page: edit, the page's own action, enable or disable, delete last
+      let deleteAction: VNodeChild | null = null;
 
       for (const btn of rowButtons) {
         if (btn.code === 'authorization:user:edit') {
@@ -374,23 +376,21 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
             )
           );
         } else if (btn.code === 'authorization:user:delete') {
-          actions.push(
-            h(
-              NPopconfirm,
-              {
-                onPositiveClick: async () => {
-                  const { error } = await deleteUser(row.id);
-                  if (!error) {
-                    window.$message?.success(t('common.deleteSuccess'));
-                    getTableData();
-                  }
+          deleteAction = h(
+            NPopconfirm,
+            {
+              onPositiveClick: async () => {
+                const { error } = await deleteUser(row.id);
+                if (!error) {
+                  window.$message?.success(t('common.deleteSuccess'));
+                  getTableData();
                 }
-              },
-              {
-                default: () => t('common.confirmDelete'),
-                trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => t('common.delete') })
               }
-            )
+            },
+            {
+              default: () => t('common.confirmDelete'),
+              trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => t('common.delete') })
+            }
           );
         }
       }
@@ -411,6 +411,8 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
           }
         )
       );
+
+      if (deleteAction) actions.push(deleteAction);
 
       return h(NSpace, { justify: 'center', size: 6, wrap: false }, { default: () => actions });
     }
