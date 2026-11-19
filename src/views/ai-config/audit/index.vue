@@ -151,6 +151,13 @@ const columnMap: Record<string, any> = {
           )
         : '-'
   },
+  redacted: {
+    title: t('page.assistant.audit.redacted'),
+    key: 'redacted',
+    width: 90,
+    align: 'center',
+    render: (row: Api.Assistant.AuditRow) => (row.redacted ? t('common.yes') : '-')
+  },
   status: {
     title: t('common.status'),
     key: 'status',
@@ -227,6 +234,7 @@ const {
     'source',
     'page',
     'model',
+    'redacted',
     'status',
     'duration_ms',
     'tokens',
