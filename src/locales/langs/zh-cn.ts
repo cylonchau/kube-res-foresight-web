@@ -365,7 +365,7 @@ const local = {
     datasource_connections: '数据源连接',
     system: '系统管理',
     system_config: '系统参数',
-    system_diagnostics: '数据库诊断',
+    system_diagnostics: '系统诊断',
     'system_login-log': '登录日志',
     'system_operation-log': '操作日志',
     system_task: '任务定义',
@@ -710,7 +710,58 @@ const local = {
       noData: '这个模块没有 CPU 或内存的使用量来源'
     },
     diagnostics: {
-      title: '数据库诊断',
+      title: '系统诊断',
+      refresh: '刷新',
+      window: '统计范围',
+      hoursOption: '最近 {n} 小时',
+      diagnosis: '诊断结论',
+      noFindings: '这段时间里没有发现需要处理的问题',
+      baseline: '各接口的耗时基线',
+      baselineHint:
+        '百分位是直方图里它所在那一格的上限，表示“不超过”；时间占比里平台自身指除数据库和 Prometheus 之外的部分。',
+      route: '接口',
+      requests: '请求数',
+      avg: '平均',
+      max: '最慢',
+      stops: '平台停止',
+      gaveUp: '被断开',
+      errors5xx: '5xx',
+      layer: '时间主要在',
+      share: '数据库 / Prometheus',
+      examples: '最慢的请求号',
+      layers: { database: '数据库', prometheus: 'Prometheus', handler: '平台自身的计算' },
+      runs: '进程的运行记录',
+      instance: '实例',
+      started: '启动',
+      lastSeen: '最后心跳',
+      ended: '结束方式',
+      alive: '运行中',
+      gracefulEnd: '收到停止信号后正常退出',
+      killedEnd: '没有写停止就消失了',
+      memory: '最后一次的内存 / 容器限制',
+      noLimit: '无限制',
+      level: { critical: '严重', warning: '注意', info: '提示' },
+      finding: {
+        no_data: '到现在只有 {requests} 个请求，还不足以下结论：让页面用一阵子再来看。',
+        platform_timeouts:
+          '{route}：平台自己在 {budget_s} 秒的时限上停了 {count} 次（共 {requests} 个请求），这就是页面上带原因的 504。时间主要在 {layer}（数据库 {db_share}%，Prometheus {prom_share}%），P95 不超过 {p95} 秒。',
+        over_half_gateway:
+          '{route}：P95 不超过 {p95} 秒、最慢 {max} 秒，已经超过网关超时（{gateway_s} 秒）的一半，慢请求在网关处就容易变成 504。时间主要在 {layer}（数据库 {db_share}%，Prometheus {prom_share}%；每个请求约 {db_calls} 条语句、{prom_calls} 次 Prometheus 查询）。',
+        slow_route:
+          '{route}：最慢的一次 {max} 秒，超过网关超时（{gateway_s} 秒）的一半；P95 不超过 {p95} 秒。时间主要在 {layer}。',
+        abandoned: '{route}：有 {count} 个请求（共 {requests} 个）在回答前被对方断开（浏览器或网关）。',
+        abandoned_at_limit:
+          '{route}：有 {count} 个请求（共 {requests} 个）在回答前被对方断开，其中一个在 {took} 秒时断开，这正是浏览器 60 秒请求时限或网关默认 60 秒读时限的位置，请在网关日志里找这个请求。',
+        server_errors: '{route}：{count} 个请求（共 {requests} 个）返回了 5xx（不是平台的时限停止）。',
+        many_statements: '{route}：每个请求平均 {db_calls} 条数据库语句，语句的数量本身就是耗时的来源。',
+        restart_killed:
+          '有 {count} 次进程没有写“正常停止”就消失了（被强行杀掉、崩溃或所在节点丢失；内存超限被杀是常见原因），最近一次约在 {last}。这段时间里在途的请求会是 502。',
+        memory_near_limit:
+          '{instance} 最后一次心跳时内存是 {sys}，已到容器限制 {limit} 的 85% 以上，很可能是内存超限被杀（{at}）。',
+        restart_graceful: '有 {count} 次进程收到停止信号后正常退出（滚动发布、探针失败被重启或手动删除）。',
+        pool_waiting:
+          '数据库连接池有 {waits} 次让语句等连接，共 {wait_ms} 毫秒（池大小 {max_open}）：池相对负载太小，会让所有页面一起变慢。'
+      },
       pool: '本进程的连接池',
       poolWaiting:
         '有语句等过连接：连接池相对负载太小。在数据库服务器还有连接可用时调大连接池（Helm：database.postgresMaxOpenConnection 或 maxOpenConnection）。',
