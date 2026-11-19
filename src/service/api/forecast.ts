@@ -1,4 +1,5 @@
 import { runModuleStep } from './async-step';
+import { $t } from '@/locales';
 import { request } from '../request';
 
 const base = '/api/v1';
@@ -83,7 +84,9 @@ export function fetchGetTrainingSummary(params: {
   from?: string;
   to?: string;
 }) {
-  return request<Api.Forecast.TrainingSummary>({ url: `${base}/training-runs/summary`, method: 'get', params });
+  return saysSummaryWindow(
+    request<Api.Forecast.TrainingSummary>({ url: `${base}/training-runs/summary`, method: 'get', params })
+  );
 }
 
 /** the categories, kinds, aggregations and periods a dataset can be made of */
@@ -299,7 +302,9 @@ export function fetchGetSnapshot(id: number) {
 export function fetchGetFallbacks(
   params: ListWindow & { module_id?: number; reason?: string; kind?: Api.Forecast.FallbackKind }
 ) {
-  return request<Api.Forecast.Paged<Api.Forecast.FallbackRecord>>({ url: `${base}/fallbacks`, method: 'get', params });
+  return saysWindow(
+    request<Api.Forecast.Paged<Api.Forecast.FallbackRecord>>({ url: `${base}/fallbacks`, method: 'get', params })
+  );
 }
 
 /** the acceptance of the prediction delay of a module over the last hours (24 by default) */
@@ -355,11 +360,9 @@ export function fetchGetScaleOutcomes(params: ListWindow & { module_id?: number;
 export function fetchGetExecutions(
   params: ListWindow & { module_id?: number; result?: string; action?: string; keyword?: string }
 ) {
-  return request<Api.Forecast.Paged<Api.Forecast.Execution>>({
-    url: `${base}/scaling-decisions`,
-    method: 'get',
-    params
-  });
+  return saysWindow(
+    request<Api.Forecast.Paged<Api.Forecast.Execution>>({ url: `${base}/scaling-decisions`, method: 'get', params })
+  );
 }
 
 export function fetchBypassModule(moduleId: number, reason: string) {
@@ -443,7 +446,9 @@ export function fetchGetLatestScores(params: {
 export function fetchGetAdmissions(
   params: ListWindow & { module_id?: number; applied?: boolean; origin?: string; keyword?: string }
 ) {
-  return request<Api.Forecast.Paged<Api.Forecast.Admission>>({ url: `${base}/admissions`, method: 'get', params });
+  return saysWindow(
+    request<Api.Forecast.Paged<Api.Forecast.Admission>>({ url: `${base}/admissions`, method: 'get', params })
+  );
 }
 
 /** enable, disable or delete several modules; items that cannot be done come back with their reason */
@@ -538,4 +543,25 @@ export function fetchGetCostModules(windowDays?: number, datasourceId?: number) 
 /** how many nodes could be emptied now and with the candidates of a level; nothing is changed */
 export function fetchSimulateCost(data: { datasource_id?: number; level: string; window_days?: number }) {
   return request<Api.Forecast.CostSimulation>({ url: `${base}/cost/simulate`, method: 'post', data });
+}
+
+/**
+ * A text search that names no time range reads the last days only (the platform sets how many: a text cannot use an index, a time can). The
+ * list says how far it read, so a search that finds nothing is not taken for "there is nothing".
+ */
+async function saysWindow<T extends { search_window_days?: number }>(
+  pending: Promise<{ data: T | null; error: unknown }>
+) {
+  const result = await pending;
+  const days = result.data?.search_window_days;
+  if (days) window.$message?.info($t('page.forecast.searchWindow', { days }), { duration: 6000 });
+  return result;
+}
+
+/** the counts of a summary read the last hours when the request names no start; the page says how many */
+async function saysSummaryWindow(pending: Promise<{ data: Api.Forecast.TrainingSummary | null; error: unknown }>) {
+  const result = await pending;
+  const hours = result.data?.window_hours;
+  if (hours) window.$message?.info($t('page.forecast.summaryWindow', { hours }), { duration: 6000 });
+  return result;
 }

@@ -716,6 +716,8 @@ declare namespace Api {
     }
 
     interface TrainingSummary {
+      /** how many hours back the counts read when the request gave no start (the platform chose it); 0 when it did */
+      window_hours?: number;
       total: number;
       ok: number;
       skipped: number;
@@ -1199,6 +1201,8 @@ declare namespace Api {
     interface Paged<T> {
       list: T[];
       total: number;
+      /** how many days a text search with no time range read back (the platform set it); absent or 0 when the request had its own range */
+      search_window_days?: number;
     }
 
     interface SourceUsage {

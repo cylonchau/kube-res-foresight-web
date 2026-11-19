@@ -808,6 +808,10 @@ const local = {
       }
     },
     forecast: {
+      searchWindow:
+        'The text search read the last {days} days, because a text cannot use an index and a long range makes the query too slow. Give a time range to read further back.',
+      summaryWindow:
+        'The counts read the last {hours} hours. Give a time range to read further back: the totals of a long range are the slowest read of this page.',
       modules: {
         name: 'Module name',
         title: 'Forecast modules',
