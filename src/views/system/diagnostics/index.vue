@@ -104,7 +104,6 @@ const writeColumns = computed<DataTableColumns<Api.Diagnostics.WriteRate>>(() =>
       <NSpace justify="space-between" align="center">
         <div>
           <div class="text-16px font-medium">{{ t('page.diagnostics.title') }}</div>
-          <div class="mt-4px text-12px opacity-60">{{ t('page.diagnostics.hint') }}</div>
         </div>
         <NButton type="primary" :loading="loading" @click="load">{{ t('common.refresh') }}</NButton>
       </NSpace>

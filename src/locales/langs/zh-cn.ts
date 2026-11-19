@@ -529,7 +529,6 @@ const local = {
     },
     diagnostics: {
       title: '数据库诊断',
-      hint: '数据库自己报告的状态：本进程的连接池、会增长的表、它们的索引、正在执行的语句、哪个模块写得最多。这里是统计数字，不是表里的数据。页面出现 502 或 504 时，在发生的那段时间来这里看。',
       pool: '本进程的连接池',
       poolWaiting:
         '有语句等过连接：连接池相对负载太小。在数据库服务器还有连接可用时调大连接池（Helm：database.postgresMaxOpenConnection 或 maxOpenConnection）。',
