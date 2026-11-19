@@ -127,8 +127,8 @@ async function commitRename() {
   min-height: 0;
 }
 
-.ai-chat-list :deep(.n-card__content),
-.ai-chat-main :deep(.n-card__content) {
+.ai-chat-list :deep(.n-card-content),
+.ai-chat-main :deep(.n-card-content) {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -137,7 +137,7 @@ async function commitRename() {
   overflow: hidden;
 }
 
-.ai-chat-list :deep(.n-card__content) {
+.ai-chat-list :deep(.n-card-content) {
   padding: 12px;
 }
 
