@@ -38,6 +38,10 @@ declare namespace Api {
       arguments?: string;
       ok: boolean;
       error?: string;
+      /** the start of what the tool returned (cut short), for the user to check the answer against */
+      result?: string;
+      /** only in the console: the step has started and has not ended */
+      running?: boolean;
     }
 
     /** a file the user can download, made available by the assistant */
@@ -120,6 +124,8 @@ declare namespace Api {
       connection_id: number;
       model: string;
       tool_mode: ToolMode | '';
+      /** the names of the platform were replaced by aliases in what was sent to the model */
+      redacted: boolean;
       status: 'success' | 'failed';
       error: string;
       duration_ms: number;

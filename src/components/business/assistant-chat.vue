@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { NButton, NInput, NPopconfirm, NPopover, NSpin, NTag, useThemeVars } from 'naive-ui';
+import { NButton, NCheckbox, NInput, NPopconfirm, NPopover, NSpin, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { router } from '@/router';
 import { useRouterPush } from '@/hooks/common/router';
@@ -8,6 +8,7 @@ import { downloadAssistantFile } from '@/service/api';
 import { MAX_MESSAGE_CHARS, argHint, skillTitle, useAssistantStore } from '@/store/modules/assistant';
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
+import AssistantSteps from '@/components/business/assistant-steps.vue';
 
 defineOptions({ name: 'AssistantChat' });
 
@@ -66,9 +67,34 @@ const palette = computed(() => {
 });
 watch(palette, () => (highlighted.value = 0));
 
-function toolLabel(name: string) {
-  return t(`page.assistant.tool_${name}`, name);
+/** what to ask first, from the page the user is on: the questions that page can be answered with */
+const starters = computed(() => {
+  const page = store.pageContext?.page ?? '';
+  const hasModule = Boolean(store.pageContext?.module_id);
+  const keys: string[] = [];
+  if (hasModule || page.startsWith('forecast-modules'))
+    keys.push('overprovisioned', 'accuracy', 'recommendation', 'metrics');
+  else if (page === 'forecast-actions_executions') keys.push('scaling', 'status');
+  else if (page === 'forecast-actions_admissions') keys.push('admissions', 'status');
+  else keys.push('status', 'overprovisionedAll', 'capabilities');
+  return keys.map(key => ({ key, text: t(`page.assistant.starter_${key}` as App.I18n.I18nKey) }));
+});
+
+/** copies an answer */
+async function copyAnswer(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    window.$message?.success(t('page.assistant.copied'));
+  } catch {
+    window.$message?.error(t('page.assistant.copyFailed'));
+  }
 }
+
+/** the last answer is the one that can be asked again */
+const lastAnswerId = computed(() => {
+  const last = [...store.messages].reverse().find(m => m.role === 'assistant' && !m.local);
+  return last?.id ?? 0;
+});
 
 async function scrollToEnd() {
   await nextTick();
@@ -192,6 +218,19 @@ watch(
             {{ command.usage }} · {{ command.title }}
           </NButton>
         </div>
+        <div class="mt-12px text-12px opacity-60">{{ t('page.assistant.startersTitle') }}</div>
+        <div class="mt-6px flex flex-wrap gap-8px">
+          <NButton
+            v-for="item in starters"
+            :key="item.key"
+            size="small"
+            tertiary
+            :disabled="!ready"
+            @click="send(item.text)"
+          >
+            {{ item.text }}
+          </NButton>
+        </div>
         <div class="mt-10px text-12px opacity-60">{{ t('page.assistant.slashHint') }}</div>
         <div v-if="!ready" class="mt-10px text-12px">
           <span class="opacity-70">{{ t(`page.assistant.notReady_${store.status?.reason || 'no_connection'}`) }}</span>
@@ -207,18 +246,7 @@ watch(
           </div>
           <!-- eslint-disable-next-line vue/no-v-html -- escaped first: see utils/mini-markdown -->
           <div v-else class="assistant-md" v-html="renderMiniMarkdown(message.content)"></div>
-          <div v-if="message.tools?.length" class="assistant-meta">
-            <span class="opacity-60">{{ t('page.assistant.readFrom') }}</span>
-            <NTag
-              v-for="(tool, i) in message.tools"
-              :key="i"
-              size="tiny"
-              :bordered="false"
-              :type="tool.ok ? 'default' : 'error'"
-            >
-              {{ toolLabel(tool.name) }}
-            </NTag>
-          </div>
+          <AssistantSteps v-if="message.tools?.length" :steps="message.tools" />
           <div v-if="message.attachments?.length" class="assistant-meta">
             <NButton
               v-for="file in message.attachments"
@@ -230,6 +258,19 @@ watch(
               @click="download(file)"
             >
               {{ t('page.assistant.download') }} {{ file.name }}
+            </NButton>
+          </div>
+          <div v-if="message.role === 'assistant' && !message.failed && !message.local" class="assistant-meta">
+            <NButton size="tiny" quaternary @click="copyAnswer(message.content)">
+              {{ t('page.assistant.copy') }}
+            </NButton>
+            <NButton
+              v-if="message.id === lastAnswerId && !store.sending"
+              size="tiny"
+              quaternary
+              @click="store.regenerate()"
+            >
+              {{ t('page.assistant.regenerate') }}
             </NButton>
           </div>
         </div>
@@ -247,10 +288,26 @@ watch(
           <NButton v-if="store.taskId" class="ml-8px" size="tiny" quaternary type="warning" @click="store.stop()">
             {{ t('page.assistant.stop') }}
           </NButton>
+          <AssistantSteps :steps="store.liveSteps" />
         </div>
       </div>
     </div>
     <div class="assistant-input">
+      <div v-if="store.pageContext" class="assistant-context">
+        <NCheckbox v-model:checked="store.attachContext" size="small">
+          {{ t('page.assistant.attachContext') }}
+        </NCheckbox>
+        <span
+          class="assistant-context-chip"
+          :class="{ 'is-off': !store.attachContext }"
+          :title="store.pageContext.page"
+        >
+          {{ store.pageContext.title || store.pageContext.page }}
+          <template v-if="store.pageContext.module_id">
+            · {{ t('page.assistant.moduleNo', { id: store.pageContext.module_id }) }}
+          </template>
+        </span>
+      </div>
       <div v-if="palette.length" class="assistant-palette" role="listbox">
         <div
           v-for="(command, i) in palette"
@@ -344,6 +401,30 @@ watch(
 </template>
 
 <style scoped>
+.assistant-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.assistant-context-chip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--assistant-primary) 14%, transparent);
+}
+
+.assistant-context-chip.is-off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
 .assistant-history {
   max-height: 320px;
   overflow-y: auto;

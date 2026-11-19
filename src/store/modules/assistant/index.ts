@@ -117,6 +117,10 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
   const loadingConversations = ref(false);
   /** what the question being answered is doing now: the tool it just read */
   const progressNote = ref('');
+  /** the steps of the question being answered, as they happen: a tool that is running, and the ones that are done with what they returned */
+  const liveSteps = ref<Api.Assistant.ToolTrace[]>([]);
+  /** whether the page and the object the user is looking at go with the question (the platform checks the user may see them) */
+  const attachContext = ref(true);
   /** the background task answering the question, 0 when there is none */
   const taskId = ref(0);
   let cancelAsked = false;
@@ -189,8 +193,14 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
           failures = 0;
           for (const event of events.data ?? []) {
             seen = Math.max(seen, event.seq);
-            if (event.type === 'tool' && event.data?.name) {
+            if (event.type === 'tool_start' && event.data?.name) {
+              liveSteps.value.push({ ...event.data, ok: false, running: true });
               progressNote.value = $t(`page.assistant.tool_${event.data.name}` as App.I18n.I18nKey, event.data.name);
+            }
+            if (event.type === 'tool' && event.data?.name) {
+              const open = liveSteps.value.findIndex(step => step.running && step.name === event.data.name);
+              if (open >= 0) liveSteps.value[open] = event.data;
+              else liveSteps.value.push(event.data);
             }
           }
           const state = task.data.status;
@@ -205,6 +215,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     } finally {
       taskId.value = 0;
       progressNote.value = '';
+      liveSteps.value = [];
       cancelAsked = false;
       rememberTask(0);
     }
@@ -215,7 +226,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     const { data, error } = await fetchAssistantChatAsync(
       [{ role: 'user', content }],
       appStore.locale,
-      currentPage(),
+      attachContext.value ? currentPage() : undefined,
       conversation
     );
     if (!data) return { data: null, error };
@@ -287,6 +298,9 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     return pageContextOf(route, key ? $t(key) : '');
   }
 
+  /** what goes with the next question, to show it before it is sent */
+  const pageContext = computed(() => currentPage());
+
   /** asks one question, or runs the skill the text names; the answer, or the reason there is none, is added to the conversation */
   async function send(text: string) {
     const content = text.trim();
@@ -322,6 +336,12 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     }
     // the platform holds the conversation, so only the question travels; it gives the model the rest from what it stored
     await ask(conversation => askInBackground(conversation, content.slice(0, MAX_MESSAGE_CHARS)));
+  }
+
+  /** asks the last question again, for another answer */
+  async function regenerate() {
+    const last = [...messages.value].reverse().find(m => m.role === 'user' && !m.local);
+    if (last) await send(last.content);
   }
 
   /** the stored conversations of the user, the latest first */
@@ -434,6 +454,10 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
     skills,
     taskId,
     progressNote,
+    liveSteps,
+    attachContext,
+    pageContext,
+    regenerate,
     stop,
     resumePending,
     loadStatus,
