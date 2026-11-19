@@ -463,6 +463,7 @@ onActivated(async () => {
         <NSelect
           v-model:value="search.moduleId"
           filterable
+          :consistent-menu-width="false"
           :options="moduleOptions"
           :placeholder="t('common.selectField', { field: t('page.forecast.modules.name') })"
         />
@@ -472,7 +473,7 @@ onActivated(async () => {
         :span="4"
         :label="t('page.datasource.mappings.metric')"
       >
-        <NSelect v-model:value="search.metric" :options="metricOptions" />
+        <NSelect v-model:value="search.metric" :options="metricOptions" :consistent-menu-width="false" />
       </NFormItemGi>
       <NFormItemGi
         class="list-search-select-field list-search-short-field"
