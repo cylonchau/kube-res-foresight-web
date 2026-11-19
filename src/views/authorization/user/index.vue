@@ -154,7 +154,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
     type: 'selection',
     resizable: true,
     align: 'center',
-    width: 48
+    width: 42
   },
   username: {
     title: t('page.manage.user.userName'),
@@ -412,7 +412,7 @@ const columnMap: Record<string, Partial<DataTableColumns<Api.System.User>[number
         )
       );
 
-      return h(NSpace, { justify: 'center', size: 6 }, { default: () => actions });
+      return h(NSpace, { justify: 'center', size: 6, wrap: false }, { default: () => actions });
     }
   }
 };

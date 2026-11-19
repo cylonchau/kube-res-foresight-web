@@ -25,6 +25,7 @@ import { fetchGetAssistantAudit, fetchGetAssistantAudits } from '@/service/api';
 import AssistantSteps from '@/components/business/assistant-steps.vue';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
 import { formatDateTime } from '@/utils/date';
+import { operateWidth } from '@/utils/operate-width';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
 defineOptions({ name: 'AiConfigAudit' });
@@ -239,7 +240,7 @@ const columnMap: Record<string, any> = {
   actions: {
     title: t('common.operate'),
     key: 'actions',
-    width: 90,
+    width: operateWidth([t('page.assistant.audit.view')]),
     fixed: 'right',
     align: 'center',
     render: (row: Api.Assistant.AuditRow) =>
