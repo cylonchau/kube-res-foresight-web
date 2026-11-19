@@ -52,7 +52,7 @@ async function commitRename() {
 <template>
   <div class="ai-chat-page h-full min-h-0 flex gap-12px overflow-hidden">
     <NCard :bordered="false" size="small" class="ai-chat-list rounded-16px shadow-sm">
-      <div class="flex-col gap-8px h-full min-h-0">
+      <div class="flex-col gap-8px min-h-0 flex-1">
         <NButton type="primary" block :disabled="store.sending" @click="store.clear()">
           {{ t('page.assistant.clear') }}
         </NButton>
@@ -107,7 +107,7 @@ async function commitRename() {
       </div>
     </NCard>
     <NCard :bordered="false" size="small" class="ai-chat-main min-w-0 flex-1 rounded-16px shadow-sm">
-      <AssistantChat :show-history="false" class="h-full min-h-0" />
+      <AssistantChat :show-history="false" class="min-h-0 flex-1" />
     </NCard>
   </div>
 </template>
@@ -118,15 +118,33 @@ async function commitRename() {
   flex-shrink: 0;
 }
 
+/* a card that fills the page and holds a list or a conversation that scrolls inside it: the card is a column, its content takes what is left (and
+   may shrink below its content, which is what lets the inside scroll), and nothing else may grow the page */
+.ai-chat-list,
+.ai-chat-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .ai-chat-list :deep(.n-card__content),
 .ai-chat-main :deep(.n-card__content) {
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
   min-height: 0;
   padding: 0;
+  overflow: hidden;
 }
 
 .ai-chat-list :deep(.n-card__content) {
   padding: 12px;
+}
+
+.ai-chat-main :deep(.assistant-chat) {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
 }
 
 .ai-chat-row {

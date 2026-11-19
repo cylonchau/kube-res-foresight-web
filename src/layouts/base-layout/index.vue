@@ -16,6 +16,8 @@ defineOptions({
   name: 'BaseLayout'
 });
 
+/** the copyright line is one slim row: a saved theme setting with a taller footer is not allowed to take the height of the pages */
+const FOOTER_MAX_HEIGHT = 28;
 const appStore = useAppStore();
 const themeStore = useThemeStore();
 const { secondLevelMenus, childLevelMenus, isActiveFirstLevelMenuHasChildren } = provideMixMenuContext();
@@ -133,7 +135,7 @@ function getSiderAndCollapsedWidth(isCollapsed: boolean) {
     :sider-width="siderWidth"
     :sider-collapsed-width="siderCollapsedWidth"
     :footer-visible="themeStore.footer.visible"
-    :footer-height="themeStore.footer.height"
+    :footer-height="Math.min(themeStore.footer.height, FOOTER_MAX_HEIGHT)"
     :fixed-footer="themeStore.footer.fixed"
     :right-footer="themeStore.footer.right"
   >

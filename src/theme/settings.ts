@@ -64,7 +64,7 @@ export const themeSettings: App.Theme.ThemeSetting = {
   footer: {
     visible: true,
     fixed: false,
-    height: 36,
+    height: 28,
     right: true
   },
   watermark: {
@@ -115,6 +115,6 @@ export const overrideThemeSettings: DeepPartial<App.Theme.ThemeSetting> = {
     collapsedWidth: 56
   },
   footer: {
-    height: 36
+    height: 28
   }
 };
