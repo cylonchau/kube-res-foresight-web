@@ -538,7 +538,6 @@ const local = {
     },
     diagnostics: {
       title: 'Database diagnostics',
-      hint: 'What the database says about itself: the pool of connections of this process, the tables that grow, their indexes, what is running now and which module writes the most. These are statistics, not rows. When a page ends in a 502 or 504, look here at the time it happens.',
       pool: 'Connection pool of this process',
       poolWaiting:
         'Statements have waited for a connection: the pool is too small for the load. Raise the pool size (Helm: database.postgresMaxOpenConnection or maxOpenConnection) while the database server still has connections to spare.',
