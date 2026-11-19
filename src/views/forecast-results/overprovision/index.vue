@@ -10,7 +10,12 @@ import { type RangeValue, lastHours, rangeParams } from '@/hooks/business/use-fo
 import { useOverprovisionAi } from '@/hooks/business/use-overprovision-ai';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
-import { fetchGetModuleOverprovision, fetchGetOverprovision, fetchRunOverprovision } from '@/service/api';
+import {
+  fetchGetModuleOverprovision,
+  fetchGetModulePrometheus,
+  fetchGetOverprovision,
+  fetchRunOverprovision
+} from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatPercent } from '@/utils/format';
 import { buildAnalysisQuestion } from '@/utils/overprovision-ai';
@@ -43,6 +48,10 @@ const board = ref<Api.Overprovision.Board | null>(null);
 const boardLoading = ref(false);
 const detail = ref<Api.Overprovision.Detail | null>(null);
 const detailLoading = ref(false);
+/** the quantiles as the Prometheus data source computes them, asked after the rest of the page is there: a long window is a slow query */
+const prom = ref<Api.Overprovision.PromStats | null>(null);
+const promLoading = ref(false);
+const promError = ref('');
 const analyzing = ref(false);
 const ai = useOverprovisionAi();
 
@@ -79,6 +88,29 @@ async function loadDetail() {
   }
 }
 
+let promSeq = 0;
+async function loadProm() {
+  const id = sel.moduleId;
+  prom.value = null;
+  promError.value = '';
+  if (!id) return;
+  promSeq += 1;
+  const seq = promSeq;
+  promLoading.value = true;
+  try {
+    const params = custom.value ? rangeParams(customRange.value) : { window: sel.window };
+    const { data, error } = await fetchGetModulePrometheus(id, params);
+    if (seq !== promSeq) return;
+    if (data) prom.value = data;
+    else {
+      const response = (error as any)?.response;
+      promError.value = response?.data?.msg || response?.data?.message || (error as any)?.message || '';
+    }
+  } finally {
+    if (seq === promSeq) promLoading.value = false;
+  }
+}
+
 async function analyzeNow() {
   analyzing.value = true;
   try {
@@ -90,7 +122,7 @@ async function analyzeNow() {
           : p('analyzedCount', { n: data.analyzed })
       );
     }
-    await Promise.all([loadBoard(), loadDetail()]);
+    await Promise.all([loadBoard(), loadDetail(), loadProm()]);
   } finally {
     analyzing.value = false;
   }
@@ -128,6 +160,7 @@ watch(
   id => {
     ai.show(id ?? 0);
     loadDetail();
+    loadProm();
   }
 );
 watch(
@@ -135,10 +168,14 @@ watch(
   () => {
     loadBoard();
     loadDetail();
+    loadProm();
   }
 );
 watch(customRange, () => {
-  if (custom.value) loadDetail();
+  if (custom.value) {
+    loadDetail();
+    loadProm();
+  }
 });
 
 const selectedRow = computed(() => rows.value.find(row => row.module_id === sel.moduleId) ?? null);
@@ -149,7 +186,7 @@ const aiLabel = computed(() => (custom.value ? p('customRange') : sel.window));
 async function analyzeWithAi() {
   const d = detail.value;
   if (!d || ai.state.running) return;
-  const question = buildAnalysisQuestion(d, aiLabel.value, locale.value === 'en-US' ? 'en-US' : 'zh-CN');
+  const question = buildAnalysisQuestion(d, aiLabel.value, locale.value === 'en-US' ? 'en-US' : 'zh-CN', prom.value);
   await ai.run(d.module_id, question, locale.value, aiLabel.value, {
     page: 'forecast-results_overprovision',
     title: p('listTitle'),
@@ -517,7 +554,15 @@ onMounted(async () => {
 
     <div v-if="sel.moduleId" class="min-h-0 flex-1 overflow-y-auto">
       <NCard :bordered="false" size="small" class="rounded-16px shadow-sm">
-        <OverprovisionModulePanel :detail="detail" :loading="detailLoading" :basis="sel.basis" :ai="ai.state" />
+        <OverprovisionModulePanel
+          :detail="detail"
+          :loading="detailLoading"
+          :basis="sel.basis"
+          :prom="prom"
+          :prom-loading="promLoading"
+          :prom-error="promError"
+          :ai="ai.state"
+        />
         <div v-if="!detail && !detailLoading" class="text-13px opacity-70">
           {{ selectedRow ? p('noData') : '' }}
         </div>

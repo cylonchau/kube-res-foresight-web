@@ -685,7 +685,17 @@ const local = {
       metricEmpty: '已配置，窗口内没有数据',
       sectionCluster: '集群',
       clusterHelp:
-        '这个模块的数据源所在集群：节点数、可分配的 CPU 与内存、正在运行的 Pod 请求的总和。直接读 kube-state-metrics，不存库；数据源没有这些指标时显示读不到。',
+        '这个模块的数据源（Prometheus）所在集群：节点数、可分配的 CPU 与内存、正在运行的 Pod 请求的总和、容器正在使用的量。每个数都是向 Prometheus 现查的结果，不存库；用到的查询写在下面，可以拿去 Grafana 核对。查不到的数写原因。',
+      promSource: '来源：Prometheus（现查）',
+      promSourceStored: '来源：平台存下的样本（Prometheus 没有答复）',
+      promHelp:
+        '每个分位数都是向 Prometheus 现查的：对这个模块指标映射里你写的 PromQL，取窗口内的 quantile_over_time（P50、P90、P95、P99）和 max_over_time。单 Pod 是同一个查询除以同一时刻的就绪副本数，全副本总和是原查询。',
+      promQueries: '查询（PromQL）',
+      promLoading: '正在向 Prometheus 查询…',
+      promFailed: 'Prometheus 没有答复',
+      clusterUsedCpu: '正在使用 CPU',
+      clusterUsedMem: '正在使用内存',
+      clusterQueries: '集群的查询（PromQL）',
       clusterUnavailable: '读不到集群的信息',
       clusterNodes: '节点',
       clusterAllocCpu: '可分配 CPU',

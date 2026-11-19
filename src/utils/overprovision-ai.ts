@@ -55,7 +55,12 @@ function resourceLines(r: Api.Overprovision.Result, zh: boolean) {
   return lines;
 }
 
-export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLabel: string, lang: AiLang): string {
+export function buildAnalysisQuestion(
+  detail: Api.Overprovision.Detail,
+  windowLabel: string,
+  lang: AiLang,
+  prom?: Api.Overprovision.PromStats | null
+): string {
   const zh = lang === 'zh-CN';
   const win = detail.windows[0];
   const who = `${detail.name} (${detail.namespace}/${detail.workload}, ${detail.replicas || '?'})`;
@@ -64,6 +69,25 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
     : `Analyse the resource use of the module ${who} over the last ${windowLabel} (the last item in the brackets is the replicas) and answer: 1) is the request over-provisioned, under-provisioned or reasonable, and on what grounds; 2) what the CPU and memory requests should be changed to and what the risk is; 3) what to watch about throttling, OOM and the JVM; 4) the next step. Answer only from the data below, take every number from it, do not work out new ones, and say "unknown" for what it does not hold. This is a read-only analysis: change nothing.`;
   const lines: string[] = [head, zh ? '数据：' : 'Data:'];
   for (const r of [win?.cpu, win?.memory]) if (r) lines.push(...resourceLines(r, zh));
+  const live = (prom?.metrics ?? []).filter(m => !m.error && (m.pod || m.total));
+  if (live.length) {
+    lines.push(
+      zh
+        ? `向 Prometheus 现查的分位数（数据源 ${prom!.datasource.name}，窗口 ${prom!.window}；单 Pod 是同一查询除以就绪副本数）：`
+        : `Quantiles asked of Prometheus now (data source ${prom!.datasource.name}, window ${prom!.window}; one Pod is the same query over the ready replicas):`
+    );
+    for (const m of live) {
+      const fmt = (v: number) => (m.unit === 'bytes' ? formatBytes(v, 2) : formatDecimal(v, 3));
+      for (const [label, q] of [
+        [zh ? '单 Pod' : 'one Pod', m.pod],
+        [zh ? '全副本总和' : 'all replicas', m.total]
+      ] as const)
+        if (q)
+          lines.push(
+            `  ${m.name} ${label}: P50 ${fmt(q.p50)}, P90 ${fmt(q.p90)}, P95 ${fmt(q.p95)}, P99 ${fmt(q.p99)}, ${zh ? '最大' : 'max'} ${fmt(q.max)}`
+          );
+    }
+  }
   const metrics = detail.metrics ?? [];
   if (metrics.length) {
     lines.push(zh ? '其他已配置的指标：' : 'Other metrics set up:');

@@ -187,7 +187,7 @@ declare namespace Api {
       max: number;
     }
 
-    /** what the cluster has to give and has given out, read live from kube-state-metrics */
+    /** what the cluster has to give, has given out and uses, asked of the Prometheus data source now */
     interface Cluster {
       datasource: { id: number; name: string };
       at: string;
@@ -197,7 +197,49 @@ declare namespace Api {
       allocatable_memory: number;
       requested_cpu: number;
       requested_memory: number;
+      used_cpu: number;
+      used_memory: number;
+      /** the PromQL that was sent */
+      queries: Array<{ name: string; query: string }>;
       notes: string[];
+    }
+
+    /** the figures of one query set */
+    interface PromQuantiles {
+      p50: number;
+      p90: number;
+      p95: number;
+      p99: number;
+      max: number;
+    }
+
+    /** one metric of the module with its quantiles as the Prometheus data source computed them */
+    interface PromMetric {
+      key: string;
+      name: string;
+      kind: string;
+      group: string;
+      level: string;
+      unit: string;
+      /** the quantiles of the sum over the Pods */
+      total?: PromQuantiles;
+      /** the quantiles of one Pod (the query over the ready replicas), or of one container */
+      pod?: PromQuantiles;
+      /** the PromQL of the mapping as rendered for the module */
+      query: string;
+      replicas?: string;
+      /** the whole query of the P95 as it was sent */
+      example?: string;
+      error?: string;
+    }
+
+    interface PromStats {
+      datasource: { id: number; name: string };
+      at: string;
+      window_minutes: number;
+      window: string;
+      step: string;
+      metrics: PromMetric[];
     }
 
     interface RunResult {
