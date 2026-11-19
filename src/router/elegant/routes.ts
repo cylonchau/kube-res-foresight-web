@@ -414,6 +414,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'system_diagnostics',
+        path: '/system/diagnostics',
+        component: 'view.system_diagnostics',
+        meta: {
+          title: 'system_diagnostics',
+          i18nKey: 'route.system_diagnostics'
+        }
+      },
+      {
         name: 'system_login-log',
         path: '/system/login-log',
         component: 'view.system_login-log',

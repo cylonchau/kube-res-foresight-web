@@ -1,3 +1,4 @@
+import { runModuleStep } from './async-step';
 import { request } from '../request';
 
 const base = '/api/v1';
@@ -405,13 +406,9 @@ export function fetchGetModuleTrace(moduleId: number, algorithm: string, source?
   });
 }
 
+/** scores the algorithms of a module in the background and waits for the scores (stopping the signal stops the task) */
 export function fetchScoreModule(moduleId: number, signal?: AbortSignal) {
-  return request<Api.Forecast.AlgorithmScore[]>({
-    url: `${base}/modules/${moduleId}/score`,
-    method: 'post',
-    headers: LONG_REQUEST,
-    signal
-  });
+  return runModuleStep<Api.Forecast.AlgorithmScore[]>(moduleId, 'score', undefined, signal);
 }
 
 export function fetchGetRanking(moduleId: number) {

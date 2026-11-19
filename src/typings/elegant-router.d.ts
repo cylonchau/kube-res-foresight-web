@@ -21,10 +21,10 @@ declare module "@elegant-router/types" {
     "404": "/404";
     "500": "/500";
     "ai-config": "/ai-config";
-    "ai-config_llm": "/ai-config/llm";
-    "ai-config_skill": "/ai-config/skill";
     "ai-config_audit": "/ai-config/audit";
     "ai-config_chat": "/ai-config/chat";
+    "ai-config_llm": "/ai-config/llm";
+    "ai-config_skill": "/ai-config/skill";
     "ai-config_task": "/ai-config/task";
     "authorization": "/authorization";
     "authorization_menu": "/authorization/menu";
@@ -59,6 +59,7 @@ declare module "@elegant-router/types" {
     "monitoring_datasets": "/monitoring/datasets";
     "system": "/system";
     "system_config": "/system/config";
+    "system_diagnostics": "/system/diagnostics";
     "system_login-log": "/system/login-log";
     "system_operation-log": "/system/operation-log";
     "system_secret-keys": "/system/secret-keys";
@@ -135,10 +136,10 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
-    | "ai-config_llm"
-    | "ai-config_skill"
     | "ai-config_audit"
     | "ai-config_chat"
+    | "ai-config_llm"
+    | "ai-config_skill"
     | "ai-config_task"
     | "authorization_menu"
     | "authorization_role"
@@ -163,6 +164,7 @@ declare module "@elegant-router/types" {
     | "monitoring_curves"
     | "monitoring_datasets"
     | "system_config"
+    | "system_diagnostics"
     | "system_login-log"
     | "system_operation-log"
     | "system_secret-keys"

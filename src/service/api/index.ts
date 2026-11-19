@@ -7,3 +7,4 @@ export * from './system';
 export * from './datasource';
 export * from './forecast';
 export * from './assistant';
+export * from './diagnostics';
