@@ -28,6 +28,7 @@ import {
   DatasetComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TitleComponent,
   ToolboxComponent,
   TooltipComponent,
@@ -71,6 +72,7 @@ export type ECOption = echarts.ComposeOption<
 echarts.use([
   TitleComponent,
   LegendComponent,
+  MarkLineComponent,
   TooltipComponent,
   GridComponent,
   DatasetComponent,

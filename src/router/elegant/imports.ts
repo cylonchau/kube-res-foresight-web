@@ -41,6 +41,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "forecast-results_evaluations": () => import("@/views/forecast-results/evaluations/index.vue"),
   "forecast-results_history": () => import("@/views/forecast-results/history/index.vue"),
   "forecast-results_leaderboard": () => import("@/views/forecast-results/leaderboard/index.vue"),
+  "forecast-results_overprovision": () => import("@/views/forecast-results/overprovision/index.vue"),
   forecast_algorithms: () => import("@/views/forecast/algorithms/index.vue"),
   forecast_models: () => import("@/views/forecast/models/index.vue"),
   forecast_ranking: () => import("@/views/forecast/ranking/index.vue"),
