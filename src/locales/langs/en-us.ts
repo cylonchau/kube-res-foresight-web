@@ -401,6 +401,25 @@ const local = {
     'forecast-results_algorithm-runs': 'Algorithm run status'
   },
   page: {
+    backgroundTasks: {
+      title: 'Background tasks',
+      note: 'The platform runs these in the background: closing a page does not stop them. Here you see how far they are, and can stop one or run it again.',
+      queued: 'Queued',
+      waitingRetry: 'This attempt did not work: another one starts in a moment',
+      attempt: 'Attempt {n}/{max}',
+      retry: 'Try again',
+      fromCache: 'A result worked out before',
+      status_queued: 'Queued',
+      status_running: 'Running',
+      status_cancelling: 'Stopping',
+      status_succeeded: 'Done',
+      status_failed: 'Failed',
+      status_cancelled: 'Cancelled',
+      status_expired: 'Result expired',
+      kind_forecast_step: 'A step of a module',
+      kind_forecast_preview: 'Change preview',
+      kind_assistant_chat: 'A question to the assistant'
+    },
     monitoring: {
       queryTest: {
         title: 'Test a PromQL query',
@@ -734,6 +753,13 @@ const local = {
     diagnostics: {
       title: 'System diagnostics',
       refresh: 'Refresh',
+      cacheTitle: 'Result cache and forecast reuse',
+      cacheHitRate: 'Share not worked out again',
+      cacheHits: 'From the cache / shared from another request / worked out',
+      cacheKept: 'Answers kept, size / limit',
+      reuse: 'Forecasts not made again / all forecasts',
+      cacheNote:
+        'Counted since this process started. The cache gives a kept answer only while the data it was made from has not changed; a forecast is reused only when its inputs are exactly the same.',
       window: 'Range',
       hoursOption: 'Last {n} hours',
       diagnosis: 'Diagnosis',
@@ -2334,6 +2360,8 @@ const local = {
         window: 'Window',
         viewRanking: 'Ranking',
         viewHistory: 'History',
+        waitingRetry: 'Attempt {n} did not work (at most {max}): waiting before the next one',
+        scoring: 'Scoring',
         scoreNow: 'Score now',
         scored: 'Scoring finished',
         rankingTitle: 'Algorithm ranking',
@@ -2518,6 +2546,8 @@ const local = {
       effect: {
         title: 'Forecast effect report',
         pickModule: 'Pick a module to see how its forecasts have done lately.',
+        partLoading: 'Reading…',
+        partFailed: 'This part could not be read',
         range: 'Range',
         testNote:
           'The figures come from the forecasts, recommendations and scaling executions the platform recorded; a part with too few samples says so instead of giving a number. Data from a test environment is not a production conclusion.',
@@ -2615,6 +2645,19 @@ const local = {
       },
       preview: {
         title: 'Change preview',
+        cancelling: 'Stopping…',
+        retry: 'Try again',
+        queued: 'Queued, starting in a moment',
+        waitingRetry: 'Attempt {n} did not work (at most {max}): waiting before the next one',
+        attempt: 'Attempt {n}/{max}',
+        keepsRunning: 'Closing this window does not stop it: come back and it is followed on',
+        trace: 'Request id',
+        fromCache:
+          'This is a result that was worked out before from the same data: nothing changed, so nothing was worked out again.',
+        stage_history: 'Reading the history',
+        stage_saved_setting: 'Replaying the saved setting',
+        stage_proposed_setting: 'Replaying the change',
+        stage_compare: 'Comparing the two',
         intro:
           'Replays the recent past twice from the stored history: once with the saved setting and once with the change below, and shows the replicas each asked for in every window. Read-only: no prediction, recommendation or training record is written, and no module or algorithm is changed.',
         window: 'Replay range',
@@ -3698,6 +3741,7 @@ const local = {
   },
   datatable: {
     itemCount: 'Total {total} items',
+    itemCountCapped: 'More than {total} items (counted up to {total}: narrow the filter)',
     fixed: {
       left: 'Left Fixed',
       right: 'Right Fixed',

@@ -94,7 +94,9 @@ function bytes(n: number) {
 }
 
 /** a wait for a connection is the one number here that says the pool, not a query, is what is slow */
-const poolWaiting = computed(() => (report.value?.pool.wait_count ?? 0) > 0);
+const poolWaiting = computed(
+  () => (report.value?.pool.wait_count ?? 0) >= 10 && (report.value?.pool.wait_ms ?? 0) >= 500
+);
 
 const tableColumns = computed<DataTableColumns<Api.Diagnostics.Table>>(() => [
   { title: t('page.diagnostics.table'), key: 'name', width: 220 },
@@ -210,7 +212,7 @@ const routeColumns = computed<DataTableColumns<Api.Diagnostics.RouteStat>>(() =>
     key: 'examples',
     width: 200,
     render: row =>
-      row.examples.length
+      row.examples?.length
         ? h(
             NTooltip,
             {},
@@ -291,7 +293,7 @@ const writeColumns = computed<DataTableColumns<Api.Diagnostics.WriteRate>>(() =>
 
     <template v-if="requests">
       <NCard :bordered="false" size="small" class="rounded-16px shadow-sm" :title="t('page.diagnostics.diagnosis')">
-        <NSpace v-if="requests.findings.length" vertical :size="8">
+        <NSpace v-if="requests.findings?.length" vertical :size="8">
           <NAlert v-for="(f, i) in requests.findings" :key="i" :type="levelType[f.level]" :bordered="false">
             <template #header>{{ t(`page.diagnostics.level.${f.level}`) }}</template>
             {{ sentence(f) }}
@@ -305,15 +307,34 @@ const writeColumns = computed<DataTableColumns<Api.Diagnostics.WriteRate>>(() =>
         <NDataTable
           size="small"
           :columns="routeColumns"
-          :data="requests.routes"
+          :data="requests.routes ?? []"
           :bordered="false"
           :scroll-x="1700"
           :max-height="420"
         />
       </NCard>
 
+      <NCard :bordered="false" size="small" class="rounded-16px shadow-sm" :title="t('page.diagnostics.cacheTitle')">
+        <NDescriptions :column="4" label-placement="top" size="small">
+          <NDescriptionsItem :label="t('page.diagnostics.cacheHitRate')">
+            {{ Math.round((requests.cache?.hit_rate ?? 0) * 100) }}%
+          </NDescriptionsItem>
+          <NDescriptionsItem :label="t('page.diagnostics.cacheHits')">
+            {{ requests.cache?.hits ?? 0 }} / {{ requests.cache?.shared ?? 0 }} / {{ requests.cache?.misses ?? 0 }}
+          </NDescriptionsItem>
+          <NDescriptionsItem :label="t('page.diagnostics.cacheKept')">
+            {{ requests.cache?.entries ?? 0 }} · {{ bytes(requests.cache?.bytes ?? 0) }} /
+            {{ bytes(requests.cache?.max_bytes ?? 0) }}
+          </NDescriptionsItem>
+          <NDescriptionsItem :label="t('page.diagnostics.reuse')">
+            {{ requests.reuse?.reused ?? 0 }} / {{ (requests.reuse?.reused ?? 0) + (requests.reuse?.computed ?? 0) }}
+          </NDescriptionsItem>
+        </NDescriptions>
+        <div class="mt-6px text-12px opacity-65">{{ t('page.diagnostics.cacheNote') }}</div>
+      </NCard>
+
       <NCard
-        v-if="requests.boots.length"
+        v-if="requests.boots?.length"
         :bordered="false"
         size="small"
         class="rounded-16px shadow-sm"

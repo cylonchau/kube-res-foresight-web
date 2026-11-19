@@ -1,9 +1,12 @@
 import { reactive, ref } from 'vue';
+import { useCappedTotal } from '@/utils/list-notice';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
 export interface PagedResult<T> {
   list: T[];
   total: number;
+  /** the total was counted up to a bound and reached it: it is a floor */
+  total_capped?: boolean;
 }
 
 /**
@@ -14,6 +17,7 @@ export interface PagedResult<T> {
 export function usePagedList<T>(load: (page: number, pageSize: number) => Promise<PagedResult<T> | null | undefined>) {
   const rows = ref<T[]>([]) as { value: T[] };
   const loading = ref(false);
+  const { capped, prefix } = useCappedTotal();
 
   const pagination = reactive({
     page: 1,
@@ -21,6 +25,7 @@ export function usePagedList<T>(load: (page: number, pageSize: number) => Promis
     itemCount: 0,
     showSizePicker: true,
     pageSizes: getAdaptivePageSizes(),
+    prefix,
     onChange: (page: number) => {
       pagination.page = page;
       reload();
@@ -43,6 +48,7 @@ export function usePagedList<T>(load: (page: number, pageSize: number) => Promis
       if (mine !== token) return;
       rows.value = data?.list || [];
       pagination.itemCount = data?.total || 0;
+      capped.value = Boolean(data?.total_capped);
     } finally {
       if (mine === token) loading.value = false;
     }

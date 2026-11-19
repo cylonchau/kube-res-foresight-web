@@ -244,6 +244,16 @@ export function fetchCancelAssistantAsyncTask(id: number) {
   return request<Api.Assistant.AsyncTask>({ url: `${base}/async/${id}/cancel`, method: 'post', headers: silent });
 }
 
+/** a failed or cancelled task, queued again with what it was given */
+export function fetchRetryAssistantAsyncTask(id: number) {
+  return request<Api.Assistant.AsyncTask>({ url: `${base}/async/${id}/retry`, method: 'post', headers: silent });
+}
+
+/** the tasks of the signed-in user that have not ended and the ones of the last hours, the newest first */
+export function fetchListAssistantAsyncTasks(params?: { kinds?: string; hours?: number }) {
+  return request<Api.Assistant.AsyncTask<unknown>[]>({ url: `${base}/async`, method: 'get', params, headers: silent });
+}
+
 /** one audit record with its conversation: the question, the answer, the steps with what each tool returned */
 export function fetchGetAssistantAudit(id: number) {
   return request<Api.Assistant.AuditRow>({ url: `${base}/audit/${id}`, method: 'get' });

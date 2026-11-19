@@ -221,6 +221,7 @@ export const useAssistantStore = defineStore(SetupStoreId.Assistant, () => {
           if (state === 'failed')
             return { data: null, error: new Error(task.data.error || $t('page.assistant.failedUnknown')) };
           if (state === 'cancelled') return { data: null, error: new Error($t('page.assistant.cancelled')) };
+          if (state === 'expired') return { data: null, error: new Error($t('page.assistant.failedUnknown')) };
         }
         await sleep(POLL_MS);
       }

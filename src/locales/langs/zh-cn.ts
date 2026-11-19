@@ -396,6 +396,25 @@ const local = {
     'forecast-results_algorithm-runs': '算法运行情况'
   },
   page: {
+    backgroundTasks: {
+      title: '后台任务',
+      note: '这些任务由平台在后台执行，关掉页面不会停；这里能看到进度，也能停止或再试一次。',
+      queued: '排队中',
+      waitingRetry: '这一次没有成功，等一会儿自动再试',
+      attempt: '第 {n}/{max} 次',
+      retry: '再试一次',
+      fromCache: '用的是之前算好的结果',
+      status_queued: '排队',
+      status_running: '运行中',
+      status_cancelling: '停止中',
+      status_succeeded: '成功',
+      status_failed: '失败',
+      status_cancelled: '已取消',
+      status_expired: '结果已过期',
+      kind_forecast_step: '模块的步骤',
+      kind_forecast_preview: '变更影响预览',
+      kind_assistant_chat: '向 AI 提问'
+    },
     monitoring: {
       queryTest: {
         title: '测试 PromQL 查询',
@@ -712,6 +731,13 @@ const local = {
     diagnostics: {
       title: '系统诊断',
       refresh: '刷新',
+      cacheTitle: '结果缓存与预测复用',
+      cacheHitRate: '没有重算的比例',
+      cacheHits: '用了缓存 / 等了别人的结果 / 自己算',
+      cacheKept: '缓存的条数、大小 / 上限',
+      reuse: '没有重算的预测 / 全部预测',
+      cacheNote:
+        '数字是本进程启动以来的。结果缓存只在数据没变时才给出缓存的结果；预测复用只在输入完全相同时才不重新计算。',
       window: '统计范围',
       hoursOption: '最近 {n} 小时',
       diagnosis: '诊断结论',
@@ -2242,6 +2268,8 @@ const local = {
         window: '评分窗口',
         viewRanking: '当前排名',
         viewHistory: '评分历史',
+        waitingRetry: '第 {n} 次没有成功（最多 {max} 次），等一会儿再试',
+        scoring: '正在评分',
         scoreNow: '立即评分',
         scored: '评分完成',
         rankingTitle: '算法排名',
@@ -2416,6 +2444,8 @@ const local = {
       effect: {
         title: '预测效果报告',
         pickModule: '选择一个模块，查看它最近一段时间的预测效果。',
+        partLoading: '正在读取…',
+        partFailed: '这一部分没有读到',
         range: '统计范围',
         testNote:
           '数字来自平台已记录的预测、推荐和扩缩容执行；样本太少的项目写“样本不足”而不给数字。测试环境的数据不是生产结论。',
@@ -2501,6 +2531,18 @@ const local = {
       },
       preview: {
         title: '变更影响预览',
+        cancelling: '正在停止…',
+        retry: '再试一次',
+        queued: '排队中，马上开始',
+        waitingRetry: '第 {n} 次没有成功（最多 {max} 次），等一会儿再试',
+        attempt: '第 {n}/{max} 次',
+        keepsRunning: '关掉这个窗口不会停，回来会接着看',
+        trace: '请求号',
+        fromCache: '这是之前用同样的数据算过的结果，数据没有变化，所以没有重算。',
+        stage_history: '读取历史',
+        stage_saved_setting: '按现在的设置回放',
+        stage_proposed_setting: '按变更后的设置回放',
+        stage_compare: '对比两遍的结果',
         intro:
           '用最近一段时间的历史回放两遍：一遍用现在保存的设置，一遍用下面填的变更，看每个窗口各要求多少副本。只读：不写预测、推荐、训练记录，也不修改模块和算法。',
         window: '回放范围',
@@ -3557,6 +3599,7 @@ const local = {
   },
   datatable: {
     itemCount: '共 {total} 条',
+    itemCountCapped: '超过 {total} 条（只数到 {total}，缩小筛选范围再看）',
     fixed: {
       left: '左固定',
       right: '右固定',

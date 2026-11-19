@@ -1,11 +1,29 @@
 import { request } from '../request';
 
 const silent = { 'X-Silent-Error': '1' };
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-/** how long the page waits for a step before it stops asking; the task goes on and its result stays for the retention */
-const MAX_WAIT_MS = 60 * 60 * 1000;
-
 type Step = 'collect' | 'predict' | 'run' | 'backtest' | 'evaluate' | 'score';
+
+import { isOpenState, watchTask } from '@/utils/task-watch';
+import type { WatchOptions, WatchResult } from '@/utils/task-watch';
+
+export type { WatchOptions, WatchResult };
+
+export function isOpenTask(task: Pick<Api.Assistant.AsyncTask<unknown>, 'status'> | null | undefined) {
+  return Boolean(task && isOpenState(task.status));
+}
+
+/** Reads a background task of the platform until it ends (see watchTask). */
+export function watchAsyncTask<R>(id: number, options: WatchOptions<R> = {}): Promise<WatchResult<R>> {
+  return watchTask<R>(
+    id,
+    {
+      read: id2 =>
+        request<Api.Assistant.AsyncTask<R>>({ url: `/api/v1/assistant/async/${id2}`, method: 'get', headers: silent }),
+      cancel: id2 => request({ url: `/api/v1/assistant/async/${id2}/cancel`, method: 'post', headers: silent })
+    },
+    options
+  );
+}
 
 /**
  * Runs a long step of a module in the background and waits for its result: the step is queued (the request that does it returns at once, so no
@@ -16,43 +34,37 @@ export async function runModuleStep<T>(
   moduleId: number,
   step: Step,
   body?: Record<string, unknown>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onUpdate?: (task: Api.Assistant.AsyncTask<T>) => void
 ): Promise<{ data: T | null; error: unknown }> {
-  const submitted = await request<Api.Assistant.AsyncTask>({
+  const submitted = await request<Api.Assistant.AsyncTask<T>>({
     url: `/api/v1/modules/${moduleId}/steps/${step}`,
     method: 'post',
     data: body ?? {}
   });
   if (!submitted.data) return { data: null, error: submitted.error };
-  const id = submitted.data.id;
-  const started = Date.now();
-  let failures = 0;
-  while (Date.now() - started < MAX_WAIT_MS) {
-    if (signal?.aborted) {
-      await request({ url: `/api/v1/assistant/async/${id}/cancel`, method: 'post', headers: silent });
-      return { data: null, error: Object.assign(new Error('canceled'), { code: 'ERR_CANCELED' }) };
-    }
-    const { data, error } = await request<Api.Assistant.AsyncTask>({
-      url: `/api/v1/assistant/async/${id}`,
-      method: 'get',
-      headers: silent
-    });
-    if (data) {
-      failures = 0;
-      if (data.status === 'succeeded') return { data: (data.result ?? null) as T | null, error: null };
-      if (data.status === 'failed') {
-        const failure = new Error(data.error || 'the step failed');
-        window.$message?.error(failure.message);
-        return { data: null, error: failure };
-      }
-      if (data.status === 'cancelled')
-        return { data: null, error: Object.assign(new Error('canceled'), { code: 'ERR_CANCELED' }) };
-    } else {
-      failures += 1;
-      // the task is gone, or the platform has not answered five times in a row
-      if ((error as any)?.response?.status === 404 || failures >= 5) return { data: null, error };
-    }
-    await sleep(1000);
+  const { data, error } = await watchAsyncTask<T>(submitted.data.id, { signal, cancelOnAbort: true, onUpdate });
+  if (error && (error as { code?: string }).code !== 'ERR_CANCELED' && (error as { task?: unknown }).task) {
+    window.$message?.error((error as Error).message);
   }
-  return { data: null, error: new Error('the step took too long to wait for: it may still finish') };
+  return { data, error };
+}
+
+/** a long step of a module, queued: it comes back as a task that is followed (see useBackgroundTask) */
+export function submitModuleStep(moduleId: number, step: Step, body?: object) {
+  return request<Api.Assistant.AsyncTask<unknown>>({
+    url: `/api/v1/modules/${moduleId}/steps/${step}`,
+    method: 'post',
+    data: body ?? {}
+  });
+}
+
+/** the replay of a change of a module, queued: it comes back as a task (held to the limit of the pipeline, not to the gateway timeout) */
+export function submitModulePreview(moduleId: number, body: object, signal?: AbortSignal) {
+  return request<Api.Assistant.AsyncTask<unknown>>({
+    url: `/api/v1/modules/${moduleId}/change-preview/async`,
+    method: 'post',
+    data: body,
+    signal
+  });
 }

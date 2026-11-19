@@ -103,7 +103,30 @@ declare namespace Api {
       params?: Record<string, number | string>;
     }
 
+    /** the cache of the heavy reports (P11 B3), as this process has used it since it started */
+    interface CacheStats {
+      hits: number;
+      misses: number;
+      shared: number;
+      changed: number;
+      expired: number;
+      evictions: number;
+      entries: number;
+      bytes: number;
+      max_bytes: number;
+      /** the share of the requests that did not work the answer out, 0 to 1 */
+      hit_rate: number;
+    }
+
+    /** forecasts that were made, and ones that a forecast already made stood for */
+    interface ReuseStats {
+      computed: number;
+      reused: number;
+    }
+
     interface Requests {
+      cache: CacheStats;
+      reuse: ReuseStats;
       hours: number;
       from: string;
       to: string;
