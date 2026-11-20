@@ -144,6 +144,12 @@ declare namespace Api {
       heap_used?: Usage;
       heap_max?: Usage;
       nonheap_used?: Usage;
+      /** what the JVM asked the system for: shown next to the use, never taken for the memory of the container */
+      heap_committed?: Usage;
+      nonheap_committed?: Usage;
+      nonheap_max?: Usage;
+      gc_count?: Usage;
+      gc_pause?: Usage;
       working_set_p99: number;
       hints: string[];
     }
