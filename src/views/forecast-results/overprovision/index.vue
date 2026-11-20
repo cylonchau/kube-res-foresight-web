@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
-import { NButton, NCard, NRadioButton, NRadioGroup, NSelect, NSpin, NTag } from 'naive-ui';
+import { NButton, NCard, NSelect, NSpin, NTag } from 'naive-ui';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import GrafanaLink from '@/components/business/grafana-link.vue';
 import InventoryClusterPanel from '@/components/business/inventory-cluster-panel.vue';
 import InventoryWorkloadPanel from '@/components/business/inventory-workload-panel.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import OverprovisionAiAssistant from '@/components/business/overprovision-ai-assistant.vue';
+import OverprovisionClusterCard from '@/components/business/overprovision-cluster-card.vue';
 import OverprovisionModulePanel from '@/components/business/overprovision-module-panel.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import HelpLabel from '@/components/common/help-label.vue';
-import { type RangeValue, lastHours, rangeParams } from '@/hooks/business/use-forecast-modules';
+import type { RangeValue } from '@/hooks/business/use-forecast-modules';
 import { useOverprovisionAi } from '@/hooks/business/use-overprovision-ai';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
@@ -26,6 +28,7 @@ import { formatBytes, formatCores, formatPercent } from '@/utils/format';
 import { buildAnalysisQuestion } from '@/utils/overprovision-ai';
 import { operateWidth } from '@/utils/operate-width';
 import { grafanaUrl, parseRouteSelection } from '@/utils/resource-links';
+import { DEFAULT_WINDOW_LABEL, rangeOfLabel, windowOf } from '@/utils/overprovision-window';
 
 defineOptions({ name: 'ForecastResultsOverprovision' });
 
@@ -38,17 +41,16 @@ defineOptions({ name: 'ForecastResultsOverprovision' });
 const { t, locale } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
 
-const WINDOWS = ['15m', '30m', '1h', '1d', '7d', '15d', '30d'];
 const HEALTHS: Api.Overprovision.Health[] = ['risk', 'under', 'over', 'limited', 'ok', 'unknown'];
 
 const sel = reactive({
   namespace: null as string | null,
   moduleId: null as number | null,
   health: null as string | null,
-  window: '7d',
   basis: 'pod' as 'pod' | 'total'
 });
-const customRange = ref<RangeValue | null>(lastHours(6));
+/** the analysis window, chosen with the same time field as everywhere else: the last N minutes, hours or days, or a fixed range */
+const range = ref<RangeValue | null>(rangeOfLabel(DEFAULT_WINDOW_LABEL));
 
 const board = ref<Api.Overprovision.Board | null>(null);
 const boardLoading = ref(false);
@@ -65,33 +67,13 @@ const ai = useOverprovisionAi();
 const grafana = ref<Api.Grafana.Settings | null>(null);
 const inventoryKey = ref(0);
 
-const custom = computed(() => sel.window === 'custom');
-/** the window of the page as Grafana's time range: '7d' is now-7d, a custom range is its two ends */
-const grafanaRange = computed(() => {
-  if (custom.value) {
-    const params = rangeParams(customRange.value);
-    return { from: params.from, to: params.to };
-  }
-  return { window: sel.window };
-});
-const WINDOW_HOURS: Record<string, number> = {
-  '15m': 1,
-  '30m': 1,
-  '1h': 1,
-  '1d': 24,
-  '7d': 168,
-  '15d': 360,
-  '30d': 720
-};
+/** what the range means for the requests, for Grafana and for the overview (see utils/overprovision-window) */
+const win = computed(() => windowOf(range.value));
+const grafanaRange = computed(() => win.value.grafana);
 /** how far back the trends and the history of changes of the inventory go: the window of the page, at least an hour */
-const inventoryHours = computed(() => {
-  if (!custom.value) return WINDOW_HOURS[sel.window] ?? 168;
-  const range = rangeParams(customRange.value);
-  const span = range.from && range.to ? (Date.parse(range.to) - Date.parse(range.from)) / 3600000 : 24;
-  return Math.min(Math.max(Math.ceil(Number.isFinite(span) ? span : 24), 1), 24 * 365);
-});
-/** the overview reads the stored results of one of the seven windows; a custom range has none, so it shows the 7 days */
-const boardWindow = computed(() => (custom.value ? '7d' : sel.window));
+const inventoryHours = computed(() => win.value.hours);
+/** the overview reads the stored results of one of the seven windows: the shortest that covers the range */
+const boardWindow = computed(() => win.value.board);
 
 async function loadBoard() {
   boardLoading.value = true;
@@ -114,14 +96,37 @@ async function loadDetail() {
   const seq = detailSeq;
   detailLoading.value = true;
   try {
-    const params = custom.value ? rangeParams(customRange.value) : { window: sel.window };
-    const { data } = await fetchGetModuleOverprovision(id, params);
+    const { data } = await fetchGetModuleOverprovision(id, win.value.params);
     if (seq === detailSeq) detail.value = data ?? null;
   } finally {
     if (seq === detailSeq) detailLoading.value = false;
   }
 }
 
+function mergeProm(
+  first: Api.Overprovision.PromStats,
+  second: Api.Overprovision.PromStats
+): Api.Overprovision.PromStats {
+  return {
+    ...first,
+    datasource: first.datasource?.name ? first.datasource : second.datasource,
+    step: second.step || first.step,
+    metrics: [...first.metrics, ...second.metrics],
+    partial: first.partial || second.partial,
+    skipped: first.skipped + second.skipped
+  };
+}
+
+function reasonOf(error: unknown) {
+  const response = (error as any)?.response;
+  return response?.data?.msg || response?.data?.message || (error as any)?.message || '';
+}
+
+/**
+ * The quantiles of the module from Prometheus in two requests: the CPU and the memory first (what the page needs at once), the other metrics after. Each
+ * request is kept by the platform inside its time limit and answers with what it got, so a slow data source or a long window makes the figures that did not
+ * come say so, and not a 504 over the whole page.
+ */
 let promSeq = 0;
 async function loadProm() {
   const id = sel.moduleId;
@@ -132,14 +137,18 @@ async function loadProm() {
   const seq = promSeq;
   promLoading.value = true;
   try {
-    const params = custom.value ? rangeParams(customRange.value) : { window: sel.window };
-    const { data, error } = await fetchGetModulePrometheus(id, params);
+    const params = win.value.params;
+    const core = await fetchGetModulePrometheus(id, { ...params, scope: 'core' });
     if (seq !== promSeq) return;
-    if (data) prom.value = data;
-    else {
-      const response = (error as any)?.response;
-      promError.value = response?.data?.msg || response?.data?.message || (error as any)?.message || '';
+    if (!core.data) {
+      promError.value = reasonOf(core.error);
+      return;
     }
+    prom.value = core.data;
+    const more = await fetchGetModulePrometheus(id, { ...params, scope: 'more' });
+    if (seq !== promSeq) return;
+    if (more.data) prom.value = mergeProm(core.data, more.data);
+    else promError.value = reasonOf(more.error);
   } finally {
     if (seq === promSeq) promLoading.value = false;
   }
@@ -163,33 +172,40 @@ async function analyzeNow() {
   }
 }
 
-// ---- the choice of the module
+// ---- the choice of the module: the namespace first, then the instance of it
 
 const rows = computed(() => board.value?.rows ?? []);
 const namespaceOptions = computed(() =>
   [...new Set(rows.value.map(row => row.namespace))].sort().map(value => ({ label: value, value }))
 );
-const moduleOptions = computed(() =>
-  rows.value
-    .filter(row => !sel.namespace || row.namespace === sel.namespace)
-    .map(row => ({ label: sel.namespace ? row.name : `${row.name}  ·  ${row.namespace}`, value: row.module_id }))
-);
+/** the instances of the namespace chosen (all of them when none is): named by themselves, the namespace is the other filter; a name two namespaces share says which */
+const moduleOptions = computed(() => {
+  const list = rows.value.filter(row => !sel.namespace || row.namespace === sel.namespace);
+  const count = new Map<string, number>();
+  for (const row of list) count.set(row.name, (count.get(row.name) ?? 0) + 1);
+  return list.map(row => ({
+    label: (count.get(row.name) ?? 0) > 1 ? `${row.name} (${row.namespace})` : row.name,
+    value: row.module_id
+  }));
+});
 const healthOptions = computed(() => HEALTHS.map(value => ({ label: p(`health_${value}`), value })));
+const basisOptions = computed(() => [
+  { label: p('basisPod'), value: 'pod' },
+  { label: p('basisTotal'), value: 'total' }
+]);
 
 function pickModule(id: number | null) {
   sel.moduleId = id;
-  // a namespace filter that does not hold the module is dropped, so the module list is never emptied by the choice that was just made
+  // the namespace follows the instance chosen, so the two filters never disagree
   const row = rows.value.find(item => item.module_id === id);
-  if (row && sel.namespace && row.namespace !== sel.namespace) sel.namespace = null;
+  if (row) sel.namespace = row.namespace;
 }
-watch(
-  () => sel.namespace,
-  ns => {
-    // a namespace that does not hold the chosen module takes the choice back
-    const row = rows.value.find(item => item.module_id === sel.moduleId);
-    if (row && ns && row.namespace !== ns) sel.moduleId = null;
-  }
-);
+function pickNamespace(ns: string | null) {
+  sel.namespace = ns;
+  // an instance that is not of the namespace is let go (and so is the instance when the namespace is cleared)
+  const row = rows.value.find(item => item.module_id === sel.moduleId);
+  if (row && row.namespace !== ns) sel.moduleId = null;
+}
 watch(
   () => sel.moduleId,
   id => {
@@ -198,19 +214,12 @@ watch(
     loadProm();
   }
 );
-watch(
-  () => sel.window,
-  () => {
-    loadBoard();
-    loadDetail();
-    loadProm();
-  }
-);
-watch(customRange, () => {
-  if (custom.value) {
-    loadDetail();
-    loadProm();
-  }
+watch(range, (now, before) => {
+  const was = windowOf(before);
+  const next = windowOf(now);
+  if (next.board !== was.board) loadBoard();
+  loadDetail();
+  loadProm();
 });
 
 const selectedRow = computed(() => rows.value.find(row => row.module_id === sel.moduleId) ?? null);
@@ -223,30 +232,27 @@ const toolbarGrafana = computed(() =>
     grafanaRange.value
   )
 );
+const clusterGrafana = computed(() => grafanaUrl(grafana.value, {}, grafanaRange.value));
 
 // ---- Grafana opens this page with the namespace and the workload (and a window) in the query: take the ones that name exactly one thing
 
 const route = useRoute();
 function applyRouteSelection() {
   const want = parseRouteSelection(route.query as Record<string, unknown>);
-  if (want.window) sel.window = want.window;
+  if (want.window) range.value = rangeOfLabel(want.window);
   const byId = want.moduleId ? rows.value.find(row => row.module_id === want.moduleId) : undefined;
   const byName =
     want.namespace && want.workload
       ? rows.value.find(row => row.namespace === want.namespace && row.workload === want.workload)
       : undefined;
   const hit = byId ?? byName;
-  if (hit) {
-    sel.namespace = hit.namespace;
-    pickModule(hit.module_id);
-  } else if (want.namespace && rows.value.some(row => row.namespace === want.namespace)) {
-    sel.namespace = want.namespace;
-  }
+  if (hit) pickModule(hit.module_id);
+  else if (want.namespace && rows.value.some(row => row.namespace === want.namespace)) sel.namespace = want.namespace;
 }
 
-// ---- the one-click AI analysis
+// ---- the AI analysis: the helper at the lower right asks, the page answers with the figures it shows
 
-const aiLabel = computed(() => (custom.value ? p('customRange') : sel.window));
+const aiLabel = computed(() => win.value.grafana.window ?? p('customRange'));
 async function analyzeWithAi() {
   const d = detail.value;
   if (!d || ai.state.running) return;
@@ -267,8 +273,39 @@ interface Cell {
   label: string;
   help: string;
   value: string;
+  sub?: string;
   type?: 'default' | 'warning' | 'error' | 'success';
 }
+
+/** the modules that were killed for memory in the window, and how many times: the first cards of the overview */
+const oomCells = computed<Cell[]>(() => {
+  const b = board.value;
+  if (!b) return [];
+  const killed = b.rows
+    .filter(row => (row.memory?.oom_kills ?? 0) > 0)
+    .sort((a, c) => (c.memory?.oom_kills ?? 0) - (a.memory?.oom_kills ?? 0));
+  const kills = killed.reduce((sum, row) => sum + (row.memory?.oom_kills ?? 0), 0);
+  return [
+    {
+      key: 'oomModules',
+      label: p('oomModules'),
+      help: p('oomModulesHelp'),
+      value: `${killed.length} / ${b.modules}`,
+      sub: killed
+        .slice(0, 3)
+        .map(row => row.name)
+        .join(', '),
+      type: killed.length > 0 ? 'error' : 'success'
+    },
+    {
+      key: 'oomKills',
+      label: p('oomKills'),
+      help: p('oomKillsHelp'),
+      value: String(kills),
+      type: kills > 0 ? 'error' : 'success'
+    }
+  ];
+});
 
 const cells = computed<Cell[]>(() => {
   const b = board.value;
@@ -276,6 +313,7 @@ const cells = computed<Cell[]>(() => {
   const reclaim = (totals: Api.Overprovision.Totals, format: (v: number) => string) =>
     `${format(totals.reclaimable)} (${formatPercent(totals.share, 0)})`;
   return [
+    ...oomCells.value,
     {
       key: 'cpuReserved',
       label: p('cardCpuReserved'),
@@ -566,15 +604,17 @@ onMounted(async () => {
 <template>
   <div class="h-full flex-col gap-10px overflow-hidden">
     <NCard :bordered="false" size="small" class="rounded-16px shadow-sm">
-      <div class="flex flex-wrap items-center gap-x-12px gap-y-8px">
+      <!-- every control opens downward from its own left edge and is the same height; the actions are on the right -->
+      <div class="filter-bar">
         <NSelect
-          v-model:value="sel.namespace"
+          :value="sel.namespace"
           clearable
           filterable
           size="small"
-          class="w-170px"
+          class="w-180px"
           :placeholder="p('namespace')"
           :options="namespaceOptions"
+          @update:value="pickNamespace"
         />
         <NSelect
           :value="sel.moduleId"
@@ -582,41 +622,22 @@ onMounted(async () => {
           filterable
           size="small"
           class="w-260px"
-          :placeholder="p('pickModule')"
+          :placeholder="p('instance')"
           :options="moduleOptions"
           :consistent-menu-width="false"
           @update:value="pickModule"
         />
-        <span class="inline-flex items-center gap-4px text-12px opacity-80">
-          <HelpLabel :label="p('window')" :help="p('windowHelp')" />
+        <span class="filter-item">
+          <HelpLabel :label="p('window')" :help="p('windowHelp')" class="filter-help" />
+          <span class="w-250px"><TimeRangeField v-model="range" :clearable="false" size="small" /></span>
         </span>
-        <NRadioGroup v-model:value="sel.window" size="small">
-          <NRadioButton v-for="w in WINDOWS" :key="w" :value="w">{{ w }}</NRadioButton>
-          <NRadioButton value="custom">{{ p('customRange') }}</NRadioButton>
-        </NRadioGroup>
-        <TimeRangeField v-if="custom" v-model="customRange" :clearable="false" />
-        <span class="inline-flex items-center gap-4px text-12px opacity-80">
-          <HelpLabel :label="p('basis')" :help="p('basisHelp')" />
+        <span class="filter-item">
+          <HelpLabel :label="p('basis')" :help="p('basisHelp')" class="filter-help" />
+          <NSelect v-model:value="sel.basis" size="small" class="w-130px" :options="basisOptions" />
         </span>
-        <NRadioGroup v-model:value="sel.basis" size="small">
-          <NRadioButton value="pod">{{ p('basisPod') }}</NRadioButton>
-          <NRadioButton value="total">{{ p('basisTotal') }}</NRadioButton>
-        </NRadioGroup>
-        <div class="ml-auto flex items-center gap-8px">
+        <div class="filter-actions">
           <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
           <NButton size="small" secondary :loading="analyzing" @click="analyzeNow">{{ p('analyzeNow') }}</NButton>
-          <NButton
-            v-if="sel.moduleId"
-            size="small"
-            type="primary"
-            :loading="ai.state.running"
-            :disabled="!detail || ai.state.ready === false"
-            :title="ai.state.ready === false ? ai.state.problem || p('aiNotReady') : ''"
-            @click="analyzeWithAi"
-          >
-            {{ p('aiButton') }}
-          </NButton>
-          <NButton v-if="ai.state.running" size="small" @click="ai.stop">{{ t('common.cancel') }}</NButton>
         </div>
       </div>
     </NCard>
@@ -630,7 +651,8 @@ onMounted(async () => {
           :prom="prom"
           :prom-loading="promLoading"
           :prom-error="promError"
-          :ai="ai.state"
+          :grafana-cluster="clusterGrafana"
+          @retry-prom="loadProm"
         />
         <div v-if="!detail && !detailLoading" class="text-13px opacity-70">
           {{ selectedRow ? p('noData') : '' }}
@@ -647,20 +669,19 @@ onMounted(async () => {
           :refresh-key="inventoryKey"
         />
       </NCard>
-      <NCard :bordered="false" size="small" class="mt-10px rounded-16px shadow-sm">
-        <InventoryClusterPanel :grafana="grafana" :range="grafanaRange" :hours="inventoryHours" />
-      </NCard>
     </div>
 
     <div v-else class="min-h-0 flex-1 flex-col gap-10px overflow-y-auto">
-      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-        <InventoryClusterPanel open :grafana="grafana" :range="grafanaRange" :hours="inventoryHours" />
-      </NCard>
-
+      <!-- OOM first, then the totals -->
       <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
         <NSpin :show="boardLoading">
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-8px">
-            <div v-for="cell in cells" :key="cell.key" class="cell">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-8px">
+            <div
+              v-for="cell in cells"
+              :key="cell.key"
+              class="cell"
+              :class="cell.key.startsWith('oom') ? 'cell-oom' : ''"
+            >
               <div class="text-12px opacity-70"><HelpLabel :label="cell.label" :help="cell.help" /></div>
               <div :class="cell.key === 'analyzedAt' ? 'text-13px leading-24px' : 'text-16px leading-24px'">
                 <NTag v-if="cell.type && cell.type !== 'default'" :type="cell.type" :bordered="false" size="small">
@@ -668,19 +689,31 @@ onMounted(async () => {
                 </NTag>
                 <span v-else>{{ cell.value }}</span>
               </div>
+              <div v-if="cell.sub" class="cell-sub" :title="cell.sub">{{ cell.sub }}</div>
             </div>
           </div>
           <div v-if="board && !board.analyzed" class="mt-6px text-12px opacity-80">{{ p('notAnalyzed') }}</div>
-          <div class="mt-8px">
-            <div class="mb-2px flex flex-wrap items-center gap-8px">
-              <HelpLabel :label="p('rankTitle')" :help="p('rankHelp')" class="text-12px opacity-80" />
-              <NSelect v-model:value="rank.mode" size="tiny" class="w-130px" :options="rankModeOptions" />
-              <NSelect v-model:value="rank.resource" size="tiny" class="w-110px" :options="rankResourceOptions" />
-            </div>
-            <div v-show="ranking.length" ref="domRef" class="h-150px w-full"></div>
-            <div v-if="!ranking.length" class="h-40px flex-center text-12px opacity-70">{{ p('rankEmpty') }}</div>
+          <div v-else-if="board && !win.stored" class="mt-6px text-12px opacity-70">
+            {{ p('boardWindowNote', { window: board.window }) }}
           </div>
         </NSpin>
+      </NCard>
+
+      <!-- the cluster: what the data source answers, then what the operator reported of the nodes -->
+      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+        <OverprovisionClusterCard open :grafana-url="clusterGrafana" />
+        <div class="section-gap"></div>
+        <InventoryClusterPanel :grafana="grafana" :range="grafanaRange" :hours="inventoryHours" />
+      </NCard>
+
+      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+        <div class="mb-2px flex flex-wrap items-center gap-8px">
+          <HelpLabel :label="p('rankTitle')" :help="p('rankHelp')" class="text-12px opacity-80" />
+          <NSelect v-model:value="rank.mode" size="tiny" class="w-130px" :options="rankModeOptions" />
+          <NSelect v-model:value="rank.resource" size="tiny" class="w-110px" :options="rankResourceOptions" />
+        </div>
+        <div v-show="ranking.length" ref="domRef" class="h-150px w-full"></div>
+        <div v-if="!ranking.length" class="h-40px flex-center text-12px opacity-70">{{ p('rankEmpty') }}</div>
       </NCard>
 
       <div class="h-520px shrink-0 flex-col">
@@ -708,6 +741,14 @@ onMounted(async () => {
         </ListTablePanel>
       </div>
     </div>
+
+    <OverprovisionAiAssistant
+      :ai="ai.state"
+      :module-name="selectedRow?.name ?? ''"
+      :can-analyze="Boolean(detail) && !detailLoading"
+      @analyze="analyzeWithAi"
+      @stop="ai.stop"
+    />
   </div>
 </template>
 
@@ -716,5 +757,42 @@ onMounted(async () => {
   border-radius: 8px;
   padding: 4px 10px;
   background: rgba(128, 128, 128, 0.07);
+  min-width: 0;
+}
+.cell-oom {
+  border-left: 3px solid rgba(208, 48, 80, 0.55);
+}
+.cell-sub {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-help {
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.section-gap {
+  height: 8px;
 }
 </style>

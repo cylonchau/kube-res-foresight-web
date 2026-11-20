@@ -154,8 +154,10 @@ declare namespace Api {
       datasource: { id: number; name: string };
       at: string;
       nodes: Record<string, NodeFigures>;
-      queries: Array<{ name: string; query: string }>;
+      queries: Api.Overprovision.ClusterQuery[];
       notes: string[];
+      reason?: 'no_datasource' | 'unreachable';
+      message?: string;
     }
 
     /** a workload as the table of the dashboard shows it */

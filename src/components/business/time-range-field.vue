@@ -14,7 +14,10 @@ defineOptions({ name: 'TimeRangeField' });
  * in milliseconds, or null for no limit.
  */
 const model = defineModel<RangeValue | null>({ default: null });
-const props = withDefaults(defineProps<{ clearable?: boolean }>(), { clearable: true });
+const props = withDefaults(defineProps<{ clearable?: boolean; size?: 'tiny' | 'small' | 'medium' | 'large' }>(), {
+  clearable: true,
+  size: 'medium'
+});
 
 const { t } = useI18n();
 const MINUTE = 60 * 1000;
@@ -83,7 +86,7 @@ function clear() {
   <NPopover v-model:show="show" trigger="click" placement="bottom-start" :show-arrow="false" class="time-range-pop">
     <template #trigger>
       <!-- the plain button: its background and border follow the theme exactly like the inputs beside it (light and dark) -->
-      <NButton class="time-range-field w-full" justify-content="space-between">
+      <NButton class="time-range-field w-full" :size="props.size" justify-content="space-between">
         <span class="truncate">{{ label }}</span>
       </NButton>
     </template>
