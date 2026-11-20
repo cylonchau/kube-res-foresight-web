@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard, NRadioButton, NRadioGroup, NSelect, NSpin, NTag } from 'naive-ui';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import GrafanaLink from '@/components/business/grafana-link.vue';
+import InventoryClusterPanel from '@/components/business/inventory-cluster-panel.vue';
+import InventoryWorkloadPanel from '@/components/business/inventory-workload-panel.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import OverprovisionModulePanel from '@/components/business/overprovision-module-panel.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
@@ -11,6 +15,7 @@ import { useOverprovisionAi } from '@/hooks/business/use-overprovision-ai';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
+  fetchGetGrafanaSettings,
   fetchGetModuleOverprovision,
   fetchGetModulePrometheus,
   fetchGetOverprovision,
@@ -20,6 +25,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatPercent } from '@/utils/format';
 import { buildAnalysisQuestion } from '@/utils/overprovision-ai';
 import { operateWidth } from '@/utils/operate-width';
+import { grafanaUrl, parseRouteSelection } from '@/utils/resource-links';
 
 defineOptions({ name: 'ForecastResultsOverprovision' });
 
@@ -55,7 +61,35 @@ const promError = ref('');
 const analyzing = ref(false);
 const ai = useOverprovisionAi();
 
+/** the address of the Grafana and of its dashboard; null until asked, and the links are drawn only when it is set */
+const grafana = ref<Api.Grafana.Settings | null>(null);
+const inventoryKey = ref(0);
+
 const custom = computed(() => sel.window === 'custom');
+/** the window of the page as Grafana's time range: '7d' is now-7d, a custom range is its two ends */
+const grafanaRange = computed(() => {
+  if (custom.value) {
+    const params = rangeParams(customRange.value);
+    return { from: params.from, to: params.to };
+  }
+  return { window: sel.window };
+});
+const WINDOW_HOURS: Record<string, number> = {
+  '15m': 1,
+  '30m': 1,
+  '1h': 1,
+  '1d': 24,
+  '7d': 168,
+  '15d': 360,
+  '30d': 720
+};
+/** how far back the trends and the history of changes of the inventory go: the window of the page, at least an hour */
+const inventoryHours = computed(() => {
+  if (!custom.value) return WINDOW_HOURS[sel.window] ?? 168;
+  const range = rangeParams(customRange.value);
+  const span = range.from && range.to ? (Date.parse(range.to) - Date.parse(range.from)) / 3600000 : 24;
+  return Math.min(Math.max(Math.ceil(Number.isFinite(span) ? span : 24), 1), 24 * 365);
+});
 /** the overview reads the stored results of one of the seven windows; a custom range has none, so it shows the 7 days */
 const boardWindow = computed(() => (custom.value ? '7d' : sel.window));
 
@@ -123,6 +157,7 @@ async function analyzeNow() {
       );
     }
     await Promise.all([loadBoard(), loadDetail(), loadProm()]);
+    inventoryKey.value += 1;
   } finally {
     analyzing.value = false;
   }
@@ -179,6 +214,35 @@ watch(customRange, () => {
 });
 
 const selectedRow = computed(() => rows.value.find(row => row.module_id === sel.moduleId) ?? null);
+
+/** the toolbar link: the module chosen, or the cluster when none is */
+const toolbarGrafana = computed(() =>
+  grafanaUrl(
+    grafana.value,
+    selectedRow.value ? { namespace: selectedRow.value.namespace, workload: selectedRow.value.workload } : {},
+    grafanaRange.value
+  )
+);
+
+// ---- Grafana opens this page with the namespace and the workload (and a window) in the query: take the ones that name exactly one thing
+
+const route = useRoute();
+function applyRouteSelection() {
+  const want = parseRouteSelection(route.query as Record<string, unknown>);
+  if (want.window) sel.window = want.window;
+  const byId = want.moduleId ? rows.value.find(row => row.module_id === want.moduleId) : undefined;
+  const byName =
+    want.namespace && want.workload
+      ? rows.value.find(row => row.namespace === want.namespace && row.workload === want.workload)
+      : undefined;
+  const hit = byId ?? byName;
+  if (hit) {
+    sel.namespace = hit.namespace;
+    pickModule(hit.module_id);
+  } else if (want.namespace && rows.value.some(row => row.namespace === want.namespace)) {
+    sel.namespace = want.namespace;
+  }
+}
 
 // ---- the one-click AI analysis
 
@@ -490,7 +554,11 @@ const cfg = useTableColumnConfig({
 onMounted(async () => {
   cfg.initColumnConfig();
   ai.checkReady();
+  fetchGetGrafanaSettings().then(({ data }) => {
+    grafana.value = data ?? null;
+  });
   await loadBoard();
+  applyRouteSelection();
   drawRanking();
 });
 </script>
@@ -535,6 +603,7 @@ onMounted(async () => {
           <NRadioButton value="total">{{ p('basisTotal') }}</NRadioButton>
         </NRadioGroup>
         <div class="ml-auto flex items-center gap-8px">
+          <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
           <NButton size="small" secondary :loading="analyzing" @click="analyzeNow">{{ p('analyzeNow') }}</NButton>
           <NButton
             v-if="sel.moduleId"
@@ -567,10 +636,28 @@ onMounted(async () => {
           {{ selectedRow ? p('noData') : '' }}
         </div>
       </NCard>
+      <NCard v-if="selectedRow" :bordered="false" size="small" class="mt-10px rounded-16px shadow-sm">
+        <InventoryWorkloadPanel
+          :module-id="selectedRow.module_id"
+          :namespace="selectedRow.namespace"
+          :workload="selectedRow.workload"
+          :grafana="grafana"
+          :range="grafanaRange"
+          :hours="inventoryHours"
+          :refresh-key="inventoryKey"
+        />
+      </NCard>
+      <NCard :bordered="false" size="small" class="mt-10px rounded-16px shadow-sm">
+        <InventoryClusterPanel :grafana="grafana" :range="grafanaRange" :hours="inventoryHours" />
+      </NCard>
     </div>
 
-    <template v-else>
-      <NCard :bordered="false" size="small" class="rounded-16px shadow-sm">
+    <div v-else class="min-h-0 flex-1 flex-col gap-10px overflow-y-auto">
+      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+        <InventoryClusterPanel open :grafana="grafana" :range="grafanaRange" :hours="inventoryHours" />
+      </NCard>
+
+      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
         <NSpin :show="boardLoading">
           <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-8px">
             <div v-for="cell in cells" :key="cell.key" class="cell">
@@ -596,29 +683,31 @@ onMounted(async () => {
         </NSpin>
       </NCard>
 
-      <ListTablePanel
-        :title="p('listTitle')"
-        :help="p('listHelp')"
-        :cfg="cfg"
-        :loading="boardLoading"
-        :data="listRows"
-        :row-key="(row: any) => row.module_id"
-        :remote="false"
-        :empty-hint="p('notAnalyzed')"
-        @refresh="loadBoard"
-      >
-        <template #suffix>
-          <NSelect
-            v-model:value="sel.health"
-            clearable
-            size="small"
-            class="w-130px"
-            :placeholder="p('health')"
-            :options="healthOptions"
-          />
-        </template>
-      </ListTablePanel>
-    </template>
+      <div class="h-520px shrink-0 flex-col">
+        <ListTablePanel
+          :title="p('listTitle')"
+          :help="p('listHelp')"
+          :cfg="cfg"
+          :loading="boardLoading"
+          :data="listRows"
+          :row-key="(row: any) => row.module_id"
+          :remote="false"
+          :empty-hint="p('notAnalyzed')"
+          @refresh="loadBoard"
+        >
+          <template #suffix>
+            <NSelect
+              v-model:value="sel.health"
+              clearable
+              size="small"
+              class="w-130px"
+              :placeholder="p('health')"
+              :options="healthOptions"
+            />
+          </template>
+        </ListTablePanel>
+      </div>
+    </div>
   </div>
 </template>
 
