@@ -1,21 +1,22 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { NButton, NCollapse, NCollapseItem, NRadioButton, NRadioGroup, NSpin, NTable, NTag } from 'naive-ui';
+import { computed } from 'vue';
+import { NButton, NCollapse, NCollapseItem, NSpin, NTable, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import OverprovisionClusterCard from '@/components/business/overprovision-cluster-card.vue';
+import OverprovisionOomCards from '@/components/business/overprovision-oom-cards.vue';
+import OverprovisionUsageChart from '@/components/business/overprovision-usage-chart.vue';
+import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
 import HelpLabel from '@/components/common/help-label.vue';
-import OverprovisionChart from '@/components/business/overprovision-chart.vue';
-import OverprovisionHistoryChart from '@/components/business/overprovision-history-chart.vue';
-import { fetchGetOverprovisionCluster } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
-import { renderMiniMarkdown } from '@/utils/mini-markdown';
 
 defineOptions({ name: 'OverprovisionModulePanel' });
 
 /**
- * The analysis of one module, in small tiles: what it is configured with (requests, limits), what it uses (P50, P90, P95, P99, the maximum) and what
- * is left, the chart with its moving averages, the metrics the module has set up (container, JVM, throttling, OOM: only those), the history of the
- * analysis, the cluster it runs in and the answer of the AI analysis. Everything is of the module chosen on the page.
+ * The analysis of one module, in small tiles and two charts: first what it says about running out of memory (the OOM cards), then what it is configured with
+ * (requests, limits), what it uses (P50, P90, P95, P99, the maximum) and what is left, the use of one Pod and of all the replicas over the window with the results
+ * the analysis stored over time on the same chart, the metrics the module has set up (container, JVM, throttling, OOM: only those), and the cluster it runs in.
+ * Everything is of the module chosen on the page; the AI analysis is the helper at the lower right of the page.
  */
 interface Props {
   detail: Api.Overprovision.Detail | null;
@@ -26,16 +27,11 @@ interface Props {
   prom: Api.Overprovision.PromStats | null;
   promLoading: boolean;
   promError: string;
-  ai: {
-    running: boolean;
-    live: string;
-    error: string;
-    text: string;
-    at: string;
-    window: string;
-  };
+  /** the Grafana link of the cluster, when there is one */
+  grafanaCluster?: string | null;
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { grafanaCluster: null });
+const emit = defineEmits<{ retryProm: [] }>();
 const { t } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
 
@@ -106,6 +102,33 @@ const configTiles = computed<Tile[]>(() => {
   return tiles;
 });
 
+/** the quantiles of every resource, of one Pod and of all the replicas: the P90, the P95 and the P99 are always there */
+interface QRow {
+  key: string;
+  label: string;
+  resource: string;
+  u: { p50: number; p90: number; p95: number; p99: number; max: number; points?: number };
+}
+const promMetric = (kind: string) => props.prom?.metrics.find(m => m.kind === kind && !m.error) ?? null;
+/** the quantiles Prometheus answered for the CPU or the memory of the module, or null */
+function promQuantiles(resource: string) {
+  const m = promMetric(resource);
+  return m && (m.pod || m.total) ? { pod: m.pod, total: m.total } : null;
+}
+const quantilesFromPrometheus = computed(() => results.value.some(item => promQuantiles(item.resource)));
+const quantileRows = computed<QRow[]>(() =>
+  results.value.flatMap(({ resource, result: r }) => {
+    const live = promQuantiles(resource);
+    const rows: QRow[] = [];
+    const pod = live ? live.pod : r.usage;
+    const total = live ? live.total : r.total;
+    if (pod) rows.push({ key: `${resource}-pod`, label: `${resName(resource)} · ${p('podUsage')}`, resource, u: pod });
+    if (total)
+      rows.push({ key: `${resource}-all`, label: `${resName(resource)} · ${p('totalUsage')}`, resource, u: total });
+    return rows;
+  })
+);
+
 /** what is used, what is left of the request, how much of it is used, and what the use supports */
 const useTiles = computed<Tile[]>(() => {
   const tiles: Tile[] = [];
@@ -150,41 +173,31 @@ const useTiles = computed<Tile[]>(() => {
   return tiles;
 });
 
-/** the quantiles of every resource, of one Pod and of all the replicas: the P90, the P95 and the P99 are always there */
-interface QRow {
-  key: string;
-  label: string;
-  resource: string;
-  u: { p50: number; p90: number; p95: number; p99: number; max: number; points?: number };
-}
-const promMetric = (kind: string) => props.prom?.metrics.find(m => m.kind === kind && !m.error) ?? null;
-/** the quantiles Prometheus answered for the CPU or the memory of the module, or null */
-function promQuantiles(resource: string) {
-  const m = promMetric(resource);
-  return m && (m.pod || m.total) ? { pod: m.pod, total: m.total } : null;
-}
-const quantilesFromPrometheus = computed(() => results.value.some(item => promQuantiles(item.resource)));
-const quantileRows = computed<QRow[]>(() =>
-  results.value.flatMap(({ resource, result: r }) => {
-    const live = promQuantiles(resource);
-    const rows: QRow[] = [];
-    const pod = live ? live.pod : r.usage;
-    const total = live ? live.total : r.total;
-    if (pod) rows.push({ key: `${resource}-pod`, label: `${resName(resource)} · ${p('podUsage')}`, resource, u: pod });
-    if (total)
-      rows.push({ key: `${resource}-all`, label: `${resName(resource)} · ${p('totalUsage')}`, resource, u: total });
-    return rows;
-  })
-);
-/** the P90, P95 and P99 of one Pod the chart draws: Prometheus' when it answered, the stored samples' when not */
-function chartQuantiles(resource: string, r: Api.Overprovision.Result) {
-  const live = promQuantiles(resource);
-  const q = live?.pod ?? r.usage;
-  return { p90: q.p90, p95: q.p95, p99: q.p99 };
-}
-const promQueries = computed(() => (props.prom?.metrics ?? []).filter(m => m.query));
+// ---- the charts: the quantiles and the limits of one Pod and of all the replicas, drawn with the use
 
-const chartOf = (resource: string) => props.detail?.charts?.find(chart => chart.resource === resource) ?? null;
+const podLimits = computed(() => ({
+  cpu: win.value?.cpu?.limit ?? 0,
+  memory: win.value?.memory?.limit ?? 0
+}));
+/** the P90, P95 and P99 of one Pod: Prometheus' when it answered, the stored samples' when not */
+const podQuantiles = computed(() => {
+  const out: Partial<Record<Res, { p90: number; p95: number; p99: number }>> = {};
+  for (const { resource, result: r } of results.value) {
+    const q = promQuantiles(resource)?.pod ?? r.usage;
+    out[resource] = { p90: q.p90, p95: q.p95, p99: q.p99 };
+  }
+  return out;
+});
+/** the same of all the replicas together */
+const totalQuantiles = computed(() => {
+  const out: Partial<Record<Res, { p90: number; p95: number; p99: number }>> = {};
+  for (const { resource, result: r } of results.value) {
+    const q = promQuantiles(resource)?.total ?? r.total;
+    if (q) out[resource] = { p90: q.p90, p95: q.p95, p99: q.p99 };
+  }
+  return out;
+});
+const hasTotal = computed(() => (props.detail?.charts ?? []).some(chart => (chart.total ?? []).length > 0));
 
 // ---- the other metrics the module has set up
 
@@ -199,8 +212,11 @@ const metricItems = computed(() =>
       : { ...m, live: false };
   })
 );
+/** the OOM metrics are the cards at the top; the other groups are listed below */
 const metricGroups = computed(() =>
-  GROUPS.map(group => ({ group, items: metricItems.value.filter(m => m.group === group) })).filter(g => g.items.length)
+  GROUPS.filter(group => group !== 'oom')
+    .map(group => ({ group, items: metricItems.value.filter(m => m.group === group) }))
+    .filter(g => g.items.length)
 );
 function metricValue(m: Api.Overprovision.MetricStat, value: number) {
   switch (m.unit.toLowerCase()) {
@@ -215,92 +231,19 @@ function metricValue(m: Api.Overprovision.MetricStat, value: number) {
   }
 }
 
-// ---- the history of the analysis
+// ---- the PromQL that was sent, in the form of Prometheus' own expression browser
 
-const historyResource = ref<Res>('cpu');
-watch(
-  results,
-  list => {
-    if (list.length && !list.some(item => item.resource === historyResource.value))
-      historyResource.value = list[0].resource;
-  },
-  { immediate: true }
+const promItems = computed<PromqlItem[]>(() =>
+  (props.prom?.metrics ?? [])
+    .filter(m => m.query)
+    .map(m => ({ name: m.name, query: m.example || m.query, error: m.error }))
 );
-
-// ---- the cluster the module runs in, read live and never needed for the rest of the page
-
-const cluster = ref<Api.Overprovision.Cluster | null>(null);
-const clusterError = ref('');
-const clusterLoading = ref(false);
-let clusterFor = 0;
-async function loadCluster(moduleId: number) {
-  if (clusterFor === moduleId) return;
-  clusterFor = moduleId;
-  cluster.value = null;
-  clusterError.value = '';
-  clusterLoading.value = true;
-  const { data, error } = await fetchGetOverprovisionCluster(moduleId);
-  if (clusterFor !== moduleId) return;
-  clusterLoading.value = false;
-  if (data) cluster.value = data;
-  else {
-    const response = (error as any)?.response;
-    const reason = response?.data?.msg || response?.data?.message || '';
-    clusterError.value = reason ? `${p('clusterUnavailable')}: ${reason}` : p('clusterUnavailable');
-  }
-}
-watch(
-  () => props.detail?.module_id,
-  id => {
-    if (id) loadCluster(id);
-  },
-  { immediate: true }
-);
-const clusterTiles = computed<Tile[]>(() => {
-  const c = cluster.value;
-  if (!c) return [];
-  const rate = (requested: number, allocatable: number) =>
-    allocatable > 0 ? formatPercent(requested / allocatable, 0) : '-';
-  return [
-    { key: 'nodes', label: p('clusterNodes'), value: String(c.nodes), sub: `${c.pods} Pods` },
-    { key: 'allocCpu', label: p('clusterAllocCpu'), help: p('clusterHelp'), value: formatCores(c.allocatable_cpu, 1) },
-    {
-      key: 'reqCpu',
-      label: p('clusterRequestedCpu'),
-      value: formatCores(c.requested_cpu, 1),
-      sub: rate(c.requested_cpu, c.allocatable_cpu)
-    },
-    {
-      key: 'usedCpu',
-      label: p('clusterUsedCpu'),
-      value: c.used_cpu > 0 ? formatCores(c.used_cpu, 1) : '-',
-      sub: c.used_cpu > 0 ? rate(c.used_cpu, c.allocatable_cpu) : undefined
-    },
-    { key: 'allocMem', label: p('clusterAllocMem'), value: formatBytes(c.allocatable_memory, 1) },
-    {
-      key: 'reqMem',
-      label: p('clusterRequestedMem'),
-      value: formatBytes(c.requested_memory, 1),
-      sub: rate(c.requested_memory, c.allocatable_memory)
-    },
-    {
-      key: 'usedMem',
-      label: p('clusterUsedMem'),
-      value: c.used_memory > 0 ? formatBytes(c.used_memory, 1) : '-',
-      sub: c.used_memory > 0 ? rate(c.used_memory, c.allocatable_memory) : undefined
-    }
-  ];
-});
-
-// ---- the answer of the AI analysis
-
-const aiHtml = computed(() => renderMiniMarkdown(props.ai.running ? props.ai.live : props.ai.text));
-const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Boolean(props.ai.error));
+const skipped = computed(() => props.prom?.skipped ?? 0);
 </script>
 
 <template>
   <NSpin :show="loading">
-    <div v-if="detail" class="flex-col gap-10px pb-8px">
+    <div v-if="detail" class="flex-col gap-12px pb-8px">
       <div class="flex flex-wrap items-center gap-x-12px gap-y-4px text-13px">
         <span class="text-16px font-medium">{{ detail.name }}</span>
         <span class="opacity-70">{{ detail.namespace }}/{{ detail.workload_kind }}/{{ detail.workload }}</span>
@@ -317,15 +260,10 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
         </template>
       </div>
 
-      <div v-if="showAi" class="rounded-8px bg-[rgba(32,128,240,0.06)] px-12px py-8px">
-        <div class="mb-4px flex items-center gap-8px text-13px font-medium">
-          {{ p('aiTitle') }}
-          <span v-if="ai.running" class="font-normal opacity-70">{{ p('aiRunning') }}</span>
-          <span v-else-if="ai.at" class="font-normal opacity-70">{{ formatDateTime(ai.at) }} · {{ ai.window }}</span>
-        </div>
-        <div v-if="ai.error" class="text-13px text-[#d03050]">{{ ai.error }}</div>
-        <!-- eslint-disable-next-line vue/no-v-html -- escaped first: see utils/mini-markdown -->
-        <div v-else class="ai-answer text-13px leading-22px" v-html="aiHtml"></div>
+      <!-- OOM: at the top of the dashboard -->
+      <div class="flex-col gap-6px">
+        <HelpLabel :label="p('oomTitle')" :help="p('oomHelp')" class="text-13px font-medium" />
+        <OverprovisionOomCards :detail="detail" :metrics="metricItems" />
       </div>
 
       <div v-if="!results.length" class="text-13px opacity-70">{{ p('noData') }}</div>
@@ -351,14 +289,20 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
 
       <div v-if="quantileRows.length" class="flex flex-wrap items-center gap-8px text-12px">
         <NTag size="tiny" :bordered="false" :type="quantilesFromPrometheus ? 'success' : 'warning'">
-          {{ quantilesFromPrometheus ? p('promSource') : p('promSourceStored') }}
+          {{
+            quantilesFromPrometheus
+              ? `Prometheus${prom?.datasource?.name ? ` · ${prom.datasource.name}` : ''}`
+              : p('promSourceStored')
+          }}
         </NTag>
         <HelpLabel :label="p('promQueries')" :help="p('promHelp')" class="opacity-70" />
         <span v-if="promLoading" class="opacity-70">{{ p('promLoading') }}</span>
         <span v-else-if="promError" class="opacity-70">{{ p('promFailed') }}: {{ promError }}</span>
-        <span v-else-if="prom" class="opacity-70">
-          {{ prom.datasource.name }} · {{ prom.window }} / {{ prom.step }}
-        </span>
+        <span v-else-if="prom" class="opacity-70">{{ prom.window }} / {{ prom.step }}</span>
+        <template v-if="skipped && !promLoading">
+          <NTag size="tiny" :bordered="false" type="warning">{{ p('promPartial', { n: skipped }) }}</NTag>
+          <NButton size="tiny" quaternary @click="emit('retryProm')">{{ p('retry') }}</NButton>
+        </template>
       </div>
       <NTable v-if="quantileRows.length" size="small" :bordered="true" :single-line="false" class="quantiles text-12px">
         <thead>
@@ -385,31 +329,33 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
         </tbody>
       </NTable>
 
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(380px,1fr))] gap-12px">
-        <div v-for="item in results" :key="item.resource">
-          <HelpLabel
-            :label="`${resName(item.resource)} · ${p('podUsage')}`"
-            :help="p('maHelp')"
-            class="text-12px opacity-80"
-          />
-          <OverprovisionChart
-            :chart="chartOf(item.resource)"
-            :height="170"
-            :limit="item.result.limit"
-            :quantiles="chartQuantiles(item.resource, item.result)"
-          />
-        </div>
+      <!-- the use of one Pod, CPU and memory in one chart, with the results the analysis stored over time -->
+      <div v-if="results.length" class="flex-col gap-4px">
+        <HelpLabel :label="p('chartPodTitle')" :help="p('chartPodHelp')" class="text-13px font-medium" />
+        <OverprovisionUsageChart
+          mode="pod"
+          :charts="detail.charts ?? []"
+          :history="detail.history"
+          :limits="podLimits"
+          :quantiles="podQuantiles"
+        />
+      </div>
+
+      <!-- the use of all the replicas together -->
+      <div v-if="results.length && hasTotal" class="flex-col gap-4px">
+        <HelpLabel :label="p('chartTotalTitle')" :help="p('chartTotalHelp')" class="text-13px font-medium" />
+        <OverprovisionUsageChart
+          mode="total"
+          :charts="detail.charts ?? []"
+          :history="detail.history"
+          :limits="podLimits"
+          :quantiles="totalQuantiles"
+        />
       </div>
 
       <NCollapse v-if="results.length" arrow-placement="right">
-        <NCollapseItem v-if="promQueries.length" :title="p('promQueries')" name="promql">
-          <div class="flex-col gap-8px text-12px">
-            <div v-for="m in promQueries" :key="m.key">
-              <div class="font-medium">{{ m.name }}</div>
-              <code class="break-all opacity-80">{{ m.example || m.query }}</code>
-              <div v-if="m.error" class="text-[#d03050]">{{ m.error }}</div>
-            </div>
-          </div>
+        <NCollapseItem v-if="promItems.length" :title="p('promQueries')" name="promql">
+          <PromqlList :items="promItems" />
         </NCollapseItem>
         <NCollapseItem :title="p('reasons')" name="reasons">
           <div class="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-12px text-12px">
@@ -425,9 +371,6 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
                 <span class="opacity-70">{{ p('configCoverage') }} {{ formatPercent(item.result.coverage, 0) }}</span>
                 <span v-if="item.resource === 'cpu' && item.result.throttle > 0" class="opacity-70">
                   {{ p('throttle') }} {{ formatPercent(item.result.throttle, 1) }}
-                </span>
-                <span v-if="item.resource === 'memory' && item.result.oom_kills > 0" class="opacity-70">
-                  {{ p('oomKills') }} {{ formatDecimal(item.result.oom_kills, 0) }}
                 </span>
               </div>
               <ul class="m-0 pl-18px leading-20px">
@@ -462,58 +405,7 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
         </ul>
       </div>
 
-      <div v-if="results.length" class="flex-col gap-4px">
-        <div class="flex flex-wrap items-center gap-8px">
-          <HelpLabel :label="p('sectionHistory')" :help="p('historyHelp')" class="text-13px font-medium" />
-          <NRadioGroup v-model:value="historyResource" size="small">
-            <NRadioButton v-for="item in results" :key="item.resource" :value="item.resource">
-              {{ resName(item.resource) }}
-            </NRadioButton>
-          </NRadioGroup>
-        </div>
-        <OverprovisionHistoryChart :rows="detail.history" :resource="historyResource" :height="170" />
-      </div>
-
-      <div class="flex-col gap-4px">
-        <div class="flex items-center gap-8px text-13px font-medium">
-          <HelpLabel :label="p('sectionCluster')" :help="p('clusterHelp')" />
-          <NButton
-            v-if="clusterError"
-            size="tiny"
-            quaternary
-            @click="
-              () => {
-                clusterFor = 0;
-                loadCluster(detail!.module_id);
-              }
-            "
-          >
-            {{ p('retry') }}
-          </NButton>
-        </div>
-        <div v-if="clusterTiles.length" class="grid grid-cols-[repeat(auto-fill,minmax(138px,1fr))] gap-8px">
-          <div v-for="tile in clusterTiles" :key="tile.key" class="tile">
-            <div class="tile-label">{{ tile.label }}</div>
-            <div class="tile-value">{{ tile.value }}</div>
-            <div v-if="tile.sub" class="tile-sub">{{ tile.sub }}</div>
-          </div>
-        </div>
-        <div v-else-if="clusterLoading" class="text-12px opacity-70">…</div>
-        <div v-else-if="clusterError" class="text-12px opacity-70">{{ clusterError }}</div>
-        <NCollapse v-if="cluster?.queries.length" arrow-placement="right">
-          <NCollapseItem :title="p('clusterQueries')" name="clusterql">
-            <div class="flex-col gap-4px text-12px">
-              <div v-for="q in cluster.queries" :key="q.name">
-                <span class="opacity-70">{{ q.name }}</span>
-                <code class="ml-6px break-all opacity-80">{{ q.query }}</code>
-              </div>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
-        <ul v-if="cluster?.notes.length" class="m-0 pl-18px text-12px leading-20px opacity-70">
-          <li v-for="note in cluster.notes" :key="note">{{ note }}</li>
-        </ul>
-      </div>
+      <OverprovisionClusterCard :module-id="detail.module_id" :grafana-url="grafanaCluster" />
     </div>
   </NSpin>
 </template>
@@ -551,10 +443,5 @@ const showAi = computed(() => props.ai.running || Boolean(props.ai.text) || Bool
 .quantiles :deep(th.key),
 .quantiles :deep(td.key) {
   font-weight: 600;
-}
-.ai-answer :deep(p),
-.ai-answer :deep(ul),
-.ai-answer :deep(ol) {
-  margin: 4px 0;
 }
 </style>

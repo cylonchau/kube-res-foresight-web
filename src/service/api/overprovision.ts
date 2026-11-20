@@ -23,7 +23,7 @@ export function fetchGetModuleOverprovision(id: number, params: { window?: strin
 }
 
 /** what the cluster of the data source of a module has to give and has given out (nodes, allocatable, the requests of the Running Pods), read live */
-export function fetchGetOverprovisionCluster(moduleId: number) {
+export function fetchGetOverprovisionCluster(moduleId?: number) {
   // a cluster that cannot be read is told on the page, in its place, and not by a message over everything
   return request<Api.Overprovision.Cluster>({
     url: `${base}/overprovision/cluster`,
@@ -34,7 +34,10 @@ export function fetchGetOverprovisionCluster(moduleId: number) {
 }
 
 /** the P50, P90, P95, P99 and the maximum of the metrics of a module, asked of the Prometheus data source now (quantile_over_time over the PromQL of its mappings) */
-export function fetchGetModulePrometheus(id: number, params: { window?: string; from?: string; to?: string }) {
+export function fetchGetModulePrometheus(
+  id: number,
+  params: { window?: string; from?: string; to?: string; scope?: 'core' | 'more' }
+) {
   return request<Api.Overprovision.PromStats>({
     url: `${base}/modules/${id}/overprovision/prometheus`,
     method: 'get',

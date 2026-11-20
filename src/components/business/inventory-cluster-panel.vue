@@ -57,7 +57,8 @@ async function load(force = false) {
   usage.value = null;
   usageError.value = '';
   const { data, error } = await fetchGetInventoryNodeUsage();
-  if (data) usage.value = data;
+  if (data?.reason) usageError.value = data.message || p('invUsageFailed');
+  else if (data) usage.value = data;
   else {
     const response = (error as any)?.response;
     usageError.value = response?.data?.msg || response?.data?.message || (error as any)?.message || p('invUsageFailed');

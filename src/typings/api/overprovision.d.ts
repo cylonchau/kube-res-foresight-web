@@ -136,6 +136,11 @@ declare namespace Api {
       ma_labels: string[];
       request: number;
       suggested: number;
+      /** the use of all the replicas together over the window (the sum over the Pods) */
+      total_ts: number[];
+      total: number[];
+      /** the replicas now: the request and the suggestion of one Pod times this are drawn against the total */
+      replicas: number;
     }
 
     interface JVM {
@@ -193,11 +198,29 @@ declare namespace Api {
       max: number;
     }
 
+    /** where the text of a query of the cluster comes from: a metric mapping of the data source, the system parameter, or the default */
+    type QuerySource = 'mapping' | 'parameter' | 'default';
+
+    /** a query sent for the cluster or the nodes, with what it answered */
+    interface ClusterQuery {
+      name: string;
+      title: string;
+      /** the metric kind of the metric mapping that replaces it */
+      kind: string;
+      query: string;
+      source: QuerySource;
+      mapping?: string;
+      mapping_id?: number;
+      value?: number;
+      error?: string;
+    }
+
     /** what the cluster has to give, has given out and uses, asked of the Prometheus data source now */
     interface Cluster {
       datasource: { id: number; name: string };
       at: string;
       nodes: number;
+      nodes_ready: number;
       pods: number;
       allocatable_cpu: number;
       allocatable_memory: number;
@@ -206,8 +229,15 @@ declare namespace Api {
       used_cpu: number;
       used_memory: number;
       /** the PromQL that was sent */
-      queries: Array<{ name: string; query: string }>;
+      queries: ClusterQuery[];
       notes: string[];
+      /** some figure has a metric mapping in the data source */
+      configured: boolean;
+      /** the metric kinds with no mapping in the data source */
+      missing: string[];
+      /** set when the cluster could not be read at all: no_datasource or unreachable */
+      reason?: 'no_datasource' | 'unreachable';
+      message?: string;
     }
 
     /** the figures of one query set */
@@ -237,6 +267,8 @@ declare namespace Api {
       /** the whole query of the P95 as it was sent */
       example?: string;
       error?: string;
+      /** the time limit of the request was over before its figures came */
+      skipped?: boolean;
     }
 
     interface PromStats {
@@ -246,6 +278,9 @@ declare namespace Api {
       window: string;
       step: string;
       metrics: PromMetric[];
+      /** some metrics were not answered in the time the request had; the others are complete */
+      partial: boolean;
+      skipped: number;
     }
 
     interface RunResult {
