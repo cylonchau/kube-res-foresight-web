@@ -13,20 +13,20 @@ import { formatBytes, formatCores, formatPercent } from '@/utils/format';
 defineOptions({ name: 'OverprovisionClusterCard' });
 
 /**
- * The cluster, as the Prometheus data source answers for it now: the nodes (ready and all), the Pods, and for the CPU and the memory what the cluster has to
- * give, what has been requested of it and what it uses, each against what it has to give. The figures are the answers to the metric mappings of the cluster in
- * the metric templates (the cluster_* kinds); a figure with no mapping is asked with the system parameter or the default query, and the card says so. When
+ * One cluster, as its Prometheus data source answers for it now: the nodes (ready and all), the Pods, and for the CPU and the memory what the cluster has to
+ * give, what has been requested of it and what it uses, each against what it has to give. The figures are the answers to the cluster metric templates of the
+ * data source (the metric type "cluster", kinds cluster_*); a figure whose template is not declared is not asked, and the card says which to declare. When
  * the cluster cannot be read at all the card says why and where to set it up, instead of a bare failure.
  */
 interface Props {
-  /** the module whose data source is the cluster's when none is set; 0 for the one the platform picks */
-  moduleId?: number;
+  /** the data source of the cluster; 0 for the one the platform picks */
+  datasourceId?: number;
   /** the Grafana link of the cluster, when there is one */
   grafanaUrl?: string | null;
   /** the section is open when the page shows it first (the overview); the module page leaves it closed until it is opened */
   open?: boolean;
 }
-const props = withDefaults(defineProps<Props>(), { moduleId: 0, grafanaUrl: null, open: false });
+const props = withDefaults(defineProps<Props>(), { datasourceId: 0, grafanaUrl: null, open: false });
 const { t } = useI18n();
 const router = useRouter();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
@@ -38,11 +38,11 @@ const opened = ref<string[]>(props.open ? ['cluster'] : []);
 let loadedFor = -1;
 
 async function load(force = false) {
-  if (!force && loadedFor === props.moduleId) return;
-  loadedFor = props.moduleId;
+  if (!force && loadedFor === props.datasourceId) return;
+  loadedFor = props.datasourceId;
   loading.value = true;
   failure.value = '';
-  const { data, error } = await fetchGetOverprovisionCluster(props.moduleId || undefined);
+  const { data, error } = await fetchGetOverprovisionCluster(props.datasourceId || undefined);
   loading.value = false;
   if (data) cluster.value = data;
   else {
@@ -55,7 +55,7 @@ async function load(force = false) {
 
 const isOpen = computed(() => opened.value.includes('cluster'));
 watch(
-  [isOpen, () => props.moduleId],
+  [isOpen, () => props.datasourceId],
   ([open]) => {
     if (open) load();
   },
@@ -64,7 +64,7 @@ watch(
 
 /** a reason the cluster is not read: the message of the platform, and the way to the page where it is set up */
 const unreadable = computed(() => cluster.value?.reason || failure.value);
-const goSetup = () => router.push('/datasource/metric-mappings');
+const goSetup = () => router.push({ path: '/datasource/metric-mappings' });
 
 interface Meter {
   key: string;

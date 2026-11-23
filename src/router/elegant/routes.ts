@@ -304,6 +304,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'forecast-results_cluster-dashboard',
+        path: '/forecast-results/cluster-dashboard',
+        component: 'view.forecast-results_cluster-dashboard',
+        meta: {
+          title: 'forecast-results_cluster-dashboard',
+          i18nKey: 'route.forecast-results_cluster-dashboard'
+        }
+      },
+      {
         name: 'forecast-results_effect',
         path: '/forecast-results/effect',
         component: 'view.forecast-results_effect',
@@ -346,6 +355,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'forecast-results_overprovision',
           i18nKey: 'route.forecast-results_overprovision'
+        }
+      },
+      {
+        name: 'forecast-results_overprovision-detail',
+        path: '/forecast-results/overprovision-detail',
+        component: 'view.forecast-results_overprovision-detail',
+        meta: {
+          title: 'forecast-results_overprovision-detail',
+          i18nKey: 'route.forecast-results_overprovision-detail'
         }
       }
     ]

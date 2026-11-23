@@ -4,14 +4,15 @@ import { NButton, NSpin, NTag, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
+import { hasComparisonTable } from '@/utils/overprovision-ai';
 import { looksLikeHtml, sanitizeAnswerHtml } from '@/utils/safe-html';
 
 defineOptions({ name: 'OverprovisionAiAssistant' });
 
 /**
  * The AI analysis of the resource dashboard as a helper at the lower right, like a support chat: a round button, and over it a window that opens over the
- * page and closes again, without taking any room of the dashboard. The page shows it for a module only, and nothing is asked until the user presses the
- * button (or "analyse" in the window): the analysis never starts by itself. It runs in the background of the page: close the window and the button tells
+ * page and closes again, without taking any room of the dashboard. The page shows it for one module only, and nothing is asked until the user opens it and
+ * presses "analyse" in the window: the analysis never starts by itself, not when the page opens and not when the button is pressed. It runs in the background of the page: close the window and the button tells
  * when the answer is there (a dot), open it again and the answer is read. The window can be made larger and put back. The answer is HTML (tables), cleaned
  * of everything but tables, lists, emphasis and the level colours before it is shown.
  */
@@ -78,12 +79,15 @@ const disabledReason = computed(() => {
   return '';
 });
 
-/** the button of the page: opens the window, and when there is no answer yet it is the user's request to make one */
+/** the button of the page only opens and closes the window: the analysis starts when the user presses "analyse" in it, never by itself */
 function pressButton() {
-  const opening = !open.value;
-  open.value = opening;
-  if (opening && !props.ai.running && !props.ai.text && !props.ai.error && !disabledReason.value) emit('analyze');
+  open.value = !open.value;
 }
+
+/** the answer has to hold the comparison of the four configurations; one that does not says so and can be asked again */
+const lacksComparison = computed(
+  () => !props.ai.running && Boolean(props.ai.text) && !props.ai.error && !hasComparisonTable(props.ai.text)
+);
 </script>
 
 <template>
@@ -121,6 +125,7 @@ function pressButton() {
             <div v-else-if="ai.at && !ai.error" class="mb-6px text-12px opacity-70">
               {{ formatDateTime(ai.at) }} · {{ ai.window }}
             </div>
+            <div v-if="lacksComparison" class="mb-6px text-12px text-[#c77d0a]">{{ p('aiNoComparison') }}</div>
             <div v-if="ai.error" class="text-13px text-[#d03050]">{{ ai.error }}</div>
             <!-- eslint-disable-next-line vue/no-v-html -- escaped first: see utils/mini-markdown -->
             <div v-else-if="ai.running || ai.text" class="ai-answer text-13px leading-22px" v-html="html"></div>

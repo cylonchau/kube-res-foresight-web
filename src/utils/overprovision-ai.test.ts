@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildAnalysisQuestion } from './overprovision-ai.ts';
+import { buildAnalysisQuestion, hasComparisonTable } from './overprovision-ai.ts';
 
 const GIB = 1024 ** 3;
 
@@ -74,7 +74,12 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
   const text = buildAnalysisQuestion(detail(), '7d', 'zh-CN');
   for (const q of ['P90', 'P95', 'P99']) assert.ok(text.includes(q), q);
   assert.ok(text.includes('shop-api'));
-  assert.ok(text.includes('不是实测'), 'a limit that is only the ratio of the module says so');
+  for (const row of ['CPU Requests', 'CPU Limits', 'Memory Requests', 'Memory Limits'])
+    assert.ok(text.includes(row), row);
+  assert.ok(
+    text.includes('当前配置与 AI 推荐配置对比'),
+    'the answer has to compare the current and the recommended configuration'
+  );
   assert.ok(text.includes('只读'), 'the question asks for an analysis and nothing else');
   assert.ok(
     text.includes('只输出 HTML') && text.includes('<td class="lv-warn">'),
@@ -88,7 +93,7 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
 test('the same question in English', () => {
   const text = buildAnalysisQuestion(detail(), '7d', 'en-US');
   assert.ok(text.includes('read-only'));
-  assert.ok(text.includes('not measured'));
+  assert.ok(text.includes('Current configuration vs AI recommended configuration'));
   assert.ok(!text.includes('只读'));
 });
 
@@ -100,4 +105,27 @@ test('a question never goes over what the assistant takes', () => {
     name: `metric_${i}_${'x'.repeat(30)}`
   }));
   assert.ok(buildAnalysisQuestion(d, '7d', 'zh-CN').length <= 3900);
+});
+
+test('a request or a limit Prometheus has no figure for is said so, not filled in from anywhere', () => {
+  const d = detail();
+  d.windows[0].cpu!.request = 0;
+  d.windows[0].cpu!.limit = 0;
+  const text = buildAnalysisQuestion(d, '7d', 'zh-CN');
+  assert.ok(text.includes('Requests Prometheus 无数据，Limits Prometheus 无数据'));
+});
+
+test('an answer without the four rows of the comparison is told from one with them', () => {
+  const rows = ['CPU Requests', 'CPU Limits', 'Memory Requests', 'Memory Limits']
+    .map(name => `<tr><td>${name}</td></tr>`)
+    .join('');
+  assert.equal(hasComparisonTable(`<table>${rows}</table>`), true);
+  assert.equal(
+    hasComparisonTable('<table><tr><td>CPU Requests</td></tr><tr><td>Memory Limits</td></tr></table>'),
+    false
+  );
+  assert.equal(
+    hasComparisonTable('<td>cpu&nbsp;requests</td><td>CPU limits</td><td>Memory   Requests</td><td>memory limits</td>'),
+    true
+  );
 });

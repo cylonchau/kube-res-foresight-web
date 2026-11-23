@@ -138,7 +138,7 @@ declare namespace Api {
     }
 
     /** where the text of a query of the cluster comes from: a metric mapping of the data source, the system parameter, or the default */
-    type QuerySource = 'mapping' | 'parameter' | 'default';
+    type QuerySource = 'mapping' | 'parameter' | 'default' | 'none';
 
     /** a query sent for the cluster or the nodes, with what it answered */
     interface ClusterQuery {
@@ -177,6 +177,41 @@ declare namespace Api {
       /** set when the cluster could not be read at all: no_datasource or unreachable */
       reason?: 'no_datasource' | 'unreachable';
       message?: string;
+    }
+
+    /** one managed cluster: a Prometheus data source that has cluster metric templates declared */
+    interface ClusterEntry {
+      datasource_id: number;
+      name: string;
+      enabled: boolean;
+      /** how many of the cluster metric kinds have a template on the data source, of how many there are */
+      declared: number;
+      total: number;
+      missing: string[];
+      /** the data source the system parameter cluster.datasource_id names */
+      primary: boolean;
+    }
+
+    interface ClusterList {
+      count: number;
+      clusters: ClusterEntry[];
+    }
+
+    /** the requests and limits of one Pod of a module (CPU in cores, memory in bytes), as Prometheus answered; null where it did not, and errors says why */
+    interface ModuleResources {
+      module_id: number;
+      cpu_request: number | null;
+      cpu_limit: number | null;
+      memory_request: number | null;
+      memory_limit: number | null;
+      errors: Record<string, string>;
+    }
+
+    interface ResourceList {
+      at: string;
+      rows: ModuleResources[];
+      partial: boolean;
+      skipped: number;
     }
   }
 }

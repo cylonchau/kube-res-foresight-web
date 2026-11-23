@@ -73,6 +73,13 @@ const oomKills = computed(() => {
 
 // ---- the card wall
 
+/** why a metric of the module has no figure: it is not set up on the module, or its query answered nothing */
+function whyMissing(kind: string) {
+  const query = props.detail?.queries.find(item => item.kind === kind);
+  if (!query) return p('metricNotSetUp', { kind });
+  return query.error || undefined;
+}
+
 /** the level of a resource's verdict: what the platform says of the request against the use */
 function statusLevel(result: Api.Overprovision.Result): WallCard['level'] {
   if (result.status === 'under' || result.risk === 'high') return 'danger';
@@ -85,24 +92,25 @@ const wall = computed<WallCard[]>(() => {
   const d = props.detail;
   if (!d) return [];
   const cards: WallCard[] = [];
+  // the requests and the limits are the answers of Prometheus to the metrics k8s_*_requests and k8s_*_limits of the module: with no such metric there is
+  // no figure, and the card says which metric to add
   const request = (resource: Res) => {
     const r = win.value?.[resource];
-    return r && r.request > 0 ? fmt(resource, r.request * times.value) : '-';
+    return r && r.request > 0
+      ? { value: fmt(resource, r.request * times.value), sub: p('fromPrometheus') }
+      : { value: '-', sub: whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests') };
   };
   const limit = (resource: Res) => {
     const r = win.value?.[resource];
-    if (!r || !(r.limit > 0)) return { value: p('limitUnknown'), sub: undefined };
-    return {
-      value: fmt(resource, r.limit * times.value),
-      sub:
-        r.limit_from === 'module' ? p('limitFromModule') : r.limit_from === 'metric' ? p('limitFromMetric') : undefined
-    };
+    if (!r || !(r.limit > 0))
+      return { value: p('limitUnknown'), sub: whyMissing(resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits') };
+    return { value: fmt(resource, r.limit * times.value), sub: p('fromPrometheus') };
   };
   cards.push({
     key: 'cpuReq',
     label: p('cpuRequests'),
     help: p('requestsHelp'),
-    value: request('cpu'),
+    ...request('cpu'),
     level: 'info'
   });
   cards.push({
@@ -116,7 +124,7 @@ const wall = computed<WallCard[]>(() => {
     key: 'memReq',
     label: p('memRequests'),
     help: p('requestsHelp'),
-    value: request('memory'),
+    ...request('memory'),
     level: 'info'
   });
   cards.push({
@@ -179,6 +187,9 @@ interface QRow {
   resource: string;
   u: Api.Overprovision.Usage;
   expected: number;
+  /** the request and the limit of what the row is about (one Pod, or all the replicas), from Prometheus; 0 when there is none */
+  request: number;
+  limit: number;
 }
 const quantileRows = computed<QRow[]>(() =>
   results.value.flatMap(({ resource, result: r }) => {
@@ -188,7 +199,9 @@ const quantileRows = computed<QRow[]>(() =>
       label: `${resName(resource)} · ${p('podUsage')}`,
       resource,
       u: r.usage,
-      expected: r.expected_points
+      expected: r.expected_points,
+      request: r.request,
+      limit: r.limit
     });
     if (r.total)
       rows.push({
@@ -196,7 +209,9 @@ const quantileRows = computed<QRow[]>(() =>
         label: `${resName(resource)} · ${p('totalUsage')}`,
         resource,
         u: r.total,
-        expected: r.expected_points
+        expected: r.expected_points,
+        request: r.request * Math.max(props.detail?.replicas ?? 1, 1),
+        limit: r.limit * Math.max(props.detail?.replicas ?? 1, 1)
       });
     return rows;
   })
@@ -317,6 +332,8 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
         <thead>
           <tr>
             <th></th>
+            <th><HelpLabel label="Requests" :help="p('requestsHelp')" /></th>
+            <th><HelpLabel label="Limits" :help="p('limitsHelp')" /></th>
             <th><HelpLabel label="P50" :help="p('statP50')" /></th>
             <th class="key"><HelpLabel label="P90" :help="p('statP90')" /></th>
             <th class="key"><HelpLabel label="P95" :help="p('statP95')" /></th>
@@ -328,6 +345,24 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
         <tbody>
           <tr v-for="row in quantileRows" :key="row.key">
             <td>{{ row.label }}</td>
+            <td
+              :title="
+                row.request > 0
+                  ? p('fromPrometheus')
+                  : whyMissing(row.resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests')
+              "
+            >
+              {{ row.request > 0 ? fmt(row.resource, row.request) : '-' }}
+            </td>
+            <td
+              :title="
+                row.limit > 0
+                  ? p('fromPrometheus')
+                  : whyMissing(row.resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits')
+              "
+            >
+              {{ row.limit > 0 ? fmt(row.resource, row.limit) : '-' }}
+            </td>
             <td>{{ fmt(row.resource, row.u.p50) }}</td>
             <td class="key">{{ fmt(row.resource, row.u.p90) }}</td>
             <td class="key">{{ fmt(row.resource, row.u.p95) }}</td>

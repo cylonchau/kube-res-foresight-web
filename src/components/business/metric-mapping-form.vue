@@ -52,6 +52,7 @@ const sample = reactive<Record<'namespace' | 'workload' | 'container' | 'service
 const form = reactive({
   datasource_id: null as number | null,
   name: '',
+  scope: 'module' as 'module' | 'cluster',
   metric: 'cpu',
   level: 'workload',
   unit: '',
@@ -68,15 +69,27 @@ const sampleVariables = computed(() =>
 );
 
 const datasourceOptions = computed(() => datasources.value.map(item => ({ label: item.name, value: item.id })));
+const scopeOptions = computed(() => [
+  { label: t('page.datasource.mappings.scope_module'), value: 'module' },
+  { label: t('page.datasource.mappings.scope_cluster'), value: 'cluster' }
+]);
+/** the metrics of the type chosen: a module metric and a cluster metric are never in one template */
 const metricOptions = computed(() =>
-  catalog.value.metrics.map(item => ({
-    label: `${t(`page.datasource.mappings.metric_${item.metric}`)} (${item.unit})`,
-    value: item.metric
-  }))
+  catalog.value.metrics
+    .filter(item => item.scope === form.scope)
+    .map(item => ({
+      label: `${t(`page.datasource.mappings.metric_${item.metric}`)} (${item.unit})`,
+      value: item.metric
+    }))
 );
+/** the levels of the type: a cluster metric is of the cluster or of its nodes, a module metric of anything but the nodes */
 const levelOptions = computed(() =>
-  catalog.value.levels.map(item => ({ label: t(`page.datasource.mappings.level_${item.level}`), value: item.level }))
+  catalog.value.levels
+    .filter(item => (form.scope === 'cluster' ? ['cluster', 'node'].includes(item.level) : item.level !== 'node'))
+    .map(item => ({ label: t(`page.datasource.mappings.level_${item.level}`), value: item.level }))
 );
+/** the level of a cluster metric follows from its kind: the nodes' kinds are of the node level */
+const levelOfKind = (metric: string) => (metric.startsWith('node_') ? 'node' : 'cluster');
 const kindUnit = computed(() => catalog.value.metrics.find(item => item.metric === form.metric)?.unit || '');
 const isCustom = computed(() => form.metric === 'custom');
 const presetOptions = computed(() => presets.value.map(item => ({ label: item.name.zh, value: item.id })));
@@ -103,6 +116,18 @@ async function loadPresets(metric: string) {
   presets.value = data?.list || [];
 }
 
+function pickMetric(metric: string) {
+  form.metric = metric;
+  if (form.scope === 'cluster') form.level = levelOfKind(metric);
+  else if (form.level === 'node' || form.level === 'cluster') form.level = 'workload';
+  loadPresets(metric);
+}
+function pickScope(scope: 'module' | 'cluster') {
+  form.scope = scope;
+  const first = catalog.value.metrics.find(item => item.scope === scope);
+  if (first) pickMetric(first.metric);
+}
+
 function applyPreset(id: string | null) {
   const preset = presets.value.find(item => item.id === id);
   pickedPreset.value = preset;
@@ -122,6 +147,7 @@ async function save() {
     const payload: Api.Datasource.MetricMappingPayload = {
       datasource_id: form.datasource_id,
       name: form.name.trim(),
+      scope: form.scope,
       metric: form.metric,
       level: form.level,
       query: form.query.trim(),
@@ -156,6 +182,7 @@ watch(show, async visible => {
   Object.assign(form, {
     datasource_id: row?.datasource_id ?? (datasources.value.length === 1 ? datasources.value[0].id : null),
     name: row?.name ?? '',
+    scope: row?.scope ?? 'module',
     metric: row?.metric ?? 'cpu',
     level: row?.level ?? 'workload',
     unit: row?.unit ?? '',
@@ -192,20 +219,26 @@ watch(show, async visible => {
         </NFormItem>
         <NFormItem>
           <template #label>
+            <HelpLabel :label="t('page.datasource.mappings.scope')" :help="t('page.formHelp.mappingScope')" />
+          </template>
+          <NSelect :value="form.scope" :disabled="Boolean(editing)" :options="scopeOptions" @update:value="pickScope" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
             <HelpLabel :label="t('page.datasource.mappings.metric')" :help="t('page.formHelp.mappingMetric')" />
           </template>
           <NSelect
-            v-model:value="form.metric"
+            :value="form.metric"
             :disabled="Boolean(editing)"
             :options="metricOptions"
-            @update:value="loadPresets"
+            @update:value="pickMetric"
           />
         </NFormItem>
         <NFormItem>
           <template #label>
             <HelpLabel :label="t('page.datasource.mappings.level')" :help="t('page.formHelp.mappingLevel')" />
           </template>
-          <NSelect v-model:value="form.level" :options="levelOptions" />
+          <NSelect v-model:value="form.level" :disabled="form.scope === 'cluster'" :options="levelOptions" />
         </NFormItem>
         <NFormItem>
           <template #label>

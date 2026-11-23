@@ -108,6 +108,8 @@ declare namespace Api {
       step_seconds: number;
       enabled: boolean;
       remark: string;
+      /** the type of the template: module (the dashboard of a module) or cluster (the cluster dashboard) */
+      scope: 'module' | 'cluster';
       /** the built-in preset the mapping was created from, empty for a hand-written one */
       preset_id: string;
     }
@@ -125,6 +127,7 @@ declare namespace Api {
       keyword?: string;
       datasource_id?: number;
       metric?: string;
+      scope?: 'module' | 'cluster';
       level?: string;
       enabled?: boolean;
     }
@@ -133,6 +136,7 @@ declare namespace Api {
       datasource_id?: number;
       name?: string;
       metric?: string;
+      scope?: 'module' | 'cluster';
       level?: string;
       query?: string;
       unit?: string;
@@ -142,7 +146,7 @@ declare namespace Api {
     }
 
     interface MetricCatalog {
-      metrics: Array<{ metric: string; unit: string }>;
+      metrics: Array<{ metric: string; unit: string; scope: 'module' | 'cluster' }>;
       levels: Array<{ level: string; required_variables: string[] }>;
       variables: string[];
       min_step_seconds: number;
