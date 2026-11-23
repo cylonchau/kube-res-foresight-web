@@ -557,9 +557,9 @@ const local = {
       openEffect: 'Effect report'
     },
     overprovision: {
-      listTitle: 'Workload resources',
+      listTitle: 'Modules',
       listHelp:
-        'One row per module: what a Pod requests against what it used in the window, and the request that use supports. Measured data only, no forecast and no money. Open the detail to see how each number was made.',
+        'Pick a module to open its resource dashboard: the requests, the use, the OOM count and every metric are read from Prometheus as they are now. No forecast takes part and no money is counted. Choose the namespace and then the instance, or press "Analyse" here.',
       window: 'Window',
       windowHelp:
         'The analysis uses the measured use of this last stretch of time. A short window is easily swayed by one peak or one lull and lowers the confidence by one level; 7 days or more is advised.',
@@ -725,8 +725,23 @@ const local = {
         'The request minus the use (P95): the part of the request that is not used. When the use is above the request it says so and the available is 0.',
       belowUse: 'request below the use',
       utilization: 'utilization',
-      utilizationHelp: 'The use (P95) over the request. Above 85% it is marked: little room is left for a peak.',
+      utilizationHelp:
+        'The use (P95) over the request. 85% and over is orange and 95% red: little room is left for a peak; under 30% is orange too: the request is too much.',
       points: 'Points',
+      oomCount: 'OOM count',
+      oomCountHelp:
+        'How many times a container was killed (OOMKilled) for running over its memory limit in the window, read from the OOM metric of the module in Prometheus. 0 means none happened.',
+      oomNoSource: 'The module has no OOM metric set up',
+      statP50: 'The median: half of the time the use is not above it.',
+      statP90: '90% of the time the use is not above it.',
+      statP95: '95% of the time the use is not above it: the request and the suggestion are made against this column.',
+      statP99: '99% of the time the use is not above it: close to the peak, to see whether the memory limit is enough.',
+      statMax: 'The largest use seen in the window.',
+      pointsHelp:
+        'Points = the samples this row is made of / the samples the window should have. The platform asks Prometheus for a range at a step of {step}, one point per step; a moment Prometheus has no data for has no point. The nearer the first number is to the second, the more complete the data; a large gap means the period has holes and the result is less trustworthy.',
+      queryPoints: 'step {step}, {n} points',
+      queriesFailed: '{n} metrics returned no data: see "Prometheus queries" for why.',
+      noModules: 'No module is enabled yet',
       group_container: 'Container metrics',
       group_jvm: 'JVM metrics',
       group_throttle: 'CPU throttling',
