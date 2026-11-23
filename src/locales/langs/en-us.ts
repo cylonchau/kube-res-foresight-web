@@ -3278,7 +3278,8 @@ const local = {
         rules:
           'The metrics of the calculation: each has a weight and a switch, and the algorithms read only these. A metric that is not added, or is disabled, takes no part in the module. Metrics that are only shown, the Requests and the Limits, are not set here but in the display metrics below.',
         looksDisplay:
-          '"{name}" looks like Requests / Limits: those are display metrics, and here they would be taken for a CPU / memory metric of the algorithms. Delete this row and bind it in the display metrics below.',
+          '"{name}" looks like Requests / Limits: those are display metrics, and here they would be taken for a CPU / memory metric of the algorithms. Move it to the display metrics below with the button (it takes effect when the module is saved).',
+        moveDisplay: 'Move to display metrics',
         displayEmpty: 'Not bound: the dashboard shows "-" for it',
         displayCol: 'Metric'
       }
