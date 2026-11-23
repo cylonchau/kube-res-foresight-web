@@ -388,6 +388,8 @@ const local = {
     'forecast-results_effect': 'Effect report',
     'forecast-results_leaderboard': 'Measured leaderboard',
     'forecast-results_overprovision': 'Resource dashboard',
+    'forecast-results_overprovision-detail': 'Module resource analysis',
+    'forecast-results_cluster-dashboard': 'Cluster dashboard',
     'forecast-actions': 'Recommendations and execution',
     'forecast-actions_recommendations': 'Resource recommendations',
     'forecast-actions_executions': 'Scaling records',
@@ -728,6 +730,31 @@ const local = {
       utilizationHelp:
         'The use (P95) over the request. 85% and over is orange and 95% red: little room is left for a peak; under 30% is orange too: the request is too much.',
       points: 'Points',
+      colCpuLimit: 'CPU limits',
+      colMemLimit: 'Memory limits',
+      resourcesFailed: 'Requests and limits could not be read',
+      noModuleChosen: 'No module is chosen: pick one in the module list of the resource dashboard.',
+      detailPageTitle: 'Module resource analysis',
+      backToList: 'Back to the module list',
+      clusterName: 'Cluster (data source)',
+      clusterPrimary: 'primary',
+      clusterShown: 'showing',
+      clusterDeclared: 'Cluster metrics declared',
+      clusterUndeclared: 'Not declared yet',
+      clusterView: 'View',
+      clusterCount: 'Clusters managed',
+      clusterCountHelp:
+        'How many clusters the platform manages: the Prometheus data sources that have cluster metrics declared in the metric templates, plus the one the system parameter cluster.datasource_id names. Each data source is one cluster.',
+      clusterShowing: 'Showing: {name}',
+      clusterNone: 'No cluster yet',
+      clusterNoneHint:
+        'Every figure of the cluster dashboard has to be declared in the Metric Templates: create a template with the metric type "cluster metric" on the Prometheus of the cluster. Presets create them in one click.',
+      clusterListTitle: 'Clusters',
+      clusterListHelp:
+        'One row per cluster: its data source, how many cluster metrics are declared, and which are not. A metric that is not declared is not asked and nothing else stands in for it. Pick a cluster to see its nodes, Pods, CPU and memory.',
+      fromPrometheus: 'asked of Prometheus',
+      metricNotSetUp:
+        'The module has no {kind} metric: add it to the metric sources of the module (a Prometheus query) to have the figure here.',
       oomCount: 'OOM count',
       oomCountHelp:
         'How many times a container was killed (OOMKilled) for running over its memory limit in the window, read from the OOM metric of the module in Prometheus. 0 means none happened.',
@@ -750,7 +777,7 @@ const local = {
       metricEmpty: 'set up, no data in the window',
       sectionCluster: 'Cluster',
       clusterHelp:
-        'The cluster of the data source (Prometheus) of this module: the nodes, what they can allocate in CPU and memory, the sum of what the Running Pods request, and what the containers use. Every figure is the answer of Prometheus now and is not stored; the queries that were sent are listed below, to be checked in Grafana. A figure it cannot answer comes with the reason.',
+        'This cluster (the Prometheus data source): the nodes, what they can allocate in CPU and memory, the sum of what the Running Pods request, and what the containers use. Every figure is the answer of Prometheus now and is not stored; the queries that were sent are listed below, to be checked in Grafana. A figure it cannot answer comes with the reason.',
       promSource: 'Source: Prometheus (asked now)',
       promSourceStored: 'Source: the samples the platform stored (Prometheus did not answer)',
       promHelp:
@@ -893,28 +920,31 @@ const local = {
       historyP95: 'Stored P95',
       promPartial: '{n} metrics did not finish in the time limit',
       clusterTitle: 'Cluster',
-      clusterNotMapped: 'not set up in the metric templates yet',
+      clusterNotMapped: 'some cluster metrics are not declared',
       clusterNoSource: 'No data source to ask',
       clusterGoSetup: 'Set up in Metric Templates',
       clusterRequested: 'Requested (promised)',
       clusterUsed: 'Used',
       clusterAllocatable: 'allocatable',
       clusterMissing:
-        '{n} cluster metrics are not set up in the metric templates; the query of the system parameter or the default is used:',
+        '{n} cluster metrics are not declared in the metric templates (metric type: cluster metric), so they are not asked:',
       reload: 'Reload',
       srcMapping: 'metric template: {name}',
       src_parameter: 'system parameter',
       src_default: 'default query',
+      src_none: 'not declared',
       aiRestore: 'Restore',
       aiExpand: 'Enlarge',
       aiCollapse: 'Collapse',
       aiEmpty:
-        'Pick an instance and press Start: the AI writes the analysis and advice from the figures on this page. It changes no configuration.',
+        'Press "Analyse": the AI writes the table of the current and the recommended configuration from the Prometheus figures on this page. Nothing is analysed until you press it, and no configuration is changed.',
+      aiNoComparison:
+        'This answer has no four-row table of the current and the recommended configuration (the Requests and Limits of CPU and memory): press "Analyse again".',
       aiPickModule: 'Pick an instance first',
       aiNoFigures: 'The data of the instance is still loading',
       aiAgain: 'Analyse again',
       clusterNoAnswer: 'The data source gave no figure for it; the query below says why',
-      aiStart: 'Start'
+      aiStart: 'Analyse'
     },
     diagnostics: {
       title: 'System diagnostics',
@@ -3306,6 +3336,9 @@ const local = {
           'Pick a template of the built-in mapping library that fits the metric and level: it fills in the PromQL and the step, and you can still edit them. Leave it empty to write the PromQL yourself.',
         templatePlaceholder: 'Pick a template to generate the PromQL, or write it yourself',
         datasource: 'Datasource',
+        scope: 'Metric type',
+        scope_module: 'Module metric',
+        scope_cluster: 'Cluster metric',
         metric: 'Metric',
         level: 'Aggregation level',
         unit: 'Unit',
@@ -3863,6 +3896,8 @@ const local = {
       ldapGroupName: 'See the field.',
       mappingDatasource: 'See the field.',
       mappingName: 'See the field.',
+      mappingScope:
+        'Module metric: for the resource dashboard of a module, and what a module picks its sources from. Cluster metric: for the cluster dashboard: every figure it shows has to be declared here, and a module cannot pick it.',
       mappingMetric: 'See the field.',
       mappingLevel: 'See the field.',
       mappingUnit: 'See the field.',

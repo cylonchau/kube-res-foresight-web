@@ -36,17 +36,24 @@ const checkedRowKeys = ref<number[]>([]);
 const search = reactive<{
   keyword: string;
   datasource_id: number | null;
+  scope: 'module' | 'cluster' | null;
   metric: string | null;
   level: string | null;
   enabled: 'true' | 'false' | null;
-}>({ keyword: '', datasource_id: null, metric: null, level: null, enabled: null });
+}>({ keyword: '', datasource_id: null, scope: null, metric: null, level: null, enabled: null });
 
 const metricLabel = (metric: string) => t(`page.datasource.mappings.metric_${metric}`);
 const levelLabel = (level: string) => t(`page.datasource.mappings.level_${level}`);
 
 const datasourceOptions = computed(() => datasources.value.map(item => ({ label: item.name, value: item.id })));
+const scopeOptions = computed(() => [
+  { label: t('page.datasource.mappings.scope_module'), value: 'module' },
+  { label: t('page.datasource.mappings.scope_cluster'), value: 'cluster' }
+]);
 const metricOptions = computed(() =>
-  catalog.value.metrics.map(item => ({ label: `${metricLabel(item.metric)} (${item.unit})`, value: item.metric }))
+  catalog.value.metrics
+    .filter(item => !search.scope || item.scope === search.scope)
+    .map(item => ({ label: `${metricLabel(item.metric)} (${item.unit})`, value: item.metric }))
 );
 const levelOptions = computed(() =>
   catalog.value.levels.map(item => ({ label: levelLabel(item.level), value: item.level }))
@@ -62,6 +69,7 @@ const list = usePagedList<Api.Datasource.MetricMapping>(async (page, pageSize) =
     page_size: pageSize,
     keyword: search.keyword.trim() || undefined,
     datasource_id: search.datasource_id ?? undefined,
+    scope: search.scope ?? undefined,
     metric: search.metric ?? undefined,
     level: search.level ?? undefined,
     enabled: search.enabled === null ? undefined : search.enabled === 'true'
@@ -72,7 +80,7 @@ const runSearch = () => list.search();
 const reload = () => list.reload();
 
 function resetSearch() {
-  Object.assign(search, { keyword: '', datasource_id: null, metric: null, level: null, enabled: null });
+  Object.assign(search, { keyword: '', datasource_id: null, scope: null, metric: null, level: null, enabled: null });
   runSearch();
 }
 
@@ -120,6 +128,18 @@ const columnMap: Record<string, any> = {
     key: 'datasource_name',
     width: 160,
     resizable: true
+  },
+  scope: {
+    title: t('page.datasource.mappings.scope'),
+    key: 'scope',
+    width: 100,
+    align: 'center',
+    render: (row: Api.Datasource.MetricMapping) =>
+      h(
+        NTag,
+        { size: 'small', type: row.scope === 'cluster' ? 'warning' : 'success', bordered: false },
+        { default: () => t(`page.datasource.mappings.scope_${row.scope}`) }
+      )
   },
   metric: {
     title: t('page.datasource.mappings.metric'),
@@ -207,6 +227,7 @@ const cfg = useTableColumnConfig({
     '__selection__',
     'name',
     'datasource_name',
+    'scope',
     'metric',
     'level',
     'unit',
@@ -248,6 +269,19 @@ onMounted(async () => {
           clearable
           :placeholder="t('common.selectField', { field: t('page.datasource.mappings.datasource') })"
           :options="datasourceOptions"
+        />
+      </NFormItemGi>
+      <NFormItemGi
+        class="list-search-select-field list-search-short-field"
+        :span="3"
+        :label="t('page.datasource.mappings.scope')"
+      >
+        <NSelect
+          v-model:value="search.scope"
+          clearable
+          :placeholder="t('common.selectField', { field: t('page.datasource.mappings.scope') })"
+          :options="scopeOptions"
+          @update:value="search.metric = null"
         />
       </NFormItemGi>
       <NFormItemGi

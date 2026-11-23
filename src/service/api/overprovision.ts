@@ -14,12 +14,30 @@ export function fetchGetModuleOverprovision(id: number, params: { window?: strin
 }
 
 /** what the cluster of the data source of a module has to give and has given out (nodes, allocatable, the requests of the Running Pods), read live */
-export function fetchGetOverprovisionCluster(moduleId?: number) {
+export function fetchGetOverprovisionCluster(datasourceId?: number) {
   // a cluster that cannot be read is told on the page, in its place, and not by a message over everything
   return request<Api.Overprovision.Cluster>({
     url: `${base}/overprovision/cluster`,
     method: 'get',
-    params: { module_id: moduleId },
+    params: { datasource_id: datasourceId },
+    headers: { 'X-Silent-Error': '1' }
+  });
+}
+
+/** the clusters the platform manages (the data sources that have cluster metric templates declared) and how many there are */
+export function fetchGetOverprovisionClusters() {
+  return request<Api.Overprovision.ClusterList>({
+    url: `${base}/overprovision/clusters`,
+    method: 'get',
+    headers: { 'X-Silent-Error': '1' }
+  });
+}
+
+/** the requests and limits of one Pod of every enabled module, each asked of Prometheus now */
+export function fetchGetOverprovisionResources() {
+  return request<Api.Overprovision.ResourceList>({
+    url: `${base}/overprovision/resources`,
+    method: 'get',
     headers: { 'X-Silent-Error': '1' }
   });
 }
