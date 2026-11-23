@@ -120,6 +120,8 @@ declare namespace Api {
       /** the metric template the query comes from, and whether the metric is only shown (no weight, no algorithm) */
       template: string;
       display: boolean;
+      /** a warning about a query that ran all the same: it looks like the wrong one */
+      note?: string;
       /** the step of the range query: the figures are made of one sample for each step */
       step: string;
       /** how many samples the query answered */
