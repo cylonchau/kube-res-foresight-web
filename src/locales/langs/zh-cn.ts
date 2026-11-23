@@ -548,9 +548,9 @@ const local = {
       openEffect: '效果报告'
     },
     overprovision: {
-      listTitle: '工作负载的资源',
+      listTitle: '模块列表',
       listHelp:
-        '每个模块一行：Pod 的请求对比窗口内的实测使用量，以及这些使用量支持的建议值。只用实测数据，不用预测，也不算金额。点“详情”看每个数字是怎么算出来的。',
+        '选一个模块进入它的资源大盘：请求、使用量、OOM 数量和各项指标都是向 Prometheus 实时查的，不用预测，也不算金额。可以先选命名空间再选实例，也可以直接点这里的“分析”。',
       window: '分析窗口',
       windowHelp:
         '用最近这段时间的实测使用量做分析。窗口越短，越容易被一次高峰或低谷带偏，可信度会降一级；建议用 7 天或更长。',
@@ -702,8 +702,23 @@ const local = {
       availableHelp: '请求减去已使用（P95）：请求里还没被用到的部分。已使用超过请求时写“低于使用量”，可用为 0。',
       belowUse: '请求低于使用量',
       utilization: '使用率',
-      utilizationHelp: '已使用（P95）÷ 请求。超过 85% 标黄：留给峰值的余量不多。',
+      utilizationHelp:
+        '已使用（P95）÷ 请求。达到 85% 为橙色、95% 为红色：留给峰值的余量不多；低于 30% 也是橙色：请求超配。',
       points: '点数',
+      oomCount: 'OOM 数量',
+      oomCountHelp:
+        '窗口内容器因内存超限被系统杀掉（OOMKilled）的次数，由模块的 OOM 指标向 Prometheus 查出。0 表示窗口内没有发生。',
+      oomNoSource: '模块没有配置 OOM 指标',
+      statP50: '中位数：一半的时间使用量不超过它。',
+      statP90: '90% 的时间使用量不超过它。',
+      statP95: '95% 的时间使用量不超过它：请求和建议值主要对着这一列。',
+      statP99: '99% 的时间使用量不超过它：接近峰值，用来看内存上限够不够。',
+      statMax: '窗口内出现过的最大使用量。',
+      pointsHelp:
+        '点数 = 算出这一行的样本数 / 窗口应有的样本数。平台向 Prometheus 按步长 {step} 取区间数据，每个步长一个点，Prometheus 里没有数据的时刻没有点。前一个数越接近后一个，数据越完整；差得多说明这段时间有缺失，结论的可信度会降低。',
+      queryPoints: '步长 {step}，{n} 个点',
+      queriesFailed: '{n} 个指标没有查到数据，原因见“Prometheus 查询”。',
+      noModules: '还没有启用的模块',
       group_container: 'Container 指标',
       group_jvm: 'JVM 指标',
       group_throttle: 'CPU 限流',

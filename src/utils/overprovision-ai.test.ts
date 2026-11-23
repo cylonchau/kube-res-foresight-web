@@ -66,8 +66,7 @@ function detail(): any {
         p99: GIB,
         max: GIB
       }
-    ],
-    history: []
+    ]
   };
 }
 
@@ -77,6 +76,11 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
   assert.ok(text.includes('shop-api'));
   assert.ok(text.includes('不是实测'), 'a limit that is only the ratio of the module says so');
   assert.ok(text.includes('只读'), 'the question asks for an analysis and nothing else');
+  assert.ok(
+    text.includes('只输出 HTML') && text.includes('<td class="lv-warn">'),
+    'the answer is HTML tables with levels'
+  );
+  assert.ok(!text.includes('下一步建议'), 'no next-step section is asked for');
   assert.ok(text.includes('jvm_heap_used'), 'the metrics that are set up go with it');
   assert.ok(text.includes('被限流'), 'a throttled CPU is told');
 });

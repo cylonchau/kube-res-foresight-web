@@ -5,7 +5,6 @@ declare namespace Api {
     type Status = 'over' | 'ok' | 'under' | 'limited' | 'unknown';
     type Grade = 'severe' | 'moderate' | 'mild' | 'reasonable' | '';
     type Level = 'high' | 'medium' | 'low';
-    type Health = 'risk' | 'under' | 'over' | 'limited' | 'ok' | 'unknown';
 
     /** the quantiles of the use of one Pod over a window (CPU in cores, memory in bytes) */
     interface Usage {
@@ -47,93 +46,11 @@ declare namespace Api {
       formula_version: string;
     }
 
-    /** a result that was stored: the figures of Result, with the total quantiles flat */
-    interface Stored {
-      id: number;
-      created_at: string;
-      module_id: number;
-      resource: Resource;
-      window_minutes: number;
-      replicas: number;
-      request: number;
-      limit: number;
-      /** where the limit comes from: a metric of the module, the module ratio of admission, or empty when not known */
-      limit_from: 'metric' | 'module' | '';
-      points: number;
-      expected_points: number;
-      coverage: number;
-      p50: number;
-      p90: number;
-      p95: number;
-      p99: number;
-      max: number;
-      total_p50: number;
-      total_p90: number;
-      total_p95: number;
-      total_p99: number;
-      total_max: number;
-      suggested: number;
-      ratio: number;
-      numerator: number;
-      denominator: number;
-      reclaimable: number;
-      status: Status;
-      grade: Grade;
-      confidence: Level;
-      risk: Level;
-      throttle: number;
-      oom_kills: number;
-      oom_working_set: number;
-      reasons: string[];
-      formula: string;
-      formula_version: string;
-    }
-
-    interface Row {
-      module_id: number;
-      name: string;
-      namespace: string;
-      workload_kind: string;
-      workload: string;
-      replicas: number;
-      health: Health;
-      analyzed_at: string;
-      cpu: Stored | null;
-      memory: Stored | null;
-    }
-
-    interface Totals {
-      request: number;
-      reclaimable: number;
-      after: number;
-      share: number;
-    }
-
-    interface Board {
-      window_minutes: number;
-      window: string;
-      analyzed_at: string | null;
-      modules: number;
-      analyzed: number;
-      cpu: Totals;
-      memory: Totals;
-      over: number;
-      under: number;
-      risk: number;
-      limited: number;
-      basis: string;
-      rows: Row[];
-    }
-
     interface Chart {
       resource: Resource;
       step_seconds: number;
       ts: number[];
       value: number[];
-      ma5: number[];
-      ma15: number[];
-      ma25: number[];
-      ma_labels: string[];
       request: number;
       suggested: number;
       /** the use of all the replicas together over the window (the sum over the Pods) */
@@ -177,8 +94,30 @@ declare namespace Api {
       windows: Window[];
       jvm?: JVM;
       charts?: Chart[];
-      history: Stored[];
       metrics: MetricStat[];
+      /** where the figures were read: the Prometheus data source and the query of each metric with what came of it */
+      datasource: { id: number; name: string };
+      queries: LiveQuery[];
+      /** the time limit of the request stopped some of the queries (skipped counts them); the others are complete */
+      partial: boolean;
+      skipped: number;
+    }
+
+    /** the query sent to Prometheus for one metric of the module */
+    interface LiveQuery {
+      key: string;
+      name: string;
+      kind: string;
+      group: string;
+      level: string;
+      unit: string;
+      query: string;
+      /** the step of the range query: the figures are made of one sample for each step */
+      step: string;
+      /** how many samples the query answered */
+      points: number;
+      error?: string;
+      skipped?: boolean;
     }
 
     /** another metric the module has set up (container, JVM, throttling, OOM ...), over the window */
@@ -238,55 +177,6 @@ declare namespace Api {
       /** set when the cluster could not be read at all: no_datasource or unreachable */
       reason?: 'no_datasource' | 'unreachable';
       message?: string;
-    }
-
-    /** the figures of one query set */
-    interface PromQuantiles {
-      p50: number;
-      p90: number;
-      p95: number;
-      p99: number;
-      max: number;
-    }
-
-    /** one metric of the module with its quantiles as the Prometheus data source computed them */
-    interface PromMetric {
-      key: string;
-      name: string;
-      kind: string;
-      group: string;
-      level: string;
-      unit: string;
-      /** the quantiles of the sum over the Pods */
-      total?: PromQuantiles;
-      /** the quantiles of one Pod (the query over the ready replicas), or of one container */
-      pod?: PromQuantiles;
-      /** the PromQL of the mapping as rendered for the module */
-      query: string;
-      replicas?: string;
-      /** the whole query of the P95 as it was sent */
-      example?: string;
-      error?: string;
-      /** the time limit of the request was over before its figures came */
-      skipped?: boolean;
-    }
-
-    interface PromStats {
-      datasource: { id: number; name: string };
-      at: string;
-      window_minutes: number;
-      window: string;
-      step: string;
-      metrics: PromMetric[];
-      /** some metrics were not answered in the time the request had; the others are complete */
-      partial: boolean;
-      skipped: number;
-    }
-
-    interface RunResult {
-      analyzed: number;
-      at: string;
-      failed?: string;
     }
   }
 }

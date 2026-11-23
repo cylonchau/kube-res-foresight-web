@@ -4,13 +4,16 @@ import { NButton, NSpin, NTag, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
+import { looksLikeHtml, sanitizeAnswerHtml } from '@/utils/safe-html';
 
 defineOptions({ name: 'OverprovisionAiAssistant' });
 
 /**
- * The AI analysis of the resource dashboard as a helper at the lower right, like a support chat: a round button, and under it a window that opens over the
- * page and closes again, without taking any room of the dashboard. The analysis runs in the background of the page: close the window and the button tells
- * when the answer is there (a dot), open it again and the answer is read. The window can be made larger and put back.
+ * The AI analysis of the resource dashboard as a helper at the lower right, like a support chat: a round button, and over it a window that opens over the
+ * page and closes again, without taking any room of the dashboard. The page shows it for a module only, and nothing is asked until the user presses the
+ * button (or "analyse" in the window): the analysis never starts by itself. It runs in the background of the page: close the window and the button tells
+ * when the answer is there (a dot), open it again and the answer is read. The window can be made larger and put back. The answer is HTML (tables), cleaned
+ * of everything but tables, lists, emphasis and the level colours before it is shown.
  */
 interface Props {
   ai: {
@@ -63,7 +66,10 @@ watch(
   }
 );
 
-const html = computed(() => renderMiniMarkdown(props.ai.running ? props.ai.live : props.ai.text));
+const html = computed(() => {
+  const source = props.ai.running ? props.ai.live : props.ai.text;
+  return looksLikeHtml(source) ? sanitizeAnswerHtml(source) : renderMiniMarkdown(source);
+});
 const blocked = computed(() => props.ai.ready === false);
 const disabledReason = computed(() => {
   if (blocked.value) return props.ai.problem || p('aiNotReady');
@@ -71,6 +77,13 @@ const disabledReason = computed(() => {
   if (!props.canAnalyze) return p('aiNoFigures');
   return '';
 });
+
+/** the button of the page: opens the window, and when there is no answer yet it is the user's request to make one */
+function pressButton() {
+  const opening = !open.value;
+  open.value = opening;
+  if (opening && !props.ai.running && !props.ai.text && !props.ai.error && !disabledReason.value) emit('analyze');
+}
 </script>
 
 <template>
@@ -145,7 +158,7 @@ const disabledReason = computed(() => {
         :style="fabColors"
         :aria-label="p('aiTitle')"
         :title="p('aiTitle')"
-        @click="open = !open"
+        @click="pressButton"
       >
         <SvgIcon icon="carbon:bot" class="text-26px" />
         <span v-if="unread && !open" class="ai-fab-dot" />
@@ -251,6 +264,47 @@ const disabledReason = computed(() => {
 .ai-answer :deep(ul),
 .ai-answer :deep(ol) {
   margin: 4px 0;
+}
+.ai-answer :deep(table) {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ai-answer :deep(th),
+.ai-answer :deep(td) {
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.ai-answer :deep(th) {
+  background: rgba(128, 128, 128, 0.14);
+}
+.ai-answer :deep(caption) {
+  margin-bottom: 4px;
+  font-weight: 600;
+  text-align: left;
+}
+.ai-answer :deep(.lv-bad) {
+  font-weight: 600;
+  color: #e03050;
+  background: rgba(224, 48, 80, 0.14);
+}
+.ai-answer :deep(.lv-warn) {
+  font-weight: 600;
+  color: #c77d0a;
+  background: rgba(240, 160, 32, 0.16);
+}
+.ai-answer :deep(.lv-ok) {
+  font-weight: 600;
+  color: #18a058;
+  background: rgba(24, 160, 88, 0.14);
+}
+.ai-answer :deep(.lv-info) {
+  font-weight: 600;
+  color: #2080f0;
+  background: rgba(32, 128, 240, 0.12);
 }
 .ai-window-enter-active,
 .ai-window-leave-active {

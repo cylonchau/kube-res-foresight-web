@@ -11,16 +11,14 @@ import { formatMetric } from '@/utils/format';
 defineOptions({ name: 'OverprovisionUsageChart' });
 
 /**
- * One chart for the CPU and the memory of a module: the use over the window with its moving averages, the request, the suggestion, the limit and the
- * quantiles, and the results the analysis stored over time (what it had said, when) on the same time axis. The two resources are two panels of the same
+ * One chart for the CPU and the memory of a module: the use over the window as Prometheus answered it, the request, the suggestion, the limit and the
+ * quantiles. The two resources are two panels of the same
  * chart, side by side (one above the other when the page is narrow), and the figures are written above each panel, not on the plot, so nothing is drawn over
  * a line or a label. `pod` draws one Pod, `total` the sum of all the replicas.
  */
 interface Props {
   mode: 'pod' | 'total';
   charts: Api.Overprovision.Chart[];
-  /** the stored results of the window (newest first) */
-  history: Api.Overprovision.Stored[];
   /** the limit of one Pod by resource, when known */
   limits?: Partial<Record<Api.Overprovision.Resource, number>>;
   /** the P90, P95 and P99 of the use by resource: of one Pod in `pod`, of all the replicas in `total` */
@@ -71,7 +69,6 @@ const stacked = computed(() => width.value > 0 && width.value < 760);
 
 const COLORS = {
   usage: '#2080f0',
-  ma: ['#8a63d2', '#d6a02b', '#4aa89a'],
   request: '#d03050',
   suggested: '#18a058',
   limit: '#f0a020',
@@ -96,13 +93,6 @@ function figures(panel: Panel) {
   const q = props.quantiles?.[resource];
   if (q) out.push(`P90 ${fmt(q.p90)} · P95 ${fmt(q.p95)} · P99 ${fmt(q.p99)}`);
   return out.join('  |  ');
-}
-
-function historyOf(resource: Res) {
-  return props.history
-    .filter(row => row.resource === resource)
-    .slice()
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 }
 
 async function draw() {
@@ -180,14 +170,6 @@ async function draw() {
         areaStyle: { opacity: 0.08, color: COLORS.usage }
       }
     );
-    if (!total) {
-      [chart.ma5, chart.ma15, chart.ma25].forEach((values, k) => {
-        line(`ma${k}`, chart.ma_labels[k], points(values), {
-          lineStyle: { width: 1, color: COLORS.ma[k] },
-          itemStyle: { color: COLORS.ma[k] }
-        });
-      });
-    }
     const dashed = (key: string, name: string, value: number, color: string, type = 'dashed') =>
       value > 0 &&
       line(key, name, flat(value), { lineStyle: { width: 1.2, type, color }, itemStyle: { color }, silent: true });
@@ -201,56 +183,12 @@ async function draw() {
       dashed('p99', 'P99', q.p99, COLORS.quantile, 'dotted');
     }
 
-    // what the analysis stored over time: the request and the suggestion of each result, and the P95 it saw
-    const rows = historyOf(resource);
-    const at = (row: Api.Overprovision.Stored) => new Date(row.created_at).getTime();
-    const mult = (row: Api.Overprovision.Stored) => (total ? Math.max(row.replicas || 1, 1) : 1);
-    if (rows.length) {
-      line(
-        'h-request',
-        p('historyRequest'),
-        rows.map(row => [at(row), row.request * mult(row)] as [number, number]),
-        {
-          step: 'end',
-          lineStyle: { width: 1, color: COLORS.request, opacity: 0.55 },
-          itemStyle: { color: COLORS.request },
-          showSymbol: rows.length < 40,
-          symbolSize: 5
-        }
-      );
-      line(
-        'h-suggested',
-        p('historySuggested'),
-        rows.map(row => [at(row), row.suggested > 0 ? row.suggested * mult(row) : null] as [number, number | null]),
-        {
-          step: 'end',
-          lineStyle: { width: 1, color: COLORS.suggested, opacity: 0.55 },
-          itemStyle: { color: COLORS.suggested },
-          showSymbol: rows.length < 40,
-          symbolSize: 5
-        }
-      );
-      line(
-        'h-p95',
-        p('historyP95'),
-        rows.map(row => [at(row), total ? row.total_p95 : row.p95] as [number, number]),
-        {
-          lineStyle: { width: 1, type: 'dotted', color: COLORS.usage },
-          itemStyle: { color: COLORS.usage },
-          showSymbol: true,
-          symbol: 'diamond',
-          symbolSize: 6
-        }
-      );
-    }
-
     const all = [
       ...panel.value,
       chart.request * times,
       chart.suggested * times,
       (props.limits?.[resource] ?? 0) * times,
-      ...(q ? [q.p99] : []),
-      ...rows.flatMap(row => [row.request * mult(row), row.suggested * mult(row)])
+      ...(q ? [q.p99] : [])
     ].filter(v => Number.isFinite(v) && v > 0);
     const axis = valueAxisFor(unitOf(resource), all);
     // a size in bytes has its ticks on round numbers of its unit: the top is the next one up, so no odd figure is written at the top of the axis
@@ -328,7 +266,7 @@ async function draw() {
   );
 }
 
-watch(() => [props.charts, props.history, props.limits, props.quantiles, props.mode, props.plotHeight], draw, {
+watch(() => [props.charts, props.limits, props.quantiles, props.mode, props.plotHeight], draw, {
   flush: 'post',
   deep: false
 });

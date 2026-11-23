@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
-import { NButton, NCard, NSelect, NSpin, NTag } from 'naive-ui';
+import { NButton, NCard, NSelect } from 'naive-ui';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import GrafanaLink from '@/components/business/grafana-link.vue';
-import InventoryClusterPanel from '@/components/business/inventory-cluster-panel.vue';
-import InventoryWorkloadPanel from '@/components/business/inventory-workload-panel.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import OverprovisionAiAssistant from '@/components/business/overprovision-ai-assistant.vue';
 import OverprovisionClusterCard from '@/components/business/overprovision-cluster-card.vue';
@@ -14,17 +12,8 @@ import TimeRangeField from '@/components/business/time-range-field.vue';
 import HelpLabel from '@/components/common/help-label.vue';
 import type { RangeValue } from '@/hooks/business/use-forecast-modules';
 import { useOverprovisionAi } from '@/hooks/business/use-overprovision-ai';
-import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
-import {
-  fetchGetGrafanaSettings,
-  fetchGetModuleOverprovision,
-  fetchGetModulePrometheus,
-  fetchGetOverprovision,
-  fetchRunOverprovision
-} from '@/service/api';
-import { formatDateTime } from '@/utils/date';
-import { formatBytes, formatCores, formatPercent } from '@/utils/format';
+import { fetchGetForecastModules, fetchGetGrafanaSettings, fetchGetModuleOverprovision } from '@/service/api';
 import { buildAnalysisQuestion } from '@/utils/overprovision-ai';
 import { operateWidth } from '@/utils/operate-width';
 import { grafanaUrl, parseRouteSelection } from '@/utils/resource-links';
@@ -33,88 +22,47 @@ import { DEFAULT_WINDOW_LABEL, rangeOfLabel, windowOf } from '@/utils/overprovis
 defineOptions({ name: 'ForecastResultsOverprovision' });
 
 /**
- * The resource dashboard (P10 A3): choose a namespace and a module, and the page is that module: what it is configured with and uses (P90, P95 and
- * P99 among the quantiles), the metrics it has set up, the history of the analysis, the cluster, and a one-click AI analysis. With no module chosen
- * it is the overview of all the modules: the totals, the ranking of what could be given back and a compact list to pick a module from. It shows
- * measured data only: no forecast takes part and no money is counted.
+ * The resource dashboard: with no module chosen it is the list of the modules (to pick the instance from) and the cluster; choose a namespace and an instance
+ * and the page is that module: its OOM kills, what it is configured with and uses (P50 to P99 and the maximum), the use over the window of one Pod and of all
+ * the replicas, the metrics it has set up, and the AI analysis at the lower right. Every figure is read from the Prometheus data source of the module's
+ * metric mappings, as it is now: nothing comes from what the platform stored, no forecast takes part and no money is counted.
  */
 const { t, locale } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
 
-const HEALTHS: Api.Overprovision.Health[] = ['risk', 'under', 'over', 'limited', 'ok', 'unknown'];
-
 const sel = reactive({
   namespace: null as string | null,
   moduleId: null as number | null,
-  health: null as string | null,
   basis: 'pod' as 'pod' | 'total'
 });
 /** the analysis window, chosen with the same time field as everywhere else: the last N minutes, hours or days, or a fixed range */
 const range = ref<RangeValue | null>(rangeOfLabel(DEFAULT_WINDOW_LABEL));
 
-const board = ref<Api.Overprovision.Board | null>(null);
-const boardLoading = ref(false);
+/** the modules the dashboard can show: the enabled ones */
+const modules = ref<Api.Forecast.Module[]>([]);
+const modulesLoading = ref(false);
+/** the route has been read and the module it names chosen: the overview is not drawn before, so it does not ask for the cluster of a page that is about a module */
+const ready = ref(false);
 const detail = ref<Api.Overprovision.Detail | null>(null);
 const detailLoading = ref(false);
-/** the quantiles as the Prometheus data source computes them, asked after the rest of the page is there: a long window is a slow query */
-const prom = ref<Api.Overprovision.PromStats | null>(null);
-const promLoading = ref(false);
-const promError = ref('');
-const analyzing = ref(false);
+const detailError = ref('');
 const ai = useOverprovisionAi();
 
 /** the address of the Grafana and of its dashboard; null until asked, and the links are drawn only when it is set */
 const grafana = ref<Api.Grafana.Settings | null>(null);
-const inventoryKey = ref(0);
 
-/** what the range means for the requests, for Grafana and for the overview (see utils/overprovision-window) */
+/** what the range means for the requests and for Grafana (see utils/overprovision-window) */
 const win = computed(() => windowOf(range.value));
 const grafanaRange = computed(() => win.value.grafana);
-/** how far back the trends and the history of changes of the inventory go: the window of the page, at least an hour */
-const inventoryHours = computed(() => win.value.hours);
-/** the overview reads the stored results of one of the seven windows: the shortest that covers the range */
-const boardWindow = computed(() => win.value.board);
 
-async function loadBoard() {
-  boardLoading.value = true;
+async function loadModules() {
+  modulesLoading.value = true;
   try {
-    const { data } = await fetchGetOverprovision(boardWindow.value);
-    board.value = data ?? null;
+    const { data } = await fetchGetForecastModules({ page: 1, page_size: 500, enabled: true });
+    modules.value = data?.list ?? [];
   } finally {
-    boardLoading.value = false;
+    modulesLoading.value = false;
   }
-}
-
-let detailSeq = 0;
-async function loadDetail() {
-  const id = sel.moduleId;
-  if (!id) {
-    detail.value = null;
-    return;
-  }
-  detailSeq += 1;
-  const seq = detailSeq;
-  detailLoading.value = true;
-  try {
-    const { data } = await fetchGetModuleOverprovision(id, win.value.params);
-    if (seq === detailSeq) detail.value = data ?? null;
-  } finally {
-    if (seq === detailSeq) detailLoading.value = false;
-  }
-}
-
-function mergeProm(
-  first: Api.Overprovision.PromStats,
-  second: Api.Overprovision.PromStats
-): Api.Overprovision.PromStats {
-  return {
-    ...first,
-    datasource: first.datasource?.name ? first.datasource : second.datasource,
-    step: second.step || first.step,
-    metrics: [...first.metrics, ...second.metrics],
-    partial: first.partial || second.partial,
-    skipped: first.skipped + second.skipped
-  };
 }
 
 function reasonOf(error: unknown) {
@@ -122,73 +70,40 @@ function reasonOf(error: unknown) {
   return response?.data?.msg || response?.data?.message || (error as any)?.message || '';
 }
 
-/**
- * The quantiles of the module from Prometheus in two requests: the CPU and the memory first (what the page needs at once), the other metrics after. Each
- * request is kept by the platform inside its time limit and answers with what it got, so a slow data source or a long window makes the figures that did not
- * come say so, and not a 504 over the whole page.
- */
-let promSeq = 0;
-async function loadProm() {
+let detailSeq = 0;
+async function loadDetail() {
   const id = sel.moduleId;
-  prom.value = null;
-  promError.value = '';
+  detail.value = null;
+  detailError.value = '';
   if (!id) return;
-  promSeq += 1;
-  const seq = promSeq;
-  promLoading.value = true;
+  detailSeq += 1;
+  const seq = detailSeq;
+  detailLoading.value = true;
   try {
-    const params = win.value.params;
-    const core = await fetchGetModulePrometheus(id, { ...params, scope: 'core' });
-    if (seq !== promSeq) return;
-    if (!core.data) {
-      promError.value = reasonOf(core.error);
-      return;
-    }
-    prom.value = core.data;
-    const more = await fetchGetModulePrometheus(id, { ...params, scope: 'more' });
-    if (seq !== promSeq) return;
-    if (more.data) prom.value = mergeProm(core.data, more.data);
-    else promError.value = reasonOf(more.error);
+    const { data, error } = await fetchGetModuleOverprovision(id, win.value.params);
+    if (seq !== detailSeq) return;
+    detail.value = data ?? null;
+    if (!data) detailError.value = reasonOf(error);
   } finally {
-    if (seq === promSeq) promLoading.value = false;
-  }
-}
-
-async function analyzeNow() {
-  analyzing.value = true;
-  try {
-    const { data } = await fetchRunOverprovision(sel.moduleId ?? undefined);
-    if (data) {
-      window.$message?.success(
-        data.failed
-          ? p('analyzePartial', { n: data.analyzed, failed: data.failed })
-          : p('analyzedCount', { n: data.analyzed })
-      );
-    }
-    await Promise.all([loadBoard(), loadDetail(), loadProm()]);
-    inventoryKey.value += 1;
-  } finally {
-    analyzing.value = false;
+    if (seq === detailSeq) detailLoading.value = false;
   }
 }
 
 // ---- the choice of the module: the namespace first, then the instance of it
 
-const rows = computed(() => board.value?.rows ?? []);
 const namespaceOptions = computed(() =>
-  [...new Set(rows.value.map(row => row.namespace))].sort().map(value => ({ label: value, value }))
+  [...new Set(modules.value.map(row => row.namespace))].sort().map(value => ({ label: value, value }))
 );
 /** the instances of the namespace chosen (all of them when none is): named by themselves, the namespace is the other filter; a name two namespaces share says which */
 const moduleOptions = computed(() => {
-  const list = rows.value.filter(row => !sel.namespace || row.namespace === sel.namespace);
+  const list = modules.value.filter(row => !sel.namespace || row.namespace === sel.namespace);
   const count = new Map<string, number>();
   for (const row of list) count.set(row.name, (count.get(row.name) ?? 0) + 1);
   return list.map(row => ({
     label: (count.get(row.name) ?? 0) > 1 ? `${row.name} (${row.namespace})` : row.name,
-    value: row.module_id
+    value: row.id
   }));
 });
-const healthOptions = computed(() => HEALTHS.map(value => ({ label: p(`health_${value}`), value })));
 const basisOptions = computed(() => [
   { label: p('basisPod'), value: 'pod' },
   { label: p('basisTotal'), value: 'total' }
@@ -197,13 +112,13 @@ const basisOptions = computed(() => [
 function pickModule(id: number | null) {
   sel.moduleId = id;
   // the namespace follows the instance chosen, so the two filters never disagree
-  const row = rows.value.find(item => item.module_id === id);
+  const row = modules.value.find(item => item.id === id);
   if (row) sel.namespace = row.namespace;
 }
 function pickNamespace(ns: string | null) {
   sel.namespace = ns;
   // an instance that is not of the namespace is let go (and so is the instance when the namespace is cleared)
-  const row = rows.value.find(item => item.module_id === sel.moduleId);
+  const row = modules.value.find(item => item.id === sel.moduleId);
   if (row && row.namespace !== ns) sel.moduleId = null;
 }
 watch(
@@ -211,18 +126,11 @@ watch(
   id => {
     ai.show(id ?? 0);
     loadDetail();
-    loadProm();
   }
 );
-watch(range, (now, before) => {
-  const was = windowOf(before);
-  const next = windowOf(now);
-  if (next.board !== was.board) loadBoard();
-  loadDetail();
-  loadProm();
-});
+watch(range, loadDetail);
 
-const selectedRow = computed(() => rows.value.find(row => row.module_id === sel.moduleId) ?? null);
+const selectedRow = computed(() => modules.value.find(row => row.id === sel.moduleId) ?? null);
 
 /** the toolbar link: the module chosen, or the cluster when none is */
 const toolbarGrafana = computed(() =>
@@ -240,23 +148,24 @@ const route = useRoute();
 function applyRouteSelection() {
   const want = parseRouteSelection(route.query as Record<string, unknown>);
   if (want.window) range.value = rangeOfLabel(want.window);
-  const byId = want.moduleId ? rows.value.find(row => row.module_id === want.moduleId) : undefined;
+  const byId = want.moduleId ? modules.value.find(row => row.id === want.moduleId) : undefined;
   const byName =
     want.namespace && want.workload
-      ? rows.value.find(row => row.namespace === want.namespace && row.workload === want.workload)
+      ? modules.value.find(row => row.namespace === want.namespace && row.workload === want.workload)
       : undefined;
   const hit = byId ?? byName;
-  if (hit) pickModule(hit.module_id);
-  else if (want.namespace && rows.value.some(row => row.namespace === want.namespace)) sel.namespace = want.namespace;
+  if (hit) pickModule(hit.id);
+  else if (want.namespace && modules.value.some(row => row.namespace === want.namespace))
+    sel.namespace = want.namespace;
 }
 
-// ---- the AI analysis: the helper at the lower right asks, the page answers with the figures it shows
+// ---- the AI analysis: the helper at the lower right asks when the user presses it, the page answers with the figures it shows
 
 const aiLabel = computed(() => win.value.grafana.window ?? p('customRange'));
 async function analyzeWithAi() {
   const d = detail.value;
   if (!d || ai.state.running) return;
-  const question = buildAnalysisQuestion(d, aiLabel.value, locale.value === 'en-US' ? 'en-US' : 'zh-CN', prom.value);
+  const question = buildAnalysisQuestion(d, aiLabel.value, locale.value === 'en-US' ? 'en-US' : 'zh-CN');
   await ai.run(d.module_id, question, locale.value, aiLabel.value, {
     page: 'forecast-results_overprovision',
     title: p('listTitle'),
@@ -266,291 +175,21 @@ async function analyzeWithAi() {
   });
 }
 
-// ---- the overview: the totals
+// ---- the list of the modules, to pick the instance from
 
-interface Cell {
-  key: string;
-  label: string;
-  help: string;
-  value: string;
-  sub?: string;
-  type?: 'default' | 'warning' | 'error' | 'success';
-}
-
-/** the modules that were killed for memory in the window, and how many times: the first cards of the overview */
-const oomCells = computed<Cell[]>(() => {
-  const b = board.value;
-  if (!b) return [];
-  const killed = b.rows
-    .filter(row => (row.memory?.oom_kills ?? 0) > 0)
-    .sort((a, c) => (c.memory?.oom_kills ?? 0) - (a.memory?.oom_kills ?? 0));
-  const kills = killed.reduce((sum, row) => sum + (row.memory?.oom_kills ?? 0), 0);
-  return [
-    {
-      key: 'oomModules',
-      label: p('oomModules'),
-      help: p('oomModulesHelp'),
-      value: `${killed.length} / ${b.modules}`,
-      sub: killed
-        .slice(0, 3)
-        .map(row => row.name)
-        .join(', '),
-      type: killed.length > 0 ? 'error' : 'success'
-    },
-    {
-      key: 'oomKills',
-      label: p('oomKills'),
-      help: p('oomKillsHelp'),
-      value: String(kills),
-      type: kills > 0 ? 'error' : 'success'
-    }
-  ];
-});
-
-const cells = computed<Cell[]>(() => {
-  const b = board.value;
-  if (!b) return [];
-  const reclaim = (totals: Api.Overprovision.Totals, format: (v: number) => string) =>
-    `${format(totals.reclaimable)} (${formatPercent(totals.share, 0)})`;
-  return [
-    ...oomCells.value,
-    {
-      key: 'cpuReserved',
-      label: p('cardCpuReserved'),
-      help: p('cardReservedHelp'),
-      value: formatCores(b.cpu.request, 2)
-    },
-    {
-      key: 'memReserved',
-      label: p('cardMemReserved'),
-      help: p('cardReservedHelp'),
-      value: formatBytes(b.memory.request, 2)
-    },
-    {
-      key: 'cpuReclaim',
-      label: p('cardCpuReclaim'),
-      help: p('cardReclaimHelp'),
-      value: reclaim(b.cpu, v => formatCores(v, 2)),
-      type: b.cpu.reclaimable > 0 ? 'warning' : 'default'
-    },
-    {
-      key: 'memReclaim',
-      label: p('cardMemReclaim'),
-      help: p('cardReclaimHelp'),
-      value: reclaim(b.memory, v => formatBytes(v, 2)),
-      type: b.memory.reclaimable > 0 ? 'warning' : 'default'
-    },
-    {
-      key: 'over',
-      label: p('cardOver'),
-      help: p('cardOverHelp'),
-      value: `${b.over} / ${b.modules}`,
-      type: b.over > 0 ? 'warning' : 'default'
-    },
-    {
-      key: 'under',
-      label: p('cardUnder'),
-      help: p('cardUnderHelp'),
-      value: String(b.under),
-      type: b.under > 0 ? 'error' : 'default'
-    },
-    {
-      key: 'risk',
-      label: p('cardRisk'),
-      help: p('cardRiskHelp'),
-      value: String(b.risk),
-      type: b.risk > 0 ? 'error' : 'success'
-    },
-    { key: 'limited', label: p('cardLimited'), help: p('cardLimitedHelp'), value: String(b.limited) },
-    {
-      key: 'analyzedAt',
-      label: p('analyzedAt'),
-      help: b.basis,
-      value: b.analyzed_at ? formatDateTime(b.analyzed_at) : '-'
-    }
-  ];
-});
-
-// ---- the overview: the ranking of what could be given back, over all replicas
-
-const rank = reactive({ mode: 'top' as 'top' | 'namespace', resource: 'cpu' as 'cpu' | 'memory' });
-const rankModeOptions = computed(() => [
-  { label: p('rankTop'), value: 'top' },
-  { label: p('rankNamespace'), value: 'namespace' }
-]);
-const rankResourceOptions = computed(() => [
-  { label: p('rankCpu'), value: 'cpu' },
-  { label: p('rankMemory'), value: 'memory' }
-]);
-const GIB = 1024 ** 3;
-
-const ranking = computed(() => {
-  const totals = new Map<string, number>();
-  for (const row of rows.value) {
-    const result = rank.resource === 'cpu' ? row.cpu : row.memory;
-    if (!result || result.reclaimable <= 0) continue;
-    const value = (result.reclaimable * Math.max(row.replicas, 1)) / (rank.resource === 'cpu' ? 1 : GIB);
-    const key = rank.mode === 'top' ? `${row.namespace}/${row.name}` : row.namespace;
-    totals.set(key, (totals.get(key) ?? 0) + value);
-  }
-  return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-});
-
-const { domRef, updateOptions } = useEcharts(
-  () =>
-    ({
-      animation: false,
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, confine: true },
-      grid: { left: 8, right: 24, top: 4, bottom: 4, containLabel: true },
-      xAxis: { type: 'value' },
-      yAxis: { type: 'category', inverse: true, data: [] as string[] },
-      series: []
-    }) as ECOption,
-  { onRender: () => {}, onUpdated: () => {} }
-);
-
-async function drawRanking() {
-  const list = ranking.value;
-  await updateOptions(opts => ({
-    ...opts,
-    yAxis: {
-      type: 'category',
-      inverse: true,
-      data: list.map(item => item[0]),
-      axisLabel: { width: 220, overflow: 'truncate' }
-    },
-    series: [
-      {
-        type: 'bar',
-        name: rank.resource === 'cpu' ? p('rankCpu') : p('rankMemory'),
-        data: list.map(item => Number(item[1].toFixed(3))),
-        itemStyle: { color: '#f0a020' },
-        barMaxWidth: 14
-      }
-    ] as never
-  }));
-}
-watch([ranking, locale], drawRanking);
-
-// ---- the overview: the compact list of modules, to pick one from
-
-type RowT = Api.Overprovision.Row;
-const total = computed(() => sel.basis === 'total');
-const times = (row: RowT) => (total.value ? Math.max(row.replicas, 1) : 1);
-const fmt = (resource: 'cpu' | 'memory', value: number) =>
-  resource === 'memory' ? formatBytes(value, 2) : formatCores(value, 2);
-
-const requestOf = (row: RowT, resource: 'cpu' | 'memory') => {
-  const r = row[resource];
-  return r && r.request > 0 ? fmt(resource, r.request * times(row)) : '-';
-};
-type Q = 'p90' | 'p95' | 'p99';
-const quantileOf = (row: RowT, resource: 'cpu' | 'memory', q: Q) => {
-  const r = row[resource];
-  if (!r || !r.points) return '-';
-  const key = total.value ? (`total_${q}` as const) : q;
-  return fmt(resource, r[key]);
-};
-const suggestedOf = (row: RowT, resource: 'cpu' | 'memory') => {
-  const r = row[resource];
-  return r && r.suggested > 0 ? fmt(resource, r.suggested * times(row)) : '-';
-};
-const worstRatio = (row: RowT) => {
-  const ratios = [row.cpu, row.memory].filter(r => r && r.suggested > 0).map(r => r!.ratio);
-  return ratios.length ? Math.max(...ratios) : null;
-};
-
-const healthType: Record<string, 'default' | 'error' | 'warning' | 'success' | 'info'> = {
-  risk: 'error',
-  under: 'error',
-  over: 'warning',
-  limited: 'info',
-  ok: 'success',
-  unknown: 'default'
-};
-
-const listRows = computed(() =>
-  rows.value.filter(
-    row => (!sel.namespace || row.namespace === sel.namespace) && (!sel.health || row.health === sel.health)
-  )
-);
-
-const quantileColumn = (key: string, title: string, resource: 'cpu' | 'memory', q: Q) => ({
-  title,
-  key,
-  width: 100,
-  render: (row: RowT) => quantileOf(row, resource, q)
-});
+const listRows = computed(() => modules.value.filter(row => !sel.namespace || row.namespace === sel.namespace));
+/** the list is as high as its rows need, between a short one and a page of them */
+const listHeight = computed(() => Math.min(520, Math.max(250, 190 + listRows.value.length * 37)));
 
 const columnMap: Record<string, any> = {
-  name: { title: p('colName'), key: 'name', minWidth: 150, ellipsis: { tooltip: true } },
+  name: { title: p('colName'), key: 'name', minWidth: 160, ellipsis: { tooltip: true } },
+  namespace: { title: p('namespace'), key: 'namespace', minWidth: 140, ellipsis: { tooltip: true } },
   workload: {
     title: p('colWorkload'),
     key: 'workload',
-    minWidth: 180,
+    minWidth: 220,
     ellipsis: { tooltip: true },
-    render: (row: RowT) => `${row.namespace}/${row.workload}`
-  },
-  replicas: {
-    title: p('colReplicas'),
-    key: 'replicas',
-    width: 70,
-    align: 'center',
-    render: (row: RowT) => row.replicas || '-'
-  },
-  cpu_request: {
-    title: p('colCpuRequest'),
-    key: 'cpu_request',
-    width: 100,
-    render: (row: RowT) => requestOf(row, 'cpu')
-  },
-  cpu_p90: quantileColumn('cpu_p90', 'CPU P90', 'cpu', 'p90'),
-  cpu_p95: quantileColumn('cpu_p95', 'CPU P95', 'cpu', 'p95'),
-  cpu_p99: quantileColumn('cpu_p99', 'CPU P99', 'cpu', 'p99'),
-  cpu_suggested: {
-    title: p('colCpuSuggested'),
-    key: 'cpu_suggested',
-    width: 100,
-    render: (row: RowT) => suggestedOf(row, 'cpu')
-  },
-  mem_request: {
-    title: p('colMemRequest'),
-    key: 'mem_request',
-    width: 100,
-    render: (row: RowT) => requestOf(row, 'memory')
-  },
-  mem_p90: quantileColumn('mem_p90', p('colMemP90'), 'memory', 'p90'),
-  mem_p95: quantileColumn('mem_p95', p('colMemP95'), 'memory', 'p95'),
-  mem_p99: quantileColumn('mem_p99', p('colMemP99'), 'memory', 'p99'),
-  mem_suggested: {
-    title: p('colMemSuggested'),
-    key: 'mem_suggested',
-    width: 110,
-    render: (row: RowT) => suggestedOf(row, 'memory')
-  },
-  ratio: {
-    title: () => h(HelpLabel, { label: p('colRatio'), help: p('colRatioHelp') }),
-    key: 'ratio',
-    width: 80,
-    align: 'center',
-    render: (row: RowT) => {
-      const ratio = worstRatio(row);
-      return ratio === null ? '-' : formatPercent(ratio, 0);
-    }
-  },
-  health: {
-    title: p('colHealth'),
-    key: 'health',
-    width: 96,
-    align: 'center',
-    render: (row: RowT) =>
-      h(NTag, { size: 'small', bordered: false, type: healthType[row.health] }, () => p(`health_${row.health}`))
-  },
-  analyzed_at: {
-    title: p('colAnalyzedAt'),
-    key: 'analyzed_at',
-    width: 160,
-    render: (row: RowT) => (row.cpu || row.memory ? formatDateTime(row.analyzed_at) : '-')
+    render: (row: Api.Forecast.Module) => `${row.workload_kind}/${row.workload}`
   },
   operate: {
     title: t('common.operate'),
@@ -558,34 +197,16 @@ const columnMap: Record<string, any> = {
     width: operateWidth([p('analyze')]),
     fixed: 'right',
     align: 'center',
-    render: (row: RowT) =>
-      h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => pickModule(row.module_id) }, () =>
+    render: (row: Api.Forecast.Module) =>
+      h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => pickModule(row.id) }, () =>
         p('analyze')
       )
   }
 };
 const cfg = useTableColumnConfig({
-  pageCode: 'forecast_overprovision',
+  pageCode: 'forecast_overprovision_modules',
   columnMap,
-  defaultKeys: [
-    'name',
-    'cpu_request',
-    'cpu_p95',
-    'cpu_suggested',
-    'mem_request',
-    'mem_p95',
-    'mem_suggested',
-    'ratio',
-    'health',
-    'cpu_p90',
-    'cpu_p99',
-    'mem_p90',
-    'mem_p99',
-    'workload',
-    'replicas',
-    'analyzed_at',
-    'operate'
-  ],
+  defaultKeys: ['name', 'namespace', 'workload', 'operate'],
   columnMinWidths: { operate: 70 }
 });
 
@@ -595,9 +216,9 @@ onMounted(async () => {
   fetchGetGrafanaSettings().then(({ data }) => {
     grafana.value = data ?? null;
   });
-  await loadBoard();
+  await loadModules();
   applyRouteSelection();
-  drawRanking();
+  ready.value = true;
 });
 </script>
 
@@ -627,17 +248,19 @@ onMounted(async () => {
           :consistent-menu-width="false"
           @update:value="pickModule"
         />
-        <span class="filter-item">
+        <span v-if="sel.moduleId" class="filter-item">
           <HelpLabel :label="p('window')" :help="p('windowHelp')" class="filter-help" />
           <span class="w-250px"><TimeRangeField v-model="range" :clearable="false" size="small" /></span>
         </span>
-        <span class="filter-item">
+        <span v-if="sel.moduleId" class="filter-item">
           <HelpLabel :label="p('basis')" :help="p('basisHelp')" class="filter-help" />
           <NSelect v-model:value="sel.basis" size="small" class="w-130px" :options="basisOptions" />
         </span>
         <div class="filter-actions">
           <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
-          <NButton size="small" secondary :loading="analyzing" @click="analyzeNow">{{ p('analyzeNow') }}</NButton>
+          <NButton v-if="sel.moduleId" size="small" secondary :loading="detailLoading" @click="loadDetail">
+            {{ p('reload') }}
+          </NButton>
         </div>
       </div>
     </NCard>
@@ -648,101 +271,37 @@ onMounted(async () => {
           :detail="detail"
           :loading="detailLoading"
           :basis="sel.basis"
-          :prom="prom"
-          :prom-loading="promLoading"
-          :prom-error="promError"
-          :grafana-cluster="clusterGrafana"
-          @retry-prom="loadProm"
-        />
-        <div v-if="!detail && !detailLoading" class="text-13px opacity-70">
-          {{ selectedRow ? p('noData') : '' }}
-        </div>
-      </NCard>
-      <NCard v-if="selectedRow" :bordered="false" size="small" class="mt-10px rounded-16px shadow-sm">
-        <InventoryWorkloadPanel
-          :module-id="selectedRow.module_id"
-          :namespace="selectedRow.namespace"
-          :workload="selectedRow.workload"
-          :grafana="grafana"
-          :range="grafanaRange"
-          :hours="inventoryHours"
-          :refresh-key="inventoryKey"
+          :error="detailError"
+          @retry="loadDetail"
         />
       </NCard>
     </div>
 
-    <div v-else class="min-h-0 flex-1 flex-col gap-10px overflow-y-auto">
-      <!-- OOM first, then the totals -->
-      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-        <NSpin :show="boardLoading">
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-8px">
-            <div
-              v-for="cell in cells"
-              :key="cell.key"
-              class="cell"
-              :class="cell.key.startsWith('oom') ? 'cell-oom' : ''"
-            >
-              <div class="text-12px opacity-70"><HelpLabel :label="cell.label" :help="cell.help" /></div>
-              <div :class="cell.key === 'analyzedAt' ? 'text-13px leading-24px' : 'text-16px leading-24px'">
-                <NTag v-if="cell.type && cell.type !== 'default'" :type="cell.type" :bordered="false" size="small">
-                  {{ cell.value }}
-                </NTag>
-                <span v-else>{{ cell.value }}</span>
-              </div>
-              <div v-if="cell.sub" class="cell-sub" :title="cell.sub">{{ cell.sub }}</div>
-            </div>
-          </div>
-          <div v-if="board && !board.analyzed" class="mt-6px text-12px opacity-80">{{ p('notAnalyzed') }}</div>
-          <div v-else-if="board && !win.stored" class="mt-6px text-12px opacity-70">
-            {{ p('boardWindowNote', { window: board.window }) }}
-          </div>
-        </NSpin>
-      </NCard>
-
-      <!-- the cluster: what the data source answers, then what the operator reported of the nodes -->
-      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-        <OverprovisionClusterCard open :grafana-url="clusterGrafana" />
-        <div class="section-gap"></div>
-        <InventoryClusterPanel :grafana="grafana" :range="grafanaRange" :hours="inventoryHours" />
-      </NCard>
-
-      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-        <div class="mb-2px flex flex-wrap items-center gap-8px">
-          <HelpLabel :label="p('rankTitle')" :help="p('rankHelp')" class="text-12px opacity-80" />
-          <NSelect v-model:value="rank.mode" size="tiny" class="w-130px" :options="rankModeOptions" />
-          <NSelect v-model:value="rank.resource" size="tiny" class="w-110px" :options="rankResourceOptions" />
-        </div>
-        <div v-show="ranking.length" ref="domRef" class="h-150px w-full"></div>
-        <div v-if="!ranking.length" class="h-40px flex-center text-12px opacity-70">{{ p('rankEmpty') }}</div>
-      </NCard>
-
-      <div class="h-520px shrink-0 flex-col">
+    <div v-else-if="ready" class="min-h-0 flex-1 flex-col gap-10px overflow-y-auto">
+      <!-- the modules first: pick the instance -->
+      <div class="shrink-0 flex-col" :style="{ height: `${listHeight}px` }">
         <ListTablePanel
           :title="p('listTitle')"
           :help="p('listHelp')"
           :cfg="cfg"
-          :loading="boardLoading"
+          :loading="modulesLoading"
           :data="listRows"
-          :row-key="(row: any) => row.module_id"
+          :row-key="(row: any) => row.id"
           :remote="false"
-          :empty-hint="p('notAnalyzed')"
-          @refresh="loadBoard"
-        >
-          <template #suffix>
-            <NSelect
-              v-model:value="sel.health"
-              clearable
-              size="small"
-              class="w-130px"
-              :placeholder="p('health')"
-              :options="healthOptions"
-            />
-          </template>
-        </ListTablePanel>
+          :empty-hint="p('noModules')"
+          @refresh="loadModules"
+        />
       </div>
+
+      <!-- the cluster, as the data source answers -->
+      <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+        <OverprovisionClusterCard open :grafana-url="clusterGrafana" />
+      </NCard>
     </div>
 
+    <!-- the AI helper belongs to the module: no module, no button -->
     <OverprovisionAiAssistant
+      v-if="sel.moduleId"
       :ai="ai.state"
       :module-name="selectedRow?.name ?? ''"
       :can-analyze="Boolean(detail) && !detailLoading"
@@ -753,23 +312,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.cell {
-  border-radius: 8px;
-  padding: 4px 10px;
-  background: rgba(128, 128, 128, 0.07);
-  min-width: 0;
-}
-.cell-oom {
-  border-left: 3px solid rgba(208, 48, 80, 0.55);
-}
-.cell-sub {
-  overflow: hidden;
-  font-size: 11px;
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0.7;
-}
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -791,8 +333,5 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   margin-left: auto;
-}
-.section-gap {
-  height: 8px;
 }
 </style>
