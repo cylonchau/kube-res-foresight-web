@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue';
+import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard, NInput, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
@@ -9,14 +9,16 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchGetForecastModules, fetchGetOverprovisionResources } from '@/service/api';
 import { formatBytes, formatCores } from '@/utils/format';
 import { operateWidth } from '@/utils/operate-width';
+import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 
 defineOptions({ name: 'ForecastResultsOverprovision' });
 
 /**
  * The resource dashboard, first level: the list of the modules. Choose a namespace or search, and open a module: its analysis is a page of its own (the second
- * level, `forecast-results_overprovision-detail`), and coming back from it brings this list back as it was left. The table has the CPU and memory requests and
- * limits of one Pod of each module, every one of them the answer of the Prometheus data source of the module's metric mapping; a module without such a metric
- * has a dash and the reason. The cluster has its own dashboard.
+ * level, `forecast-results_overprovision-detail`), and coming back from it brings this list back as it was left. The rows are the modules of the module
+ * management, every one of them, a row to a line and a page at a time (previous and next). The table has the CPU and memory requests and limits of one Pod of
+ * each module, every one of them the answer of the Prometheus data source the module's dashboard metrics (Requests / Limits) point to; a module without such a
+ * metric has a dash and the reason. The cluster has its own dashboard.
  */
 const { t } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
@@ -30,11 +32,18 @@ const resourcesLoading = ref(false);
 const resourcesError = ref('');
 const resourcesPartial = ref(0);
 
+/** every module of the module management, in the pages the server gives (200 at most a page), enabled or not */
 async function loadModules() {
   modulesLoading.value = true;
   try {
-    const { data } = await fetchGetForecastModules({ page: 1, page_size: 500, enabled: true });
-    modules.value = data?.list ?? [];
+    const all: Api.Forecast.Module[] = [];
+    for (let page = 1; page <= 50; page += 1) {
+      const { data } = await fetchGetForecastModules({ page, page_size: 200 });
+      if (!data) break;
+      all.push(...data.list);
+      if (!data.list.length || all.length >= data.total) break;
+    }
+    modules.value = all.sort((a, b) => a.id - b.id);
   } finally {
     modulesLoading.value = false;
   }
@@ -79,6 +88,31 @@ const listRows = computed(() => {
   );
 });
 
+// the page and its size stay in the list state, so coming back from a module lands on the same page; a new search starts on the first page
+const pagination = reactive({
+  page: keep.page,
+  pageSize: keep.pageSize || getAdaptivePageSize(),
+  pageSizes: getAdaptivePageSizes(),
+  showSizePicker: true,
+  onChange: (page: number) => {
+    pagination.page = page;
+    keep.page = page;
+  },
+  onUpdatePageSize: (size: number) => {
+    pagination.pageSize = size;
+    pagination.page = 1;
+    keep.pageSize = size;
+    keep.page = 1;
+  }
+});
+watch(
+  () => [keep.namespace, keep.keyword],
+  () => {
+    pagination.page = 1;
+    keep.page = 1;
+  }
+);
+
 /** a module is opened as the second level; what is chosen here stays in the list state */
 function open(row: Api.Forecast.Module) {
   routerPushByKey('forecast-results_overprovision-detail', { query: { module: String(row.id) } });
@@ -107,12 +141,14 @@ const columnMap: Record<string, any> = {
   name: {
     title: p('colName'),
     key: 'name',
-    minWidth: 220,
+    minWidth: 200,
+    // one line: the namespace and the workload are in the tooltip and in the columns of their own
     render: (row: Api.Forecast.Module) =>
-      h('div', { class: 'leading-18px' }, [
-        h('div', row.name),
-        h('div', { class: 'text-11px opacity-60' }, `${row.namespace}/${row.workload_kind}/${row.workload}`)
-      ])
+      h(
+        'span',
+        { class: 'whitespace-nowrap', title: `${row.namespace}/${row.workload_kind}/${row.workload}` },
+        row.enabled ? row.name : `${row.name} (${p('disabled')})`
+      )
   },
   namespace: { title: p('namespace'), key: 'namespace', minWidth: 130, ellipsis: { tooltip: true } },
   workload: {
@@ -195,6 +231,7 @@ onMounted(() => {
         :cfg="cfg"
         :loading="modulesLoading || resourcesLoading"
         :data="listRows"
+        :pagination="pagination"
         :row-key="(row: any) => row.id"
         :remote="false"
         :empty-hint="p('noModules')"

@@ -514,7 +514,14 @@ declare namespace Api {
       precision: number;
       aggregation: SourceAggregation;
       missing: SourceMissing;
+      /** the dashboard reads it from Prometheus (dashboard), the history is collected from it (history), or both */
+      purpose: SourcePurpose;
+      /** what the query answers: one Pod, all the replicas together, or empty for what the level of the template says */
+      per: SourcePer;
     }
+
+    type SourcePurpose = 'dashboard' | 'history' | 'both';
+    type SourcePer = '' | 'pod' | 'total';
 
     /** a source of a dataset with what the page shows: its category, the query behind it and the grid it is sampled on */
     interface DatasetSource extends Source {
@@ -589,6 +596,8 @@ declare namespace Api {
       precision?: number;
       aggregation?: SourceAggregation;
       missing?: SourceMissing;
+      purpose?: SourcePurpose;
+      per?: SourcePer;
       custom?: CustomQuery;
     }
 

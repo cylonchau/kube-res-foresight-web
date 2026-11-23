@@ -217,6 +217,7 @@ const cloneSource = ref<Api.Forecast.Module>();
 const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
 const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const oomMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
+const boardMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const bypassTarget = ref<Api.Forecast.Module>();
 /** the module whose need (replicas, CPU, memory) is being read, before it is configured to act */
 const needTarget = ref<Api.Forecast.Module>();
@@ -316,6 +317,7 @@ function open(row?: Api.Forecast.Module) {
     periodEditor.value?.load(row?.id);
     metricsEditor.value?.load(row?.id);
     oomMetricsEditor.value?.load(row?.id);
+    boardMetricsEditor.value?.load(row?.id);
   });
 }
 
@@ -393,6 +395,7 @@ function clone(row: Api.Forecast.Module) {
     periodEditor.value?.load();
     metricsEditor.value?.load();
     oomMetricsEditor.value?.load();
+    boardMetricsEditor.value?.load();
   });
 }
 
@@ -433,6 +436,7 @@ async function save() {
   const editorProblem =
     metricsEditor.value?.problem(form.step_seconds) ||
     oomMetricsEditor.value?.problem(form.step_seconds) ||
+    boardMetricsEditor.value?.problem(form.step_seconds) ||
     periodEditor.value?.problem();
   if (editorProblem) {
     message.warning(editorProblem);
@@ -457,7 +461,8 @@ async function save() {
       }
       const metricsSaved = !savedId || (await metricsEditor.value?.save(savedId)) !== false;
       const oomSaved = !savedId || (await oomMetricsEditor.value?.save(savedId)) !== false;
-      if (!metricsSaved || !oomSaved) {
+      const boardSaved = !savedId || (await boardMetricsEditor.value?.save(savedId)) !== false;
+      if (!metricsSaved || !oomSaved || !boardSaved) {
         complete = false;
         message.warning(t('page.forecast.moduleMetrics.saveFailed'));
       }
@@ -471,7 +476,8 @@ async function save() {
         await Promise.all([
           periodEditor.value?.load(savedId),
           metricsEditor.value?.load(savedId),
-          oomMetricsEditor.value?.load(savedId)
+          oomMetricsEditor.value?.load(savedId),
+          boardMetricsEditor.value?.load(savedId)
         ]);
       }
       await load();
@@ -1274,6 +1280,19 @@ onMounted(() => {
         <ModuleMetrics
           ref="metricsEditor"
           scope="general"
+          @preview="source => showPreview(editing?.id ?? null, source)"
+        />
+
+        <NDivider class="!my-18px" />
+        <div class="mb-8px flex items-center gap-6px font-medium">
+          {{ t('page.forecast.moduleMetrics.boardTitle') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-420px leading-22px">{{ t('page.forecast.moduleMetrics.boardRules') }}</div>
+          </IconTooltip>
+        </div>
+        <ModuleMetrics
+          ref="boardMetricsEditor"
+          scope="dashboard"
           @preview="source => showPreview(editing?.id ?? null, source)"
         />
 

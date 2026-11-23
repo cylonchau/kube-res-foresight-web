@@ -20,17 +20,24 @@ import {
  * module's own parameters, and a metric that is not here (or is disabled) takes no part in its forecast, score or decision.
  * Rows are saved with the module: removed rows are deleted, changed rows updated, new rows created.
  *
- * The editor has a scope: the metrics of the OOM protection (OOM kills, the working set before a kill, the JVM heap, the memory limits)
- * are edited apart from the metrics the forecast is made of, so the two kinds are not mixed in one list. A scope reads, shows and saves
- * only its own kinds.
+ * The editor has a scope: the metrics of the OOM protection (OOM kills, the working set before a kill, the JVM heap) and the Requests and Limits the resource
+ * dashboard reads from Prometheus are edited apart from the metrics the forecast is made of, so the kinds are not mixed in one list. A scope reads, shows and
+ * saves only its own kinds. The dashboard scope also says what each query answers: one Pod, or all the replicas together.
  */
 defineOptions({ name: 'ModuleMetrics' });
 
 /** the kinds of metric the OOM protection reads; every other kind belongs to the general scope */
-const OOM_KINDS = ['oom', 'oom_working_set', 'jvm_heap_used', 'jvm_heap_max', 'k8s_mem_limits'];
+const OOM_KINDS = ['oom', 'oom_working_set', 'jvm_heap_used', 'jvm_heap_max'];
+/** the Requests and Limits of a Pod, read by the resource dashboard from Prometheus */
+const DASHBOARD_KINDS = ['k8s_cpu_requests', 'k8s_cpu_limits', 'k8s_mem_requests', 'k8s_mem_limits'];
 
-const props = withDefaults(defineProps<{ scope?: 'general' | 'oom' }>(), { scope: 'general' });
-const inScope = (kind: string) => (props.scope === 'oom') === OOM_KINDS.includes(kind);
+const props = withDefaults(defineProps<{ scope?: 'general' | 'oom' | 'dashboard' }>(), { scope: 'general' });
+const isDashboard = computed(() => props.scope === 'dashboard');
+const inScope = (kind: string) => {
+  if (props.scope === 'oom') return OOM_KINDS.includes(kind);
+  if (props.scope === 'dashboard') return DASHBOARD_KINDS.includes(kind);
+  return !OOM_KINDS.includes(kind) && !DASHBOARD_KINDS.includes(kind);
+};
 
 interface Row {
   /** the id of the source this row is saved as; none for a row that was just added */
@@ -41,10 +48,26 @@ interface Row {
   savedWeight?: number;
   savedEnabled?: boolean;
   savedName?: string;
+  savedPer?: Api.Forecast.SourcePer;
+  savedPurpose?: Api.Forecast.SourcePurpose;
   mappingId: number | null;
   weight: number;
   enabled: boolean;
+  /** what the query answers (the dashboard scope): one Pod, all the replicas together, or what the level of the template says */
+  per: Api.Forecast.SourcePer;
+  /** the memory limit is also what the OOM protection reads from the history; the other dashboard metrics are for the dashboard alone */
+  purpose: Api.Forecast.SourcePurpose;
 }
+
+const perOptions = computed(() => [
+  { label: $t('page.forecast.moduleMetrics.per_default'), value: '' },
+  { label: $t('page.forecast.moduleMetrics.per_pod'), value: 'pod' },
+  { label: $t('page.forecast.moduleMetrics.per_total'), value: 'total' }
+]);
+const purposeOptions = computed(() => [
+  { label: $t('page.forecast.moduleMetrics.purpose_dashboard'), value: 'dashboard' },
+  { label: $t('page.forecast.moduleMetrics.purpose_both'), value: 'both' }
+]);
 
 /** what the preview needs of a template: the query and how it is shaped */
 export interface TemplatePreview {
@@ -66,6 +89,8 @@ const loadedIds = ref<number[]>([]);
 
 const kindLabel = (kind: string) => $t(`page.datasource.mappings.metric_${kind}` as any, kind);
 const templateById = (id: number | null) => templates.value.find(item => item.id === id);
+/** only the memory limit has a history use (the OOM protection); the purpose of every other one is fixed */
+const purposeFree = (row: Row) => templateById(row.mappingId)?.metric === 'k8s_mem_limits';
 
 /** the templates grouped by the kind of metric, so a CPU template is not looked for among the JVM ones */
 const templateOptions = computed(() => {
@@ -106,14 +131,19 @@ async function load(moduleId?: number) {
     savedWeight: item.weight,
     savedEnabled: item.enabled,
     savedName: item.name,
+    savedPer: item.per || '',
+    savedPurpose: item.purpose || 'both',
     mappingId: item.mapping_id,
     weight: item.weight,
-    enabled: item.enabled
+    enabled: item.enabled,
+    per: item.per || '',
+    // only the memory limit can be for both; the others are saved as dashboard metrics, so that is what the row shows
+    purpose: item.kind === 'k8s_mem_limits' ? item.purpose || 'both' : 'dashboard'
   }));
 }
 
 function add() {
-  rows.value.push({ mappingId: null, weight: 1, enabled: true });
+  rows.value.push({ mappingId: null, weight: 1, enabled: true, per: '', purpose: 'dashboard' });
 }
 
 /**
@@ -123,16 +153,26 @@ function add() {
  */
 function problem(stepSeconds = 0): string {
   const used = new Set<number>();
+  const kinds = new Set<string>();
   for (const row of rows.value) {
     if (!row.mappingId) return $t('page.forecast.moduleMetrics.templateRequired');
     const template = templateById(row.mappingId);
+    // the dashboard reads one query for each of the Requests and Limits
+    if (isDashboard.value && template) {
+      if (kinds.has(template.metric)) {
+        return $t('page.forecast.moduleMetrics.kindDuplicate', { kind: kindLabel(template.metric) });
+      }
+      kinds.add(template.metric);
+    }
     if (used.has(row.mappingId)) {
       return $t('page.forecast.moduleMetrics.templateDuplicate', { name: template?.name || row.mappingId });
     }
     used.add(row.mappingId);
     if (!(row.weight >= 0)) return $t('page.forecast.moduleMetrics.weightInvalid');
     const query = template?.step_seconds || 0;
-    if (row.enabled && stepSeconds > 0 && query > 0) {
+    // the dashboard asks Prometheus as it is now: the sampling of the module does not apply to what is only for it
+    const forHistory = !isDashboard.value || row.purpose !== 'dashboard';
+    if (row.enabled && stepSeconds > 0 && query > 0 && forHistory) {
       const values = { step: stepSeconds, query, name: template?.name || '' };
       if (stepSeconds < query) return $t('page.forecast.moduleMetrics.stepFiner', values);
       if (stepSeconds % query !== 0) return $t('page.forecast.moduleMetrics.stepMultiple', values);
@@ -154,6 +194,11 @@ function uniqueName(base: string, taken: Set<string>) {
   for (let n = 2; taken.has(name); n += 1) name = `${base} (${n})`;
   taken.add(name);
   return name;
+}
+
+/** the purpose a row is saved with: only the memory limit can be for both, the other Requests and Limits are for the dashboard alone */
+function purposeOf(row: Row, kind: string): Api.Forecast.SourcePurpose {
+  return kind === 'k8s_mem_limits' && row.purpose === 'both' ? 'both' : 'dashboard';
 }
 
 /** Writes the rows to the module; returns false when a request failed. */
@@ -188,18 +233,21 @@ async function save(moduleId: number): Promise<boolean> {
         scale: 1,
         precision: 6,
         aggregation: 'avg',
-        missing: info?.missing
+        missing: info?.missing,
+        ...(isDashboard.value ? { purpose: purposeOf(row, template.metric), per: row.per } : {})
       });
       if (error) ok = false;
     } else if (
       row.savedMapping !== row.mappingId ||
       row.savedWeight !== row.weight ||
-      row.savedEnabled !== row.enabled
+      row.savedEnabled !== row.enabled ||
+      (isDashboard.value && (row.savedPer !== row.per || row.savedPurpose !== purposeOf(row, template.metric)))
     ) {
       const { error } = await fetchUpdateModuleSource(moduleId, row.id as number, {
         mapping_id: row.mappingId as number,
         weight: row.weight,
-        enabled: row.enabled
+        enabled: row.enabled,
+        ...(isDashboard.value ? { purpose: purposeOf(row, template.metric), per: row.per } : {})
       });
       if (error) ok = false;
     }
@@ -225,14 +273,28 @@ defineExpose({ load, save, problem });
 
 <template>
   <div class="module-metrics">
-    <div v-if="rows.length" class="metric-grid metric-head">
+    <div v-if="rows.length" class="metric-grid metric-head" :class="{ 'is-dashboard': isDashboard }">
       <span class="inline-flex items-center gap-4px">
         {{ $t('page.forecast.moduleMetrics.col_template') }}
         <IconTooltip icon="mdi-help-circle" placement="top">
           <div class="max-w-320px leading-22px">{{ $t('page.forecast.moduleMetrics.helpTemplate') }}</div>
         </IconTooltip>
       </span>
-      <span class="inline-flex items-center gap-4px">
+      <template v-if="isDashboard">
+        <span class="inline-flex items-center gap-4px">
+          {{ $t('page.forecast.moduleMetrics.col_per') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-320px leading-22px">{{ $t('page.forecast.moduleMetrics.helpPer') }}</div>
+          </IconTooltip>
+        </span>
+        <span class="inline-flex items-center gap-4px">
+          {{ $t('page.forecast.moduleMetrics.col_purpose') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-320px leading-22px">{{ $t('page.forecast.moduleMetrics.helpPurpose') }}</div>
+          </IconTooltip>
+        </span>
+      </template>
+      <span v-else class="inline-flex items-center gap-4px">
         {{ $t('page.forecast.moduleMetrics.col_weight') }}
         <IconTooltip icon="mdi-help-circle" placement="top">
           <div class="max-w-320px leading-22px">{{ $t('page.forecast.moduleMetrics.helpWeight') }}</div>
@@ -247,9 +309,18 @@ defineExpose({ load, save, problem });
       <span />
       <span />
     </div>
-    <div v-for="(row, index) in rows" :key="row.id ?? `new-${index}`" class="metric-grid metric-row">
+    <div
+      v-for="(row, index) in rows"
+      :key="row.id ?? `new-${index}`"
+      class="metric-grid metric-row"
+      :class="{ 'is-dashboard': isDashboard }"
+    >
       <NSelect v-model:value="row.mappingId" filterable size="small" :options="templateOptions" />
-      <NInputNumber v-model:value="row.weight" size="small" :min="0" :step="0.5" :show-button="false" />
+      <template v-if="isDashboard">
+        <NSelect v-model:value="row.per" size="small" :options="perOptions" />
+        <NSelect v-model:value="row.purpose" size="small" :options="purposeOptions" :disabled="!purposeFree(row)" />
+      </template>
+      <NInputNumber v-else v-model:value="row.weight" size="small" :min="0" :step="0.5" :show-button="false" />
       <StatusSelect v-model:value="row.enabled" />
       <NButton size="small" :disabled="!row.mappingId" @click="preview(row)">
         {{ $t('page.forecast.moduleMetrics.preview') }}
@@ -267,6 +338,10 @@ defineExpose({ load, save, problem });
   grid-template-columns: minmax(260px, 2fr) 90px 112px 64px 52px;
   gap: 8px;
   align-items: center;
+}
+
+.metric-grid.is-dashboard {
+  grid-template-columns: minmax(240px, 2fr) 150px 150px 112px 64px 52px;
 }
 
 .metric-head {

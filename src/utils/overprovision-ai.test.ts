@@ -23,6 +23,7 @@ function result(resource: 'cpu' | 'memory', scale: number): any {
     coverage: 1,
     expected_points: 2016,
     suggested: 1 * scale,
+    suggested_limit: 1.5 * scale,
     ratio: 0.75,
     numerator: 3 * scale,
     denominator: 4 * scale,
@@ -80,6 +81,11 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
     text.includes('当前配置与 AI 推荐配置对比'),
     'the answer has to compare the current and the recommended configuration'
   );
+  assert.ok(
+    text.includes('单 Pod 推荐值') && text.includes('全副本总和推荐值'),
+    'the table has the recommendation of one Pod and of all the replicas'
+  );
+  assert.ok(text.includes('建议 Requests') && text.includes('建议 Limits'), 'the platform suggestion of both is given');
   assert.ok(text.includes('只读'), 'the question asks for an analysis and nothing else');
   assert.ok(
     text.includes('只输出 HTML') && text.includes('<td class="lv-warn">'),

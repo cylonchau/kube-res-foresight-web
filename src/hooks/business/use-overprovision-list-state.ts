@@ -7,7 +7,10 @@ import { reactive } from 'vue';
  */
 const state = reactive({
   namespace: null as string | null,
-  keyword: ''
+  keyword: '',
+  /** the page of the list and how many rows a page has */
+  page: 1,
+  pageSize: 0
 });
 
 export function useOverprovisionListState() {

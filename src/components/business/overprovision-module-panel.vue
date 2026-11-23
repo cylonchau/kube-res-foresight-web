@@ -12,8 +12,8 @@ import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/
 defineOptions({ name: 'OverprovisionModulePanel' });
 
 /**
- * The analysis of one module, every figure of it read from Prometheus: first the number of OOM kills, then a wall of cards (what it is configured with, what it
- * uses, what is left and what the use supports), the quantiles of the use of one Pod and of all the replicas with the number of samples they are made of, the
+ * The analysis of one module, every figure of it read from Prometheus: first the table of the Requests and Limits (what they are now and what the use
+ * supports, for one Pod and for all the replicas), then a wall of cards (the OOM kills, what it uses, what is left and how much of it is used), the quantiles of the use of one Pod and of all the replicas with the number of samples they are made of, the
  * use of one Pod and of all the replicas over the window, the queries that were sent, and the other metrics the module has set up (container, JVM, throttling).
  * Everything is of the module chosen on the page; the AI analysis is the helper at the lower right of the page.
  */
@@ -70,6 +70,11 @@ const oomKills = computed(() => {
   if (!oomSource.value || oomSource.value.error || !memory) return null;
   return memory.oom_kills;
 });
+/** the working set at the time of the kill, when the module has that metric and a kill happened */
+const oomWorkingSet = computed(() => {
+  const memory = win.value?.memory;
+  return memory && memory.oom_working_set > 0 ? memory.oom_working_set : 0;
+});
 
 // ---- the card wall
 
@@ -80,60 +85,35 @@ function whyMissing(kind: string) {
   return query.error || undefined;
 }
 
-/** the level of a resource's verdict: what the platform says of the request against the use */
-function statusLevel(result: Api.Overprovision.Result): WallCard['level'] {
-  if (result.status === 'under' || result.risk === 'high') return 'danger';
-  if (result.status === 'over') return result.grade === 'mild' ? 'info' : 'warn';
-  if (result.status === 'limited') return 'warn';
-  return result.status === 'ok' ? 'good' : 'neutral';
+/** the share of the request that is used, as a figure that stays readable: above 200% it says so instead of a number of thousands */
+function rateText(rate: number | null) {
+  if (rate === null) return '-';
+  return rate > 2 ? '> 200%' : formatPercent(rate, 0);
 }
 
 const wall = computed<WallCard[]>(() => {
   const d = props.detail;
   if (!d) return [];
   const cards: WallCard[] = [];
-  // the requests and the limits are the answers of Prometheus to the metrics k8s_*_requests and k8s_*_limits of the module: with no such metric there is
-  // no figure, and the card says which metric to add
-  const request = (resource: Res) => {
-    const r = win.value?.[resource];
-    return r && r.request > 0
-      ? { value: fmt(resource, r.request * times.value), sub: p('fromPrometheus') }
-      : { value: '-', sub: whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests') };
-  };
-  const limit = (resource: Res) => {
-    const r = win.value?.[resource];
-    if (!r || !(r.limit > 0))
-      return { value: p('limitUnknown'), sub: whyMissing(resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits') };
-    return { value: fmt(resource, r.limit * times.value), sub: p('fromPrometheus') };
-  };
+  // OOM: how many times a container was killed for memory in the window, and what the working set was then
   cards.push({
-    key: 'cpuReq',
-    label: p('cpuRequests'),
-    help: p('requestsHelp'),
-    ...request('cpu'),
-    level: 'info'
+    key: 'oom',
+    label: p('oomCount'),
+    help: p('oomCountHelp'),
+    value: oomKills.value === null ? '-' : formatDecimal(oomKills.value, 0),
+    sub: oomKills.value === null ? oomSource.value?.error || p('oomNoSource') : undefined,
+    level: oomKills.value === null ? 'neutral' : oomKills.value > 0 ? 'danger' : 'good'
   });
-  cards.push({
-    key: 'cpuLim',
-    label: p('cpuLimits'),
-    help: p('limitsHelp'),
-    ...limit('cpu'),
-    level: 'info'
-  });
-  cards.push({
-    key: 'memReq',
-    label: p('memRequests'),
-    help: p('requestsHelp'),
-    ...request('memory'),
-    level: 'info'
-  });
-  cards.push({
-    key: 'memLim',
-    label: p('memLimits'),
-    help: p('limitsHelp'),
-    ...limit('memory'),
-    level: 'info'
-  });
+  if (oomKills.value !== null && oomKills.value > 0) {
+    cards.push({
+      key: 'oomWs',
+      label: p('oomWorkingSet'),
+      help: p('oomWorkingSetHelp'),
+      value: oomWorkingSet.value > 0 ? fmt('memory', oomWorkingSet.value * times.value) : '-',
+      sub: oomWorkingSet.value > 0 ? undefined : whyMissing('oom_working_set'),
+      level: 'danger'
+    });
+  }
   cards.push({
     key: 'replicas',
     label: p('configReplicas'),
@@ -158,26 +138,84 @@ const wall = computed<WallCard[]>(() => {
       label: `${name} ${p('available')}`,
       help: p('availableHelp'),
       value: reserved > 0 ? fmt(resource, Math.max(left, 0)) : '-',
-      sub: left < 0 ? p('belowUse') : undefined,
+      sub:
+        left < 0
+          ? p('belowUse')
+          : reserved > 0
+            ? undefined
+            : whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests'),
       level: left < 0 ? 'danger' : reserved > 0 ? 'good' : 'neutral'
     });
     cards.push({
       key: `${resource}Rate`,
       label: `${name} ${p('utilization')}`,
       help: p('utilizationHelp'),
-      value: rate === null ? '-' : formatPercent(rate, 0),
+      value: rateText(rate),
       level: rate === null ? 'neutral' : rate >= 0.95 ? 'danger' : rate >= 0.85 ? 'warn' : rate < 0.3 ? 'warn' : 'good'
-    });
-    cards.push({
-      key: `${resource}Sug`,
-      label: `${name} ${p('suggested')}`,
-      value: r.suggested > 0 ? fmt(resource, r.suggested * times.value) : p('suggestedNone'),
-      sub: r.suggested > 0 ? `${p('ratioLabel')} ${formatPercent(r.ratio, 0)}` : undefined,
-      level: r.suggested > 0 ? statusLevel(r) : 'neutral'
     });
   }
   return cards;
 });
+
+// ---- the table of the Requests and Limits: what they are now (Prometheus), and what the use supports for one Pod and for all the replicas
+
+interface RecRow {
+  key: string;
+  label: string;
+  resource: Res;
+  /** one Pod: the figure now (0 = none) and the figure the use supports (0 = none) */
+  current: number;
+  recommended: number;
+  /** why there is no current figure, or no recommendation */
+  whyNoCurrent?: string;
+  whyNoRecommended?: string;
+}
+const replicas = computed(() => Math.max(props.detail?.replicas ?? 0, 0));
+const recRows = computed<RecRow[]>(() => {
+  const rows: RecRow[] = [];
+  for (const resource of ['cpu', 'memory'] as Res[]) {
+    const r = win.value?.[resource];
+    if (!r) continue;
+    const none =
+      r.suggested > 0 ? undefined : r.reasons.map(reason => p(`reason_${reason}`)).join(' ') || p('suggestedNone');
+    rows.push({
+      key: `${resource}-req`,
+      label: resource === 'cpu' ? p('cpuRequests') : p('memRequests'),
+      resource,
+      current: r.request,
+      recommended: r.suggested,
+      whyNoCurrent:
+        r.request > 0 ? undefined : whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests'),
+      whyNoRecommended: none
+    });
+    rows.push({
+      key: `${resource}-lim`,
+      label: resource === 'cpu' ? p('cpuLimits') : p('memLimits'),
+      resource,
+      current: r.limit,
+      recommended: r.suggested_limit,
+      whyNoCurrent: r.limit > 0 ? undefined : whyMissing(resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits'),
+      whyNoRecommended: none
+    });
+  }
+  return rows;
+});
+/** how far the recommendation is from the figure now, as a signed share of it; null when either is missing */
+function change(row: RecRow) {
+  if (!(row.current > 0) || !(row.recommended > 0)) return null;
+  return (row.recommended - row.current) / row.current;
+}
+function changeText(row: RecRow) {
+  const c = change(row);
+  if (c === null) return '';
+  return `${c > 0 ? '+' : ''}${formatPercent(c, 0)}`;
+}
+function changeType(row: RecRow): 'success' | 'warning' | 'error' | 'default' {
+  const c = change(row);
+  if (c === null || Math.abs(c) < 0.05) return 'default';
+  // a lower request is what gets given back; a higher one is what the use needs
+  return c < 0 ? 'success' : 'error';
+}
 
 // ---- the quantiles, with the samples they are made of
 
@@ -273,13 +311,17 @@ function metricCards(items: Api.Overprovision.MetricStat[], group: string): Wall
 
 // ---- the PromQL that was sent, in the form of Prometheus' own expression browser
 
+/** the name of a metric kind as the metric templates page calls it */
+const kindName = (kind: string) => t(`page.datasource.mappings.metric_${kind}` as any, kind);
 const promItems = computed<PromqlItem[]>(() =>
   (props.detail?.queries ?? [])
     .filter(q => q.query || q.error)
     .map(q => ({
-      name: q.name,
+      name: `${q.name} · ${kindName(q.kind)}`,
       query: q.query || '-',
-      value: q.points ? p('queryPoints', { step: q.step, n: q.points }) : undefined,
+      value: q.points
+        ? `${p('queryPoints', { step: q.step, n: q.points })}${q.per ? ` · ${p(`per_${q.per}`)}` : ''}`
+        : undefined,
       error: q.error
     }))
 );
@@ -289,7 +331,7 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 
 <template>
   <NSpin :show="loading">
-    <div v-if="detail" class="flex-col gap-12px pb-8px">
+    <div v-if="detail" class="min-w-0 flex-col gap-12px pb-8px">
       <div class="flex flex-wrap items-center gap-x-12px gap-y-4px text-13px">
         <span class="text-16px font-medium">{{ detail.name }}</span>
         <span class="opacity-70">{{ detail.namespace }}/{{ detail.workload_kind }}/{{ detail.workload }}</span>
@@ -314,64 +356,106 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
       </div>
       <div v-else-if="failed" class="text-12px opacity-80">{{ p('queriesFailed', { n: failed }) }}</div>
 
-      <!-- OOM: the number of times, nothing more -->
-      <div class="flex flex-wrap items-center gap-8px text-13px">
-        <HelpLabel :label="p('oomCount')" :help="p('oomCountHelp')" class="font-medium" />
-        <span>:</span>
-        <NTag v-if="oomKills !== null" :type="oomKills > 0 ? 'error' : 'success'" :bordered="false" size="medium">
-          {{ formatDecimal(oomKills, 0) }}
-        </NTag>
-        <span v-else class="opacity-70">{{ oomSource?.error ? oomSource.error : p('oomNoSource') }}</span>
-      </div>
-
       <div v-if="!results.length" class="text-13px opacity-70">{{ p('noData') }}</div>
+
+      <!-- Requests and Limits: now, and what the use supports for one Pod and for all the replicas -->
+      <div v-if="recRows.length" class="flex-col gap-4px">
+        <HelpLabel :label="p('recTitle')" :help="p('recHelp')" class="text-13px font-medium" />
+        <div class="table-scroll">
+          <NTable size="small" :bordered="true" :single-line="false" class="rec text-12px">
+            <thead>
+              <tr>
+                <th>{{ p('colItem') }}</th>
+                <th>{{ p('colCurrent') }}</th>
+                <th class="key">{{ p('colPodRec') }}</th>
+                <th class="key">{{ p('colTotalRec') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in recRows" :key="row.key">
+                <td class="font-medium">{{ row.label }}</td>
+                <td :title="row.current > 0 ? p('fromPrometheus') : row.whyNoCurrent">
+                  <template v-if="row.current > 0">
+                    {{ fmt(row.resource, row.current) }}
+                    <span v-if="replicas > 0" class="opacity-60">
+                      · {{ p('currentTotal', { value: fmt(row.resource, row.current * replicas) }) }}
+                    </span>
+                  </template>
+                  <span v-else class="opacity-60">-</span>
+                </td>
+                <td class="key" :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
+                  <template v-if="row.recommended > 0">
+                    {{ fmt(row.resource, row.recommended) }}
+                    <NTag v-if="changeText(row)" size="tiny" :bordered="false" :type="changeType(row)" class="ml-4px">
+                      {{ changeText(row) }}
+                    </NTag>
+                  </template>
+                  <span v-else class="opacity-60">{{ p('suggestedNone') }}</span>
+                </td>
+                <td
+                  class="key"
+                  :title="row.recommended > 0 && replicas > 0 ? undefined : row.whyNoRecommended || p('noReplicas')"
+                >
+                  <template v-if="row.recommended > 0 && replicas > 0">
+                    {{ fmt(row.resource, row.recommended * replicas) }}
+                    <span class="opacity-60">· {{ replicas }} {{ p('replicasUnit') }}</span>
+                  </template>
+                  <span v-else class="opacity-60">-</span>
+                </td>
+              </tr>
+            </tbody>
+          </NTable>
+        </div>
+      </div>
 
       <OverprovisionCardWall v-if="wall.length" :cards="wall" />
 
-      <NTable v-if="quantileRows.length" size="small" :bordered="true" :single-line="false" class="quantiles text-12px">
-        <thead>
-          <tr>
-            <th></th>
-            <th><HelpLabel label="Requests" :help="p('requestsHelp')" /></th>
-            <th><HelpLabel label="Limits" :help="p('limitsHelp')" /></th>
-            <th><HelpLabel label="P50" :help="p('statP50')" /></th>
-            <th class="key"><HelpLabel label="P90" :help="p('statP90')" /></th>
-            <th class="key"><HelpLabel label="P95" :help="p('statP95')" /></th>
-            <th class="key"><HelpLabel label="P99" :help="p('statP99')" /></th>
-            <th><HelpLabel label="Max" :help="p('statMax')" /></th>
-            <th><HelpLabel :label="p('points')" :help="p('pointsHelp', { step: step || '-' })" /></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in quantileRows" :key="row.key">
-            <td>{{ row.label }}</td>
-            <td
-              :title="
-                row.request > 0
-                  ? p('fromPrometheus')
-                  : whyMissing(row.resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests')
-              "
-            >
-              {{ row.request > 0 ? fmt(row.resource, row.request) : '-' }}
-            </td>
-            <td
-              :title="
-                row.limit > 0
-                  ? p('fromPrometheus')
-                  : whyMissing(row.resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits')
-              "
-            >
-              {{ row.limit > 0 ? fmt(row.resource, row.limit) : '-' }}
-            </td>
-            <td>{{ fmt(row.resource, row.u.p50) }}</td>
-            <td class="key">{{ fmt(row.resource, row.u.p90) }}</td>
-            <td class="key">{{ fmt(row.resource, row.u.p95) }}</td>
-            <td class="key">{{ fmt(row.resource, row.u.p99) }}</td>
-            <td>{{ fmt(row.resource, row.u.max) }}</td>
-            <td>{{ row.u.points }} / {{ row.expected }}</td>
-          </tr>
-        </tbody>
-      </NTable>
+      <div v-if="quantileRows.length" class="table-scroll">
+        <NTable size="small" :bordered="true" :single-line="false" class="quantiles text-12px">
+          <thead>
+            <tr>
+              <th></th>
+              <th><HelpLabel label="Requests" :help="p('requestsHelp')" /></th>
+              <th><HelpLabel label="Limits" :help="p('limitsHelp')" /></th>
+              <th><HelpLabel label="P50" :help="p('statP50')" /></th>
+              <th class="key"><HelpLabel label="P90" :help="p('statP90')" /></th>
+              <th class="key"><HelpLabel label="P95" :help="p('statP95')" /></th>
+              <th class="key"><HelpLabel label="P99" :help="p('statP99')" /></th>
+              <th><HelpLabel label="Max" :help="p('statMax')" /></th>
+              <th><HelpLabel :label="p('points')" :help="p('pointsHelp', { step: step || '-' })" /></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in quantileRows" :key="row.key">
+              <td>{{ row.label }}</td>
+              <td
+                :title="
+                  row.request > 0
+                    ? p('fromPrometheus')
+                    : whyMissing(row.resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests')
+                "
+              >
+                {{ row.request > 0 ? fmt(row.resource, row.request) : '-' }}
+              </td>
+              <td
+                :title="
+                  row.limit > 0
+                    ? p('fromPrometheus')
+                    : whyMissing(row.resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits')
+                "
+              >
+                {{ row.limit > 0 ? fmt(row.resource, row.limit) : '-' }}
+              </td>
+              <td>{{ fmt(row.resource, row.u.p50) }}</td>
+              <td class="key">{{ fmt(row.resource, row.u.p90) }}</td>
+              <td class="key">{{ fmt(row.resource, row.u.p95) }}</td>
+              <td class="key">{{ fmt(row.resource, row.u.p99) }}</td>
+              <td>{{ fmt(row.resource, row.u.max) }}</td>
+              <td>{{ row.u.points }} / {{ row.expected }}</td>
+            </tr>
+          </tbody>
+        </NTable>
+      </div>
 
       <!-- the use of one Pod, CPU and memory in one chart -->
       <div v-if="results.length" class="flex-col gap-4px">
@@ -445,7 +529,15 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 
 <style scoped>
 .quantiles :deep(th.key),
-.quantiles :deep(td.key) {
+.quantiles :deep(td.key),
+.rec :deep(th.key),
+.rec :deep(td.key) {
   font-weight: 600;
+}
+
+/* a table wider than the page scrolls in its own box, it does not push the page sideways */
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
 }
 </style>
