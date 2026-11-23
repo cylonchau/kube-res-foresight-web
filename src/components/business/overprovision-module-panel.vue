@@ -316,9 +316,13 @@ const promItems = computed<PromqlItem[]>(() =>
     .map(q => ({
       name: `${q.name} · ${kindName(q.kind)}${q.display ? ` · ${p('displayOnly')}` : ''}`,
       query: q.query || '-',
-      value: q.points
-        ? `${p('queryPoints', { step: q.step, n: q.points })}${q.per ? ` · ${p(`per_${q.per}`)}` : ''}`
-        : undefined,
+      value:
+        [
+          q.points ? `${p('queryPoints', { step: q.step, n: q.points })}${q.per ? ` · ${p(`per_${q.per}`)}` : ''}` : '',
+          q.note ? `⚠ ${q.note}` : ''
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined,
       error: q.error
     }))
 );
