@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NButton, NCollapse, NCollapseItem, NSpin, NTable, NTag } from 'naive-ui';
+import { NButton, NCollapse, NCollapseItem, NSkeleton, NSpin, NTable, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import OverprovisionCardWall, { type WallCard } from '@/components/business/overprovision-card-wall.vue';
 import OverprovisionUsageChart from '@/components/business/overprovision-usage-chart.vue';
@@ -331,7 +331,20 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 </script>
 
 <template>
-  <NSpin :show="loading">
+  <!-- the first read of a module: a skeleton of the page and what is being read, not a lone spinner in an empty page; a reload keeps the figures and spins over them -->
+  <div v-if="loading && !detail" class="loading-state flex-col gap-14px pb-8px">
+    <div class="flex items-center gap-8px text-13px opacity-80">
+      <NSpin :size="16" />
+      {{ p('loadingDetail') }}
+    </div>
+    <NSkeleton text style="width: 38%" />
+    <div class="skeleton-cards">
+      <NSkeleton v-for="n in 4" :key="n" :height="84" :sharp="false" />
+    </div>
+    <NSkeleton :height="150" :sharp="false" />
+    <NSkeleton :height="220" :sharp="false" />
+  </div>
+  <NSpin v-else :show="loading">
     <div v-if="detail" class="min-w-0 flex-col gap-12px pb-8px">
       <div class="flex flex-wrap items-center gap-x-12px gap-y-4px text-13px">
         <span class="text-16px font-medium">{{ detail.name }}</span>
@@ -526,6 +539,12 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 </template>
 
 <style scoped>
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
 .quantiles :deep(th.key),
 .quantiles :deep(td.key),
 .rec :deep(th.key),

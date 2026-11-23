@@ -966,6 +966,7 @@ const local = {
         'This answer has no four-row table of the current and the recommended configuration (the Requests and Limits of CPU and memory): press "Analyse again".',
       aiPickModule: 'Pick an instance first',
       aiNoFigures: 'The data of the instance is still loading',
+      loadingDetail: 'Reading the data of this module from Prometheus, one moment…',
       aiAgain: 'Analyse again',
       clusterNoAnswer: 'The data source gave no figure for it; the query below says why',
       aiStart: 'Analyse'
