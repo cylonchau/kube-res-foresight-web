@@ -194,7 +194,15 @@ function preview(role: Role) {
   });
 }
 
-defineExpose({ load, save, problem });
+/** gives a role the template of a row that was moved here from the algorithm metrics */
+function bind(kind: string, mappingId: number) {
+  const role = roles.value.find(item => item.kind === kind);
+  if (!role) return;
+  role.mappingId = mappingId;
+  role.per = '';
+}
+
+defineExpose({ load, save, problem, bind });
 </script>
 
 <template>

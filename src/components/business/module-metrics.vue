@@ -59,7 +59,11 @@ export interface TemplatePreview {
   step_seconds: number;
 }
 
-const emit = defineEmits<{ preview: [template: TemplatePreview] }>();
+const emit = defineEmits<{
+  preview: [template: TemplatePreview];
+  /** a row that is a Requests / Limits is taken out of the algorithm metrics and handed to the display metrics */
+  moveDisplay: [payload: { kind: string; mappingId: number }];
+}>();
 const rows = ref<Row[]>([]);
 const templates = ref<Api.Datasource.MetricMapping[]>([]);
 const catalog = ref<Api.Forecast.DatasetCatalog>();
@@ -75,6 +79,23 @@ const DISPLAY_NAME = /(request|limit)/i;
 function looksDisplay(row: Row) {
   const template = templateById(row.mappingId);
   return Boolean(template && ['cpu', 'memory'].includes(template.metric) && DISPLAY_NAME.test(template.name));
+}
+
+/** which of the four a template named like Requests / Limits is: CPU or memory by its kind, Limits or Requests by its name */
+function displayKindOf(row: Row): string {
+  const template = templateById(row.mappingId);
+  const cpu = template?.metric === 'cpu';
+  const limits = /limit/i.test(template?.name ?? '') && !/request/i.test(template?.name ?? '');
+  if (cpu) return limits ? 'k8s_cpu_limits' : 'k8s_cpu_requests';
+  return limits ? 'k8s_mem_limits' : 'k8s_mem_requests';
+}
+
+/** the row leaves the algorithm metrics (the source is deleted when the module is saved) and the display metrics get its template */
+function moveToDisplay(index: number) {
+  const row = rows.value[index];
+  if (!row?.mappingId) return;
+  emit('moveDisplay', { kind: displayKindOf(row), mappingId: row.mappingId });
+  rows.value.splice(index, 1);
 }
 
 /** the templates grouped by the kind of metric, so a CPU template is not looked for among the JVM ones */
@@ -267,6 +288,9 @@ defineExpose({ load, save, problem });
       <NButton size="small" quaternary type="error" @click="rows.splice(index, 1)">{{ $t('common.delete') }}</NButton>
       <div v-if="looksDisplay(row)" class="looks-display">
         {{ $t('page.forecast.moduleMetrics.looksDisplay', { name: templateById(row.mappingId)?.name }) }}
+        <NButton size="tiny" type="warning" secondary class="ml-8px" @click="moveToDisplay(index)">
+          {{ $t('page.forecast.moduleMetrics.moveDisplay') }}
+        </NButton>
       </div>
     </div>
     <div v-if="!rows.length" class="mb-6px text-12px opacity-70">{{ $t('page.forecast.moduleMetrics.empty') }}</div>

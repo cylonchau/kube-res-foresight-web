@@ -1282,6 +1282,7 @@ onMounted(() => {
           ref="metricsEditor"
           scope="general"
           @preview="source => showPreview(editing?.id ?? null, source)"
+          @move-display="item => boardMetricsEditor?.bind(item.kind, item.mappingId)"
         />
 
         <NDivider class="!my-18px" />
