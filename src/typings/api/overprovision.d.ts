@@ -22,6 +22,9 @@ declare namespace Api {
       window_minutes: number;
       request: number;
       limit: number;
+      /** the Requests and the Limits of all the Pods together as Prometheus has them (0 = not known): the Pods in the sum are not always the ready replicas */
+      request_total: number;
+      limit_total: number;
       /** where the limit comes from: a metric of the module, the module ratio of admission, or empty when not known */
       limit_from: 'metric' | 'module' | '';
       usage: Usage;
@@ -31,8 +34,12 @@ declare namespace Api {
       expected_points: number;
       /** the request the use supports (one Pod), with or without a request to compare with; 0 when none is made */
       suggested: number;
-      /** the limit that goes with it: never below the P99, a memory limit never below the suggested request */
+      /** what the use asks of the request by the bands (before it is kept, lowered or raised by the verdict); 0 when none is made */
+      needed: number;
+      /** the limit that goes with it: the P99 with the headroom, never below the suggested request */
       suggested_limit: number;
+      /** the use of each percentile as a share of the request (0 to 1 and over); absent when there is no request */
+      shares?: Usage;
       ratio: number;
       numerator: number;
       denominator: number;
@@ -79,6 +86,29 @@ declare namespace Api {
       hints: string[];
     }
 
+    /** what is asked of one percentile against the request: the share it takes at the recommended request, and the range of shares that is reasonable */
+    interface Band {
+      target: number;
+      low: number;
+      high: number;
+    }
+
+    /** the numbers of the verdict (shares are 0 to 1) */
+    interface Params {
+      p90: Band;
+      p95: Band;
+      p99: Band;
+      limit_headroom: number;
+      oom_uplift: number;
+      throttle_limit: number;
+      baseline_minutes: number;
+      severe: number;
+      moderate: number;
+      coverage_high: number;
+      coverage_mid: number;
+      peak_near_limit: number;
+    }
+
     interface Window {
       label: string;
       window_minutes: number;
@@ -95,6 +125,9 @@ declare namespace Api {
       replicas: number;
       at: string;
       windows: Window[];
+      /** the analysis over the recommendation period (a system parameter, apart from the window): the verdict and the recommended Requests and Limits are its */
+      recommend?: Window;
+      params?: Params;
       jvm?: JVM;
       charts?: Chart[];
       metrics: MetricStat[];
@@ -147,6 +180,9 @@ declare namespace Api {
       max: number;
       /** a metric that is only shown: no weight, no algorithm */
       display: boolean;
+      /** the series over the window (of one Pod where the metric is of Pods), thinned to what a chart draws */
+      ts?: number[];
+      value?: number[];
     }
 
     /** where the text of a query of the cluster comes from: a metric mapping of the data source, the system parameter, or the default */

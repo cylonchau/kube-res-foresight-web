@@ -5,6 +5,16 @@ const base = '/api/v1/assistant';
 /** the chat shows a failure in the conversation itself, so the request is asked not to pop one up as well */
 const silent = { 'X-Silent-Error': '1' };
 
+/** mails an answer of the assistant (the analysis of the resource dashboard) to the signed-in user: the address is the one of their account, never one sent with the request */
+export function fetchMailAssistantAnswer(body: { title: string; content: string }) {
+  return request<{ sent: number; to: string[]; failed?: string[] }>({
+    url: `${base}/mail-me`,
+    method: 'post',
+    data: body,
+    headers: silent
+  });
+}
+
 /** whether the assistant is on, whether a language model can be asked, and its skills */
 export function fetchAssistantStatus() {
   return request<Api.Assistant.Availability>({ url: `${base}/status`, method: 'get', headers: silent });

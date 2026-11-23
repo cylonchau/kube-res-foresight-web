@@ -505,7 +505,7 @@ const local = {
         originCustom: 'Custom PromQL',
         customRequired: 'Pick a data source and write the PromQL',
         queryHint:
-          "The placeholders {'{{namespace}}'}, {'{{workload}}'}, {'{{service}}'}, {'{{pod}}'}, {'{{container}}'} and {'{{range}}'} are rendered from the workload of the module; the query must return a single time series. The matching metric mapping is created together with the metric.",
+          "The placeholders {'{{namespace}}'}, {'{{workload}}'}, {'{{pod}}'}, {'{{container}}'} and {'{{range}}'} are rendered from the workload of the module; the query must return a single time series. The matching metric mapping is created together with the metric.",
         level: 'Aggregation level',
         sectionShape: 'Data handling',
         shapeHint:
@@ -647,8 +647,8 @@ const local = {
       configCoverage: 'Data coverage',
       sectionCpu: 'CPU',
       sectionMemory: 'Memory',
-      request: 'Request',
-      limit: 'Limit',
+      request: 'Requests',
+      limit: 'Limits',
       limitUnknown: 'unknown',
       suggested: 'Suggested',
       suggestedNone: 'no suggestion',
@@ -659,8 +659,8 @@ const local = {
       maHelp:
         "The number after MA is how many points, the one after {'@'} is the time of a point: MA5{'@'}1m is the mean of the last 5 minutes, MA15{'@'}1m of the last 15 minutes.",
       chartUsage: 'Use',
-      chartRequest: 'Request',
-      chartSuggested: 'Suggested',
+      chartRequest: 'Requests',
+      chartSuggested: 'Recommended Requests',
       reasons: 'Why',
       formulaTitle: 'How the suggestion was made',
       throttle: 'Share of time throttled',
@@ -678,7 +678,7 @@ const local = {
       reason_oom:
         'The memory was OOM-killed in the window: the suggestion is not below the working set at the kill times the factor, nor below the request.',
       reason_peak_near_limit: 'The peak came near the limit: the risk is one level higher.',
-      reason_request_below_p95: 'The request is below the P95 use: under-provisioned, to raise.',
+      reason_request_below_p95: 'The use of the Requests is above its reasonable range: under-provisioned, to raise.',
       reason_no_limit: 'The limit was not read, so the distance to it is not judged.',
       sectionJvm: 'JVM',
       jvmHelp:
@@ -740,7 +740,7 @@ const local = {
       disabled: 'disabled',
       recTitle: 'Requests / Limits: now and recommended',
       recHelp:
-        'The recommendation is the configuration the use supports and that is suggested for the Pod, not one that is in force: Requests is what is reserved for the Pod when it is scheduled (Reserved), Limits is the most it may use. Requests is the higher of P95 with a margin and P99 (memory: P99 with a margin and the highest), Limits is not below the P99 and the highest use, a memory limit is not below the recommended Requests; with an OOM or throttling it is never lowered. Figures are whole numbers and a recommendation is rounded up; the total for all the replicas is the whole figure of one Pod times the replicas. The figures now come from Prometheus only.',
+        'The recommendation is the configuration the use supports and that is suggested for the Pod, not one that is in force, and it does not follow the window of the charts: Requests is what is reserved for the Pod when it is scheduled (Reserved), Limits is the most it may use. The recommended Requests is the largest of what P90, P95 and P99 each ask for (the use divided by its reference share); Limits is the P99 plus a margin and never below the recommended Requests; with an OOM or throttling it is never lowered; a peak that came once takes no part. Adjustment is how much the figure now is above (over-provisioned) or below (under-provisioned) the recommendation, and its share of the figure now: a P95 use under the low end of its range is over-provisioned, over the high end under-provisioned, in the range reasonable (and a reasonable one still says how much could be given back when the use supports less). The figures now come from Prometheus only and are not rounded.',
       colItem: 'Item',
       colCurrent: 'Now',
       colPodRec: 'Recommended, one Pod',
@@ -755,6 +755,24 @@ const local = {
       colNowTotal: 'Now (all replicas)',
       colRecPod: 'Recommended (one Pod)',
       colRecTotal: 'Recommended (all replicas)',
+      colAdjust: 'Adjustment',
+      colAdjustHelp:
+        'The figure now against the recommended one, for one Pod: more is over-provisioned (can be given back), less is under-provisioned (to add); the share of the figure now is in brackets. Limits has the difference only, no status of its own.',
+      recPeriod: 'Recommendation period {period} (does not follow the chart window)',
+      shareLine:
+        '{name}: use as a share of Requests P90 {p90} · P95 {p95} · P99 {p99} (reasonable range P90 {r90}, P95 {r95}, P99 {r99})',
+      adjOver: 'Over-provisioned {amount}',
+      adjUnder: 'Under-provisioned {amount}',
+      adjOkCouldGive: 'Reasonable, could give back {amount}',
+      adjOkAbove: 'Reasonable, recommended is above now by {amount}',
+      adjSame: 'Reasonable, no change',
+      adjLimited: 'Limited (OOM or throttling), not lowered',
+      adjLimitsLower: 'Could be lowered by {amount}',
+      adjLimitsRaise: 'Needs raising by {amount}',
+      jvmHeapChart: 'JVM Heap',
+      jvmNonHeapChart: 'JVM Non-Heap',
+      reason_burst_tail:
+        'The steady use is low but the P99 is above its reasonable range: Requests is held for a peak that comes now and then, so it is not called over-provisioned and not lowered.',
       displayOnly: 'display only',
       aiRecMismatch:
         'The recommended values of the answer are not the ones the platform worked out (missing: {list}): the recommendation has to use the platform figures as they are. Press "Analyse again".',
@@ -967,6 +985,9 @@ const local = {
       aiPickModule: 'Pick an instance first',
       aiNoFigures: 'The data of the instance is still loading',
       loadingDetail: 'Reading the data of this module from Prometheus, one moment…',
+      aiMail: 'Send to my e-mail',
+      aiMailSent: 'Sent to {to}',
+      aiMailFailed: 'Could not send: {reason}',
       aiAgain: 'Analyse again',
       clusterNoAnswer: 'The data source gave no figure for it; the query below says why',
       aiStart: 'Analyse'
@@ -1614,7 +1635,7 @@ const local = {
         container: 'Container',
         optional: 'Optional',
         queryVariablesHint:
-          "Only fills the {'{{service}}'} and {'{{container}}'} variables in the PromQL of the metric mappings (for example a request rate per service). It is not part of the workload identity and does not affect how requests and limits are rewritten.",
+          "Only fills the {'{{container}}'} variable in the PromQL of the metric mappings (for example to count one container only). It is not part of the workload identity and does not affect how requests and limits are rewritten.",
         sectionData: 'Data and forecast period',
         dataHint:
           'What the module reads: the history window decides how much data is collected and trained on, the forecast period how far ahead every algorithm forecasts.',
@@ -3736,6 +3757,7 @@ const local = {
         notify: 'Notifications',
         ldap: 'LDAP sign-in',
         forecast: 'Forecast and resources',
+        analysis: 'Resource analysis and recommendation',
         operator: 'Operator settings',
         assistant: 'AI assistant',
         http: 'HTTP and timeouts'

@@ -2,6 +2,7 @@
 import { computed, onActivated, onDeactivated, ref, watch } from 'vue';
 import { NButton, NSpin, NTag, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import { fetchMailAssistantAnswer } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
 import { hasComparisonTable, missingRecommendations } from '@/utils/overprovision-ai';
@@ -11,10 +12,11 @@ defineOptions({ name: 'OverprovisionAiAssistant' });
 
 /**
  * The AI analysis of the resource dashboard as a helper at the lower right, like a support chat: a round button, and over it a window that opens over the
- * page and closes again, without taking any room of the dashboard. The page shows it for one module only, and nothing is asked until the user opens it and
- * presses "analyse" in the window: the analysis never starts by itself, not when the page opens and not when the button is pressed. It runs in the background of the page: close the window and the button tells
- * when the answer is there (a dot), open it again and the answer is read. The window can be made larger and put back. The answer is HTML (tables), cleaned
- * of everything but tables, lists, emphasis and the level colours before it is shown.
+ * page and closes again, without taking any room of the dashboard. The page shows it for one module only. Pressing the button opens the window large and the analysis
+ * starts at once (there is no period to choose: it is the recommendation period of the platform, and the figures are the ones the page shows); an answer that was
+ * kept for the module is shown instead of asking again, and "analyse again" asks again. Nothing is asked when the page opens. It runs in the background of the page: close the
+ * window and the button tells when the answer is there (a dot), open it again and the answer is read. The answer can be mailed to the signed-in user. The answer is
+ * HTML (tables), cleaned of everything but tables, lists, emphasis and the level colours before it is shown.
  */
 interface Props {
   ai: {
@@ -93,9 +95,56 @@ const disabledReason = computed(() => {
   return '';
 });
 
-/** the button of the page only opens and closes the window: the analysis starts when the user presses "analyse" in it, never by itself */
+/** the analysis can be asked for now: the assistant is ready, the module is chosen and its figures are there */
+const canStart = computed(
+  () =>
+    !props.ai.running &&
+    !props.ai.text &&
+    !props.ai.error &&
+    !blocked.value &&
+    Boolean(props.moduleName) &&
+    props.canAnalyze
+);
+/** the button was pressed before the figures of the module were there: the analysis starts when they are */
+const startWhenReady = ref(false);
+watch(
+  () => props.canAnalyze,
+  ready => {
+    if (ready && startWhenReady.value && open.value) {
+      startWhenReady.value = false;
+      if (canStart.value) emit('analyze');
+    }
+  }
+);
+
+/** the button opens the window large and starts the analysis; pressed again it closes the window (the analysis goes on) */
 function pressButton() {
   open.value = !open.value;
+  if (!open.value) return;
+  expanded.value = true;
+  if (canStart.value) emit('analyze');
+  else if (!props.ai.running && !props.ai.text && !props.ai.error && !blocked.value && props.moduleName)
+    startWhenReady.value = true;
+}
+
+// ---- mailing the answer to the signed-in user
+const sending = ref(false);
+async function sendMail() {
+  if (!props.ai.text || props.ai.running || sending.value) return;
+  sending.value = true;
+  try {
+    const { data, error } = await fetchMailAssistantAnswer({
+      title: [props.moduleName, props.ai.window].filter(Boolean).join(' · '),
+      content: props.ai.text
+    });
+    if (data) window.$message?.success(p('aiMailSent', { to: (data.to ?? []).join(', ') }));
+    else
+      window.$message?.error(
+        p('aiMailFailed', { reason: (error as any)?.response?.data?.msg || (error as any)?.message || '' })
+      );
+  } finally {
+    sending.value = false;
+  }
 }
 
 /** the answer has to hold the comparison of the four configurations; one that does not says so and can be asked again */
@@ -165,6 +214,15 @@ const mismatched = computed(() =>
             </span>
             <span class="inline-flex shrink-0 items-center gap-8px">
               <NButton v-if="ai.running" size="small" @click="emit('stop')">{{ t('common.cancel') }}</NButton>
+              <NButton
+                v-if="ai.text && !ai.error"
+                size="small"
+                :loading="sending"
+                :disabled="ai.running"
+                @click="sendMail"
+              >
+                {{ p('aiMail') }}
+              </NButton>
               <NButton
                 size="small"
                 type="primary"

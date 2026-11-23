@@ -3,12 +3,13 @@ import { computed } from 'vue';
 import { NButton, NCollapse, NCollapseItem, NSkeleton, NSpin, NTable, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import OverprovisionCardWall, { type WallCard } from '@/components/business/overprovision-card-wall.vue';
-import OverprovisionUsageChart from '@/components/business/overprovision-usage-chart.vue';
+import OverprovisionLineChart, { type ChartSpec } from '@/components/business/overprovision-line-chart.vue';
 import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
 import HelpLabel from '@/components/common/help-label.vue';
-import { amountText, wholeAmount, wholeText } from '@/utils/amount';
+import { allText, amountText, podsOf, totalText } from '@/utils/amount';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
+import { adjustmentOf, adjustmentText, shareText } from '@/utils/overprovision-verdict';
 
 defineOptions({ name: 'OverprovisionModulePanel' });
 
@@ -38,6 +39,14 @@ const results = computed(() =>
     .map(resource => ({ resource, result: win.value?.[resource] ?? null }))
     .filter((item): item is { resource: Res; result: Api.Overprovision.Result } => Boolean(item.result))
 );
+/** the analysis of the recommendation period: the verdict and the recommended Requests and Limits are this one's, whatever window the page shows (an older answer of the platform has only the window) */
+const rec = computed(() => props.detail?.recommend ?? win.value);
+const recResults = computed(() =>
+  (['cpu', 'memory'] as Res[])
+    .map(resource => ({ resource, result: rec.value?.[resource] ?? null }))
+    .filter((item): item is { resource: Res; result: Api.Overprovision.Result } => Boolean(item.result))
+);
+const recLabel = computed(() => rec.value?.label ?? '');
 const times = computed(() => (props.basis === 'total' ? Math.max(props.detail?.replicas ?? 1, 1) : 1));
 
 const fmt = (resource: string, value: number | null | undefined) =>
@@ -124,10 +133,13 @@ const wall = computed<WallCard[]>(() => {
   for (const { resource, result: r } of results.value) {
     const name = resName(resource);
     const used = props.basis === 'total' && r.total ? r.total.p95 : r.usage.p95;
-    const reserved = r.request * times.value;
+    // all the replicas together: what Prometheus summed (the Pods in the sum are not always the ready replicas), else one Pod times the ready replicas
+    const reserved = props.basis === 'total' && r.request_total > 0 ? r.request_total : r.request * times.value;
     const known = reserved > 0;
     const left = reserved - used;
     const rate = known ? used / reserved : null;
+    // the share of the Requests the P95 takes is judged by the band of the P95: under it is more than needed, over it is too little
+    const band = props.detail?.params?.p95 ?? { low: 0.8, high: 0.9 };
     const noRequest = whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests') || p('noRequestFigure');
     cards.push({
       key: `${resource}Used`,
@@ -150,7 +162,7 @@ const wall = computed<WallCard[]>(() => {
       help: p('utilizationHelp'),
       value: rateText(rate),
       sub: known ? undefined : noRequest,
-      level: rate === null ? 'neutral' : rate >= 0.95 ? 'danger' : rate >= 0.85 ? 'warn' : rate < 0.3 ? 'warn' : 'good'
+      level: rate === null ? 'neutral' : rate > band.high ? 'danger' : rate < band.low ? 'warn' : 'good'
     });
   }
   return cards;
@@ -161,12 +173,15 @@ const wall = computed<WallCard[]>(() => {
 interface RecRow {
   key: string;
   label: string;
-  /** what the figure is: the Requests are what is reserved for the Pod, the Limits are the most it may use */
-  tag: 'reserved' | 'limit';
   resource: Res;
   /** one Pod: the figure now (0 = none) and the figure the use supports (0 = none) */
   current: number;
   recommended: number;
+  /** the figure now of all the Pods together as Prometheus has it (0 = not known), and how many Pods the total is of */
+  currentTotal: number;
+  pods: number;
+  /** the verdict of the analysis, for a Requests row (a Limits row has none of its own) */
+  status: Api.Overprovision.Status | null;
   /** why there is no current figure, or no recommendation */
   whyNoCurrent?: string;
   whyNoRecommended?: string;
@@ -175,17 +190,19 @@ const replicas = computed(() => Math.max(props.detail?.replicas ?? 0, 0));
 const recRows = computed<RecRow[]>(() => {
   const rows: RecRow[] = [];
   for (const resource of ['cpu', 'memory'] as Res[]) {
-    const r = win.value?.[resource];
+    const r = rec.value?.[resource];
     if (!r) continue;
     const none =
       r.suggested > 0 ? undefined : r.reasons.map(reason => p(`reason_${reason}`)).join(' ') || p('suggestedNone');
     rows.push({
       key: `${resource}-req`,
       label: resource === 'cpu' ? p('cpuRequests') : p('memRequests'),
-      tag: 'reserved',
       resource,
       current: r.request,
       recommended: r.suggested,
+      currentTotal: r.request_total ?? 0,
+      pods: podsOf(r.request, r.request_total, replicas.value),
+      status: r.status,
       whyNoCurrent:
         r.request > 0 ? undefined : whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests'),
       whyNoRecommended: none
@@ -193,10 +210,12 @@ const recRows = computed<RecRow[]>(() => {
     rows.push({
       key: `${resource}-lim`,
       label: resource === 'cpu' ? p('cpuLimits') : p('memLimits'),
-      tag: 'limit',
       resource,
       current: r.limit,
       recommended: r.suggested_limit,
+      currentTotal: r.limit_total ?? 0,
+      pods: podsOf(r.limit, r.limit_total, replicas.value),
+      status: null,
       whyNoCurrent: r.limit > 0 ? undefined : whyMissing(resource === 'cpu' ? 'k8s_cpu_limits' : 'k8s_mem_limits'),
       whyNoRecommended: none
     });
@@ -205,14 +224,59 @@ const recRows = computed<RecRow[]>(() => {
 });
 /** with no recommendation at all (too little data) the table is the figures now and their total, nothing more */
 const hasRecommendation = computed(() => recRows.value.some(row => row.recommended > 0));
-/** the figures are whole numbers; a recommendation is rounded up, so it is never less than the use needs, and its total is the whole figure of one Pod times the replicas */
-const cellNow = (row: RecRow) => (row.current > 0 ? wholeText(row.resource, row.current) : '-');
-const cellNowTotal = (row: RecRow) =>
-  row.current > 0 && replicas.value > 0 ? wholeText(row.resource, row.current * replicas.value) : '-';
-const recPod = (row: RecRow) => (row.recommended > 0 ? wholeAmount(row.resource, row.recommended, 'up') : 0);
-const cellRec = (row: RecRow) => (recPod(row) > 0 ? amountText(row.resource, recPod(row)) : '-');
-const cellRecTotal = (row: RecRow) =>
-  recPod(row) > 0 && replicas.value > 0 ? amountText(row.resource, recPod(row) * replicas.value) : '-';
+/** the figures are the ones of the spec and of the platform, as they are: the Requests of 4 cores is "4 cores", never "5" */
+const cellNow = (row: RecRow) => amountText(row.resource, row.current);
+const cellNowTotal = (row: RecRow) => allText(row.resource, row.current, row.currentTotal, replicas.value);
+const cellRec = (row: RecRow) => amountText(row.resource, row.recommended);
+const cellRecTotal = (row: RecRow) => totalText(row.resource, row.recommended, row.pods);
+
+/** how the figure now stands against the recommended one: how much of it is more (or less) than the use needs, and the share of the figure that is */
+interface AdjustCell {
+  text: string;
+  type: 'default' | 'success' | 'warning' | 'error' | 'info';
+}
+function cellAdjust(row: RecRow): AdjustCell {
+  const a = adjustmentOf(row.current, row.recommended);
+  if (!a) return { text: '-', type: 'default' };
+  const amount = adjustmentText(row.resource, a);
+  if (row.status === 'limited') return { text: p('adjLimited'), type: 'info' };
+  if (a.direction === 'same') return { text: p('adjSame'), type: 'success' };
+  if (row.status === null)
+    return a.direction === 'over'
+      ? { text: p('adjLimitsLower', { amount }), type: 'default' }
+      : { text: p('adjLimitsRaise', { amount }), type: 'default' };
+  if (row.status === 'ok')
+    return a.direction === 'over'
+      ? { text: p('adjOkCouldGive', { amount }), type: 'success' }
+      : { text: p('adjOkAbove', { amount }), type: 'success' };
+  return a.direction === 'over'
+    ? { text: p('adjOver', { amount }), type: 'warning' }
+    : { text: p('adjUnder', { amount }), type: 'error' };
+}
+
+/** where the P90, the P95 and the P99 of the use stand against the Requests, with the range that is reasonable for each: the figures the verdict is made of */
+const shareLines = computed(() => {
+  const params = props.detail?.params;
+  return recResults.value
+    .filter(item => item.result.shares)
+    .map(item => {
+      const sh = item.result.shares as Api.Overprovision.Usage;
+      const range = (b?: Api.Overprovision.Band) =>
+        b ? `${formatDecimal(b.low * 100, 0)}%–${formatDecimal(b.high * 100, 0)}%` : '-';
+      return {
+        key: item.resource,
+        text: p('shareLine', {
+          name: resName(item.resource),
+          p90: shareText(sh.p90),
+          p95: shareText(sh.p95),
+          p99: shareText(sh.p99),
+          r90: range(params?.p90),
+          r95: range(params?.p95),
+          r99: range(params?.p99)
+        })
+      };
+    });
+});
 
 // ---- the quantiles, with the samples they are made of
 
@@ -245,33 +309,117 @@ const quantileRows = computed<QRow[]>(() =>
         resource,
         u: r.total,
         expected: r.expected_points,
-        request: r.request * Math.max(props.detail?.replicas ?? 1, 1),
-        limit: r.limit * Math.max(props.detail?.replicas ?? 1, 1)
+        request: r.request_total > 0 ? r.request_total : r.request * Math.max(props.detail?.replicas ?? 1, 1),
+        limit: r.limit_total > 0 ? r.limit_total : r.limit * Math.max(props.detail?.replicas ?? 1, 1)
       });
     return rows;
   })
 );
 const step = computed(() => props.detail?.queries.find(query => query.step)?.step ?? '');
 
-// ---- the charts: the quantiles and the limits of one Pod and of all the replicas, drawn with the use
+// ---- the charts: one for each thing the module has set up (its CPU and memory, the heap of its JVM, the metrics of its own ...), and none for what it has not
 
-const podLimits = computed(() => ({
-  cpu: win.value?.cpu?.limit ?? 0,
-  memory: win.value?.memory?.limit ?? 0
-}));
-const podQuantiles = computed(() => {
-  const out: Partial<Record<Res, { p90: number; p95: number; p99: number }>> = {};
-  for (const { resource, result: r } of results.value)
-    out[resource] = { p90: r.usage.p90, p95: r.usage.p95, p99: r.usage.p99 };
-  return out;
+const podQuantiles = (resource: Res) => {
+  const r = win.value?.[resource];
+  return r ? { p90: r.usage.p90, p95: r.usage.p95, p99: r.usage.p99 } : null;
+};
+const totalQuantiles = (resource: Res) => {
+  const r = win.value?.[resource];
+  return r?.total ? { p90: r.total.p90, p95: r.total.p95, p99: r.total.p99 } : null;
+};
+const COLORS = {
+  usage: '#2080f0',
+  request: '#d03050',
+  suggested: '#18a058',
+  limit: '#f0a020',
+  p90: '#8e44ad',
+  p95: '#00a3a3',
+  p99: '#8d5524'
+};
+const unitOfResource = (resource: Res) => (resource === 'memory' ? 'bytes' : 'cores');
+
+/** the use of the CPU or the memory of one Pod (or of all the replicas) with the Requests, the recommended Requests, the Limits and the quantiles drawn over it */
+function usageChart(chart: Api.Overprovision.Chart, mode: 'pod' | 'total'): ChartSpec {
+  const resource = chart.resource;
+  const total = mode === 'total';
+  const unit = unitOfResource(resource);
+  const result = rec.value?.[resource] ?? win.value?.[resource];
+  // all the replicas together are the Pods Prometheus summed, not always the ready replicas
+  const pods = total
+    ? Math.max(result ? podsOf(result.request, result.request_total, chart.replicas) : chart.replicas, 1)
+    : 1;
+  const figure = (value: number) => (resource === 'memory' ? formatBytes(value, 2) : formatCores(value, 2));
+  const limit = (win.value?.[resource]?.limit ?? 0) * pods;
+  const q = total ? totalQuantiles(resource) : podQuantiles(resource);
+  const refs = [
+    { name: 'Requests', value: chart.request * pods, color: COLORS.request },
+    { name: p('chartSuggested'), value: chart.suggested * pods, color: COLORS.suggested },
+    { name: 'Limits', value: limit, color: COLORS.limit },
+    ...(q
+      ? [
+          { name: 'P90', value: q.p90, color: COLORS.p90, style: 'dotted' as const },
+          { name: 'P95', value: q.p95, color: COLORS.p95, style: 'dotted' as const },
+          { name: 'P99', value: q.p99, color: COLORS.p99, style: 'dotted' as const }
+        ]
+      : [])
+  ];
+  const figures: string[] = [];
+  if (chart.request > 0) figures.push(`Requests ${figure(chart.request * pods)}`);
+  if (chart.suggested > 0) figures.push(`${p('chartSuggested')} ${figure(chart.suggested * pods)}`);
+  if (limit > 0) figures.push(`Limits ${figure(limit)}`);
+  if (q) figures.push(`P90 ${figure(q.p90)} · P95 ${figure(q.p95)} · P99 ${figure(q.p99)}`);
+  return {
+    key: `${mode}:${resource}`,
+    title: `${resName(resource)} · ${total ? p('totalUsage') : p('podUsage')}`,
+    unit,
+    lines: [
+      {
+        name: total ? p('chartTotalUsage') : p('chartUsage'),
+        ts: total ? (chart.total_ts ?? []) : chart.ts,
+        value: total ? (chart.total ?? []) : chart.value,
+        color: COLORS.usage
+      }
+    ],
+    refs,
+    figures: figures.join('  |  ')
+  };
+}
+
+/** the family of a metric that is drawn together with others: the heap used, committed and maximum of the JVM are one chart, the non-heap ones another; any other metric is a chart of its own */
+function familyOf(m: Api.Overprovision.MetricStat): { key: string; title: string } {
+  const heap = /^jvm_(heap|nonheap)_(used|committed|max)$/.exec(m.kind);
+  if (heap) return { key: `jvm_${heap[1]}`, title: heap[1] === 'heap' ? p('jvmHeapChart') : p('jvmNonHeapChart') };
+  return { key: m.key, title: m.name };
+}
+const unitOfMetric = (m: Api.Overprovision.MetricStat) => {
+  const unit = (m.unit || '').toLowerCase();
+  return unit === 'cores' || unit === 'bytes' || unit === 'seconds' ? unit : '';
+};
+const GROUP_ORDER = ['container', 'jvm', 'throttle', 'oom', 'other'];
+const metricChartSpecs = computed<ChartSpec[]>(() => {
+  const families = new Map<string, ChartSpec>();
+  const metrics = [...(props.detail?.metrics ?? [])].sort(
+    (a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group)
+  );
+  for (const m of metrics) {
+    if (!m.ts || m.ts.length < 2) continue;
+    const family = familyOf(m);
+    let spec = families.get(family.key);
+    if (!spec) {
+      spec = { key: `metric:${family.key}`, title: family.title, unit: unitOfMetric(m), lines: [], refs: [] };
+      families.set(family.key, spec);
+    }
+    spec.lines.push({ name: m.name, ts: m.ts, value: m.value ?? [] });
+  }
+  return [...families.values()];
 });
-const totalQuantiles = computed(() => {
-  const out: Partial<Record<Res, { p90: number; p95: number; p99: number }>> = {};
-  for (const { resource, result: r } of results.value)
-    if (r.total) out[resource] = { p90: r.total.p90, p95: r.total.p95, p99: r.total.p99 };
-  return out;
+
+const chartSpecs = computed<ChartSpec[]>(() => {
+  const charts = props.detail?.charts ?? [];
+  const out: ChartSpec[] = charts.map(chart => usageChart(chart, 'pod'));
+  for (const chart of charts) if ((chart.total ?? []).length > 0) out.push(usageChart(chart, 'total'));
+  return [...out, ...metricChartSpecs.value];
 });
-const hasTotal = computed(() => (props.detail?.charts ?? []).some(chart => (chart.total ?? []).length > 0));
 
 // ---- the other metrics the module has set up (the OOM kills are the line at the top, not a metric)
 
@@ -356,12 +504,13 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
           {{ p('configWindow') }} {{ win?.label === 'custom' ? p('customRange') : win?.label }} · {{ p('configAt') }}
           {{ formatDateTime(detail.at) }}
         </span>
-        <template v-for="item in results" :key="item.resource">
+        <template v-for="item in recResults" :key="item.resource">
           <NTag size="small" :bordered="false" :type="statusType[item.result.status]">
             {{ resName(item.resource) }}
             {{ item.result.status === 'over' ? p(`grade_${item.result.grade}`) : p(`health_${item.result.status}`) }}
           </NTag>
         </template>
+        <span class="opacity-70">{{ p('recPeriod', { period: recLabel }) }}</span>
       </div>
 
       <div v-if="skipped" class="flex flex-wrap items-center gap-8px text-12px">
@@ -385,17 +534,13 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                 <template v-if="hasRecommendation">
                   <th class="key">{{ p('colRecPod') }}</th>
                   <th class="key">{{ p('colRecTotal') }}</th>
+                  <th><HelpLabel :label="p('colAdjust')" :help="p('colAdjustHelp')" /></th>
                 </template>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in recRows" :key="row.key">
-                <td class="font-medium">
-                  {{ row.label }}
-                  <span class="font-normal opacity-60">
-                    （{{ p(row.tag === 'reserved' ? 'tagReserved' : 'tagLimit') }}）
-                  </span>
-                </td>
+                <td class="font-medium">{{ row.label }}</td>
                 <td :title="row.current > 0 ? p('fromPrometheus') : row.whyNoCurrent">
                   <span :class="{ 'opacity-60': row.current <= 0 }">{{ cellNow(row) }}</span>
                 </td>
@@ -412,11 +557,15 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                   >
                     <span :class="{ 'opacity-60': cellRecTotal(row) === '-' }">{{ cellRecTotal(row) }}</span>
                   </td>
+                  <td :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
+                    <NTag size="small" :bordered="false" :type="cellAdjust(row).type">{{ cellAdjust(row).text }}</NTag>
+                  </td>
                 </template>
               </tr>
             </tbody>
           </NTable>
         </div>
+        <div v-for="line in shareLines" :key="line.key" class="text-12px opacity-75">{{ line.text }}</div>
       </div>
 
       <OverprovisionCardWall v-if="wall.length" :cards="wall" />
@@ -468,35 +617,20 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
         </NTable>
       </div>
 
-      <!-- the use of one Pod, CPU and memory in one chart -->
-      <div v-if="results.length" class="flex-col gap-4px">
-        <HelpLabel :label="p('chartPodTitle')" :help="p('chartPodHelp')" class="text-13px font-medium" />
-        <OverprovisionUsageChart
-          mode="pod"
-          :charts="detail.charts ?? []"
-          :limits="podLimits"
-          :quantiles="podQuantiles"
-        />
-      </div>
-
-      <!-- the use of all the replicas together -->
-      <div v-if="results.length && hasTotal" class="flex-col gap-4px">
-        <HelpLabel :label="p('chartTotalTitle')" :help="p('chartTotalHelp')" class="text-13px font-medium" />
-        <OverprovisionUsageChart
-          mode="total"
-          :charts="detail.charts ?? []"
-          :limits="podLimits"
-          :quantiles="totalQuantiles"
-        />
+      <!-- one chart for each thing the module has set up, two to a row; a row that has one chart takes the whole width -->
+      <div v-if="chartSpecs.length" class="chart-grid">
+        <div v-for="spec in chartSpecs" :key="spec.key" class="chart-cell">
+          <OverprovisionLineChart :spec="spec" />
+        </div>
       </div>
 
       <NCollapse v-if="results.length || promItems.length" arrow-placement="right">
         <NCollapseItem v-if="promItems.length" :title="p('promQueries')" name="promql">
           <PromqlList :items="promItems" />
         </NCollapseItem>
-        <NCollapseItem v-if="results.length" :title="p('reasons')" name="reasons">
+        <NCollapseItem v-if="recResults.length" :title="p('reasons')" name="reasons">
           <div class="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-12px text-12px">
-            <div v-for="item in results" :key="item.resource" class="flex-col gap-4px">
+            <div v-for="item in recResults" :key="item.resource" class="flex-col gap-4px">
               <div class="flex flex-wrap items-center gap-6px">
                 <span class="font-medium">{{ resName(item.resource) }}</span>
                 <NTag size="tiny" :bordered="false" :type="levelType[item.result.confidence]">
@@ -539,6 +673,27 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 </template>
 
 <style scoped>
+/* the charts are two to a row: the one that is left alone in its row takes the whole of it, so there is no empty place */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.chart-cell {
+  min-width: 0;
+}
+
+.chart-cell:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1100px) {
+  .chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .skeleton-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

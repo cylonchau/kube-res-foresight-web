@@ -500,7 +500,7 @@ const local = {
         originCustom: '自定义 PromQL',
         customRequired: '请选择数据源并填写 PromQL',
         queryHint:
-          "可以使用 {'{{namespace}}'}、{'{{workload}}'}、{'{{service}}'}、{'{{pod}}'}、{'{{container}}'}、{'{{range}}'} 占位符，由模块的工作负载渲染；查询必须只返回一条时间序列。保存时会同时创建对应的指标映射。",
+          "可以使用 {'{{namespace}}'}、{'{{workload}}'}、{'{{pod}}'}、{'{{container}}'}、{'{{range}}'} 占位符，由模块的工作负载渲染；查询必须只返回一条时间序列。保存时会同时创建对应的指标映射。",
         level: '聚合层级',
         sectionShape: '数据处理',
         shapeHint:
@@ -633,8 +633,8 @@ const local = {
       configCoverage: '数据覆盖',
       sectionCpu: 'CPU',
       sectionMemory: '内存',
-      request: '请求',
-      limit: '上限',
+      request: 'Requests',
+      limit: 'Limits',
       limitUnknown: '未知',
       suggested: '建议值',
       suggestedNone: '不给建议',
@@ -645,8 +645,8 @@ const local = {
       maHelp:
         "MA 后面的数字是点数，{'@'} 后面是每点的时间：MA5{'@'}1m 是最近 5 分钟的平均，MA15{'@'}1m 是最近 15 分钟的平均。",
       chartUsage: '使用',
-      chartRequest: '请求',
-      chartSuggested: '建议',
+      chartRequest: 'Requests',
+      chartSuggested: '推荐 Requests',
       reasons: '依据',
       formulaTitle: '建议值的算法',
       throttle: '被限流的时间占比',
@@ -661,7 +661,7 @@ const local = {
       reason_throttled: 'CPU 被限流超过上限：使用量低估了需求，不判超配，也不建议低于现在的请求。',
       reason_oom: '窗口内出过 OOM：建议值不低于出事时的工作集乘以系数，也不低于现在的请求。',
       reason_peak_near_limit: '峰值接近上限：风险抬高一级。',
-      reason_request_below_p95: '请求低于 P95 使用量：欠配，需要提高。',
+      reason_request_below_p95: 'Requests 的使用量高于合理区间：欠配，需要提高。',
       reason_no_limit: '没有读到上限，不判断离上限有多远。',
       sectionJvm: 'JVM',
       jvmHelp:
@@ -717,7 +717,7 @@ const local = {
       disabled: '已禁用',
       recTitle: 'Requests / Limits：当前与推荐',
       recHelp:
-        '「推荐值」是按窗口内使用量算出、建议写进 Pod 的配置，不是已经生效的：Requests 是调度时给 Pod 预留（Reserved）的量，Limits 是它最多能用的量。Requests 取 P95 加余量与 P99 的较大者（内存取 P99 加余量与最大值的较大者），Limits 不低于 P99 和最大使用量，内存 Limits 不低于推荐 Requests；有 OOM 或限流时只升不降。数值取整，推荐值向上取整；全副本总和是单 Pod 的整数值乘以副本数。当前值只来自 Prometheus。',
+        '「推荐值」是按推荐分析周期内的使用量算出、建议写进 Pod 的配置，不是已经生效的，也不随图表的时间窗口变：Requests 是调度时给 Pod 预留（Reserved）的量，Limits 是它最多能用的量。推荐 Requests 取 P90、P95、P99 各自要求的最大者（使用量除以各自的参考比例）；Limits 取 P99 加余量，不低于推荐 Requests；有 OOM 或限流时只升不降；偶发的最大值不参与。「调整」写当前比推荐多出（超配）或少了（欠配）多少，和占当前的比例；P95 使用量低于合理区间下限为超配，高于上限为欠配，区间内为合理（合理时若使用量支持更低的值，也写出可优化的量）。当前值只来自 Prometheus，不取整。',
       colItem: '资源项',
       colCurrent: '当前值',
       colPodRec: '单 Pod 推荐值',
@@ -732,6 +732,24 @@ const local = {
       colNowTotal: '当前值（全副本总和）',
       colRecPod: '推荐值（单 Pod）',
       colRecTotal: '推荐值（全副本总和）',
+      colAdjust: '调整',
+      colAdjustHelp:
+        '当前值和推荐值的差，单位是单 Pod：多出来的是超配（可以回收），少了的是欠配（需要增加）；括号里是占当前值的比例。Limits 只写差，不单独判状态。',
+      recPeriod: '推荐分析周期 {period}（不随图表窗口变化）',
+      shareLine:
+        '{name}：使用量占 Requests 的比例 P90 {p90} · P95 {p95} · P99 {p99}（合理区间 P90 {r90}、P95 {r95}、P99 {r99}）',
+      adjOver: '超配 {amount}',
+      adjUnder: '欠配 {amount}',
+      adjOkCouldGive: '合理，可优化 {amount}',
+      adjOkAbove: '合理，推荐高出当前 {amount}',
+      adjSame: '合理，无需调整',
+      adjLimited: '受限（OOM 或限流），不下调',
+      adjLimitsLower: '可降低 {amount}',
+      adjLimitsRaise: '需提高 {amount}',
+      jvmHeapChart: 'JVM 堆（Heap）',
+      jvmNonHeapChart: 'JVM 非堆（Non-Heap）',
+      reason_burst_tail:
+        '平时的使用量不高，但 P99 超出了合理区间：Requests 是按偶尔出现的高峰留的，不判超配，也不下调。',
       displayOnly: '仅展示',
       aiRecMismatch:
         '答案里的推荐值和平台算出的不一致（缺：{list}）：推荐配置必须原样用平台算好的数值，请点「重新分析」。',
@@ -934,6 +952,9 @@ const local = {
       aiPickModule: '先选一个实例',
       aiNoFigures: '实例的数据还在加载',
       loadingDetail: '正在从 Prometheus 读取该模块的数据，请稍候…',
+      aiMail: '发送到邮箱',
+      aiMailSent: '已发送到 {to}',
+      aiMailFailed: '发送失败：{reason}',
       aiAgain: '重新分析',
       clusterNoAnswer: '数据源没有给出这个数，原因在下面的查询里',
       aiStart: '分析'
@@ -1542,7 +1563,7 @@ const local = {
         container: '容器',
         optional: '可选',
         queryVariablesHint:
-          "只用于填充指标映射 PromQL 里的 {'{{service}}'} 与 {'{{container}}'} 变量（例如按服务统计请求量）；不属于工作负载标识，也不影响 requests/limits 的改写。",
+          "只用于填充指标映射 PromQL 里的 {'{{container}}'} 变量（例如只统计某个容器）；不属于工作负载标识，也不影响 requests/limits 的改写。",
         sectionData: '数据与预测周期',
         dataHint: '模块读取指标所需的设置：历史窗口决定采集和训练用多久的数据，预测周期决定所有算法向前预测多远。',
         lookbackHours: '历史窗口(小时)',
@@ -3577,6 +3598,7 @@ const local = {
         notify: '通知推送',
         ldap: 'LDAP 认证',
         forecast: '预测与资源',
+        analysis: '资源分析与推荐',
         operator: 'Operator 参数',
         assistant: 'AI 助手',
         http: '接口与超时'
