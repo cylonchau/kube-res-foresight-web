@@ -1,43 +1,43 @@
+import { formatBytes, formatCores } from './format.ts';
+
 /**
- * Amounts of CPU (cores) and memory (bytes) as whole numbers, for the table of the Requests and the Limits and for the question of the AI analysis, so the two
- * write the same figure. A figure under a core is whole millicores, from a core up whole cores; under a GiB it is whole MiB, from a GiB up whole GiB.
- * A recommendation is rounded up (never less than what the use needs), a figure that is read is rounded to the nearest.
+ * The figures of the Requests and the Limits as they are: the value Prometheus gave (and the one the platform recommends, which the platform has already rounded up to
+ * a figure a Pod spec can say) with at most two decimals and no trailing zeros, so a Requests of 4 cores is "4 cores" and a Limits of 16 GiB is "16 GiB". Nothing is
+ * rounded to a whole core or GiB here: the page must show what the spec says. The table of the page and the question of the AI analysis write the same figure.
  */
 export type AmountResource = 'cpu' | 'memory';
-export type AmountRounding = 'nearest' | 'up';
 
-const MIB = 1024 * 1024;
-const GIB = 1024 * MIB;
-/** a hair under an integer must not become the next one when it is rounded up (0.96 x 1000 is 960.0000000000001) */
-const EPS = 1e-6;
-
-const whole = (value: number, rounding: AmountRounding) =>
-  rounding === 'up' ? Math.ceil(value - EPS) : Math.round(value);
-
-/** the value rounded to its whole unit, in cores for the CPU and bytes for the memory; 0 for anything that is not a positive number */
-export function wholeAmount(resource: AmountResource, value: number, rounding: AmountRounding = 'nearest'): number {
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  if (resource === 'cpu') {
-    const milli = whole(value * 1000, rounding);
-    return milli >= 1000 ? whole(value, rounding) : milli / 1000;
-  }
-  const mib = whole(value / MIB, rounding);
-  return mib >= 1024 ? whole(value / GIB, rounding) * GIB : mib * MIB;
+/** the text of an amount of CPU (cores) or memory (bytes): "250 mCPU", "4 cores", "512 MiB", "9.94 GiB"; "-" for anything that is not a positive number */
+export function amountText(resource: AmountResource, value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value) || value <= 0) return '-';
+  return resource === 'memory' ? formatBytes(value, 2) : formatCores(value, 2);
 }
 
-/** the text of an amount that is already whole (see wholeAmount): "960 mCPU", "4 cores", "512 MiB", "7 GiB"; "-" for nothing */
-export function amountText(resource: AmountResource, value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return '-';
-  if (resource === 'cpu') {
-    if (value < 1) return `${Math.round(value * 1000)} mCPU`;
-    const n = Math.round(value);
-    return `${n} ${n === 1 ? 'core' : 'cores'}`;
-  }
-  if (value < GIB) return `${Math.round(value / MIB)} MiB`;
-  return `${Math.round(value / GIB)} GiB`;
+/** the amount of one Pod times the replicas, as text ("-" when either is missing) */
+export function totalText(resource: AmountResource, value: number | null | undefined, replicas: number): string {
+  if (!(replicas > 0)) return '-';
+  return amountText(resource, (value ?? 0) * replicas);
 }
 
-/** the value rounded, as text */
-export function wholeText(resource: AmountResource, value: number, rounding: AmountRounding = 'nearest'): string {
-  return amountText(resource, wholeAmount(resource, value, rounding));
+/**
+ * How many Pods the figure of all the replicas is of: the Pods that Prometheus summed (the total divided by the figure of one Pod), which is not always the ready replicas
+ * (a Pod that is still starting has its Requests and is not ready); the ready replicas when Prometheus gave no total.
+ */
+export function podsOf(pod: number, total: number | undefined, replicas: number): number {
+  if (pod > 0 && total && total > 0) {
+    const n = Math.round(total / pod);
+    if (n >= 1) return n;
+  }
+  return Math.max(replicas, 0);
+}
+
+/** the figure of all the replicas: what Prometheus summed when it gave a total, else the figure of one Pod times the ready replicas */
+export function allText(
+  resource: AmountResource,
+  pod: number | null | undefined,
+  total: number | undefined,
+  replicas: number
+): string {
+  if (total && total > 0) return amountText(resource, total);
+  return totalText(resource, pod, replicas);
 }

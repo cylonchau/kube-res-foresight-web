@@ -43,6 +43,7 @@ import {
   fetchResumeModule,
   fetchUpdateForecastModule
 } from '@/service/api';
+import SvgIcon from '@/components/custom/svg-icon.vue';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { copyCell } from '@/utils/copy-cell';
@@ -547,6 +548,32 @@ async function resume(row: Api.Forecast.Module) {
 }
 
 // ---- table
+
+/**
+ * The chips of the table (the run mode, the switch and the state) are made one way: the same size, an icon in front, and one colour for one meaning (grey nothing
+ * is running or asked, blue it only recommends, orange it changes the Pod when it is created, green it is on and well).
+ */
+interface ChipLook {
+  type: 'default' | 'info' | 'success' | 'warning' | 'error';
+  icon: string;
+}
+const MODE_LOOK: Record<string, ChipLook> = {
+  observe: { type: 'default', icon: 'carbon:view' },
+  recommend: { type: 'info', icon: 'carbon:idea' },
+  admission: { type: 'warning', icon: 'carbon:security' },
+  auto: { type: 'success', icon: 'carbon:automatic' }
+};
+function chip(look: ChipLook, text: string, title?: string) {
+  return h(
+    NTag,
+    { type: look.type, bordered: false, size: 'small', title },
+    {
+      icon: () => h(SvgIcon, { icon: look.icon }),
+      default: () => text
+    }
+  );
+}
+
 const columnMap: Record<string, any> = {
   __selection__: { type: 'selection', width: 42, minWidth: 42 },
   id: { title: t('common.id'), key: 'id', width: 70, align: 'center' },
@@ -569,26 +596,20 @@ const columnMap: Record<string, any> = {
   mode: {
     title: t('page.forecast.modules.mode'),
     key: 'mode',
-    width: 120,
+    width: 130,
     align: 'center',
     render: (row: Api.Forecast.Module) =>
-      h(
-        NTag,
-        { type: row.mode === 'observe' ? 'default' : 'info', bordered: false },
-        { default: () => t(`page.forecast.modules.mode_${row.mode}`) }
-      )
+      chip(MODE_LOOK[row.mode] ?? MODE_LOOK.observe, t(`page.forecast.modules.mode_${row.mode}`))
   },
   enabled: {
     title: t('page.datasource.connections.enabled'),
     key: 'enabled',
-    width: 90,
+    width: 100,
     align: 'center',
     render: (row: Api.Forecast.Module) =>
-      h(
-        NTag,
-        { type: row.enabled ? 'success' : 'default', bordered: false },
-        { default: () => (row.enabled ? t('common.enable') : t('common.disable')) }
-      )
+      row.enabled
+        ? chip({ type: 'success', icon: 'carbon:checkmark-filled' }, t('common.enable'))
+        : chip({ type: 'default', icon: 'carbon:subtract-alt' }, t('common.disable'))
   },
   bypass: {
     title: t('page.forecast.modules.bypass'),
@@ -612,49 +633,44 @@ const columnMap: Record<string, any> = {
       const tags: ReturnType<typeof h>[] = [];
       if (row.bypass)
         tags.push(
-          h(NTag, { type: 'warning', bordered: false, size: 'small', title: row.bypass_reason }, () =>
-            t('page.forecast.modules.bypassing')
-          )
+          chip({ type: 'warning', icon: 'carbon:warning-alt' }, t('page.forecast.modules.bypassing'), row.bypass_reason)
         );
       if (row.summary?.degraded)
         tags.push(
-          h(NTag, { type: 'error', bordered: false, size: 'small', title: row.summary.degrade_reasons }, () =>
-            t('page.forecast.modules.degraded')
+          chip(
+            { type: 'error', icon: 'carbon:warning-filled' },
+            t('page.forecast.modules.degraded'),
+            row.summary.degrade_reasons
           )
         );
       if (row.summary?.oom_floor)
-        tags.push(
-          h(NTag, { type: 'error', bordered: false, size: 'small' }, () => t('page.forecast.recommendations.oomFloor'))
-        );
+        tags.push(chip({ type: 'error', icon: 'carbon:warning-filled' }, t('page.forecast.recommendations.oomFloor')));
       if (row.summary && row.summary.consecutive_failures > 0)
         tags.push(
-          h(NTag, { type: 'warning', bordered: false, size: 'small', title: row.summary.last_error }, () =>
-            t('page.forecast.modules.failing', { count: row.summary!.consecutive_failures })
+          chip(
+            { type: 'warning', icon: 'carbon:warning-alt' },
+            t('page.forecast.modules.failing', { count: row.summary!.consecutive_failures }),
+            row.summary.last_error
           )
         );
       // a module with nothing wrong says so: an empty cell reads as "no state"
       if (!tags.length) {
         if (!row.enabled) {
-          tags.push(h(NTag, { bordered: false, size: 'small' }, () => t('page.forecast.modules.stateDisabled')));
+          tags.push(chip({ type: 'default', icon: 'carbon:subtract-alt' }, t('page.forecast.modules.stateDisabled')));
         } else if (!row.summary?.latest_version) {
           tags.push(
-            h(
-              NTag,
-              { type: 'info', bordered: false, size: 'small', title: t('page.forecast.modules.stateNoSnapshotHelp') },
-              () => t('page.forecast.modules.stateNoSnapshot')
+            chip(
+              { type: 'info', icon: 'carbon:time' },
+              t('page.forecast.modules.stateNoSnapshot'),
+              t('page.forecast.modules.stateNoSnapshotHelp')
             )
           );
         } else {
           tags.push(
-            h(
-              NTag,
-              {
-                type: 'success',
-                bordered: false,
-                size: 'small',
-                title: t('page.forecast.modules.stateHealthyHelp', { version: row.summary.latest_version })
-              },
-              () => t('page.forecast.modules.stateHealthy')
+            chip(
+              { type: 'success', icon: 'carbon:checkmark-filled' },
+              t('page.forecast.modules.stateHealthy'),
+              t('page.forecast.modules.stateHealthyHelp', { version: row.summary.latest_version })
             )
           );
         }
@@ -923,17 +939,6 @@ onMounted(() => {
               v-model:value="form.workload"
               :placeholder="t('common.inputField', { field: t('page.forecast.modules.workload') })"
             />
-          </NFormItem>
-          <NFormItem>
-            <template #label>
-              <span class="inline-flex items-center gap-4px">
-                {{ t('page.forecast.modules.service') }}
-                <IconTooltip icon="mdi-help-circle" placement="top">
-                  <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.queryVariablesHint') }}</div>
-                </IconTooltip>
-              </span>
-            </template>
-            <NInput v-model:value="form.service" :placeholder="t('page.forecast.modules.optional')" />
           </NFormItem>
           <NFormItem>
             <template #label>

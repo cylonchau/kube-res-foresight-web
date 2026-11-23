@@ -87,7 +87,7 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
     'the answer has to compare the current and the recommended configuration'
   );
   assert.ok(
-    text.includes('推荐值（单 Pod）') && text.includes('推荐值（全副本总和）'),
+    text.includes('推荐值（单 Pod）') && text.includes('推荐值（全副本总和）') && text.includes('调整'),
     'the table has the recommendation of one Pod and of all the replicas'
   );
   assert.ok(text.includes('平台推荐值'), 'the platform figures are given to be copied');
@@ -141,16 +141,48 @@ test('an answer without the four rows of the comparison is told from one with th
   );
 });
 
-test('the recommended figures are whole, rounded up, and the total is the figure of one Pod times the replicas', () => {
+test('the recommended figures are the platform, and the total is the figure of one Pod times the replicas', () => {
   const rows = recommendedFigures(detail());
   assert.equal(rows.length, 4);
   const cpu = rows[0];
   assert.equal(cpu.label, 'CPU Requests');
-  // the suggestion of the fixture is 1 core a Pod (scale 1) and the module has the replicas of the fixture
-  assert.match(cpu.pod, /^\d+ (mCPU|cores?)$/);
+  // the suggestion of the fixture is 1 core a Pod and the module has 4 replicas; the request now is 4 cores
+  assert.equal(cpu.pod, '1 core');
+  assert.equal(cpu.total, '4 cores');
+  assert.equal(cpu.nowPod, '4 cores');
+  assert.equal(cpu.nowTotal, '16 cores');
   assert.ok(rows[1].label === 'CPU Limits' && rows[2].label === 'Memory Requests' && rows[3].label === 'Memory Limits');
   const text = buildAnalysisQuestion(detail(), '7d', 'zh-CN');
   for (const row of rows) assert.ok(text.includes(row.pod), `the question gives ${row.label} ${row.pod}`);
+});
+
+test('each row says how far the figure now is from the recommendation, with the amount and its share', () => {
+  const rows = recommendedFigures(detail(), true);
+  // 4 cores now, 1 core recommended, over-provisioned: 3 cores, 75%
+  assert.equal(rows[0].adjust, '超配 3 cores (75.0%)');
+  // 6 cores of Limits now, 1.5 recommended: a Limits has no verdict of its own, so it is told as what it is (the status is of the Requests)
+  assert.equal(rows[1].adjust, '可降低 4.5 cores (75.0%)');
+  const d = detail();
+  d.windows[0].cpu!.suggested = 3.5;
+  d.windows[0].cpu!.status = 'ok';
+  assert.equal(recommendedFigures(d, true)[0].adjust, '合理，可优化 500 mCPU (12.5%)');
+  d.windows[0].cpu!.suggested = 4;
+  assert.equal(recommendedFigures(d, true)[0].adjust, '合理，无需调整');
+  d.windows[0].cpu!.suggested = 9;
+  d.windows[0].cpu!.status = 'under';
+  assert.equal(recommendedFigures(d, true)[0].adjust, '欠配 5 cores (125.0%)');
+  assert.equal(recommendedFigures(d, false)[0].adjust, 'under-provisioned by 5 cores (125.0%)');
+  const question = buildAnalysisQuestion(d, '7d', 'zh-CN');
+  assert.ok(question.includes('调整 欠配 5 cores (125.0%)'));
+});
+
+test('the figures of the recommendation period are the ones that count, not those of the window of the page', () => {
+  const d = detail();
+  const recommend = { label: '7d', window_minutes: 10080, cpu: result('cpu', 1), memory: result('memory', GIB) };
+  recommend.cpu.suggested = 2;
+  d.windows[0].label = '1h';
+  d.recommend = recommend;
+  assert.equal(recommendedFigures(d)[0].pod, '2 cores');
 });
 
 test('an answer that does not write the platform figures is told', () => {

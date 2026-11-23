@@ -111,7 +111,8 @@ const toolbarGrafana = computed(() =>
 
 // ---- the AI analysis: the helper at the lower right asks when the user presses "analyse", the page answers with the figures it shows
 
-const aiLabel = computed(() => win.value.grafana.window ?? p('customRange'));
+/** the period the question is about: the recommendation period of the platform (the answer does not follow the window of the charts) */
+const aiLabel = computed(() => detail.value?.recommend?.label ?? win.value.grafana.window ?? p('customRange'));
 async function analyzeWithAi() {
   const d = detail.value;
   if (!d || ai.state.running) return;

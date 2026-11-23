@@ -1,34 +1,43 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { amountText, wholeAmount, wholeText } from './amount.ts';
+import { amountText, totalText } from './amount.ts';
 
 const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
 
-test('CPU is whole millicores under a core and whole cores from a core up', () => {
-  assert.equal(wholeText('cpu', 0.96, 'up'), '960 mCPU');
-  assert.equal(wholeText('cpu', 0.9604, 'up'), '961 mCPU');
-  assert.equal(wholeText('cpu', 3.75, 'up'), '4 cores');
-  assert.equal(wholeText('cpu', 3.75), '4 cores');
-  assert.equal(wholeText('cpu', 1.2, 'up'), '2 cores', 'a recommendation is never rounded down');
-  assert.equal(wholeText('cpu', 1.2), '1 core');
-  assert.equal(wholeText('cpu', 0.9996, 'up'), '1 core', 'a figure that reaches a core is read in cores');
-  assert.equal(wholeText('cpu', 0), '-');
-  assert.equal(wholeText('cpu', Number.NaN), '-');
+test('an amount is written as it is, with no rounding to a whole core or GiB', () => {
+  assert.equal(amountText('cpu', 4), '4 cores');
+  assert.equal(amountText('cpu', 8), '8 cores');
+  assert.equal(amountText('cpu', 1.5), '1.5 cores');
+  assert.equal(amountText('cpu', 4.36), '4.36 cores');
+  assert.equal(amountText('cpu', 0.25), '250 mCPU');
+  assert.equal(amountText('memory', 6 * GIB), '6 GiB');
+  assert.equal(amountText('memory', 16 * GIB), '16 GiB');
+  assert.equal(amountText('memory', 9.9375 * GIB), '9.94 GiB');
+  assert.equal(amountText('memory', 512 * MIB), '512 MiB');
 });
 
-test('memory is whole MiB under a GiB and whole GiB from a GiB up', () => {
-  assert.equal(wholeText('memory', 1.44 * GIB, 'up'), '2 GiB');
-  assert.equal(wholeText('memory', 1.44 * GIB), '1 GiB');
-  assert.equal(wholeText('memory', 7.06 * GIB, 'up'), '8 GiB');
-  assert.equal(wholeText('memory', 300.4 * MIB, 'up'), '301 MiB');
-  assert.equal(wholeText('memory', 1023.2 * MIB, 'up'), '1 GiB');
-  assert.equal(wholeText('memory', 0), '-');
+test('nothing, zero and what is not a number are "-"', () => {
+  for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, null, undefined]) {
+    assert.equal(amountText('cpu', value), '-');
+    assert.equal(amountText('memory', value), '-');
+  }
 });
 
-test('a total is the whole figure of one Pod times the replicas', () => {
-  const pod = wholeAmount('cpu', 3.75, 'up');
-  assert.equal(pod, 4);
-  assert.equal(amountText('cpu', pod * 12), '48 cores');
-  assert.equal(amountText('memory', wholeAmount('memory', 1.5 * GIB, 'up') * 12), '24 GiB');
+test('a total is the figure of one Pod times the replicas', () => {
+  assert.equal(totalText('cpu', 4, 12), '48 cores');
+  assert.equal(totalText('memory', 6 * GIB, 12), '72 GiB');
+  assert.equal(totalText('cpu', 4, 0), '-');
+  assert.equal(totalText('cpu', 0, 12), '-');
+});
+
+test('the Pods of a total are the ones Prometheus summed, not always the ready replicas', async () => {
+  const { podsOf, allText } = await import('./amount.ts');
+  // 48 cores of Requests of 4 cores a Pod are 12 Pods, while 11 replicas are ready
+  assert.equal(podsOf(4, 48, 11), 12);
+  assert.equal(podsOf(4, undefined, 11), 11);
+  assert.equal(podsOf(0, 48, 11), 11);
+  assert.equal(allText('cpu', 4, 48, 11), '48 cores', 'the total is what Prometheus summed');
+  assert.equal(allText('cpu', 4, undefined, 11), '44 cores');
+  assert.equal(totalText('cpu', 3.8, podsOf(4, 48, 11)), '45.6 cores');
 });
