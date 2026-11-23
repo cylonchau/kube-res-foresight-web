@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildAnalysisQuestion, hasComparisonTable } from './overprovision-ai.ts';
+import {
+  buildAnalysisQuestion,
+  hasComparisonTable,
+  missingRecommendations,
+  recommendedFigures
+} from './overprovision-ai.ts';
 
 const GIB = 1024 ** 3;
 
@@ -82,10 +87,10 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
     'the answer has to compare the current and the recommended configuration'
   );
   assert.ok(
-    text.includes('单 Pod 推荐值') && text.includes('全副本总和推荐值'),
+    text.includes('推荐值（单 Pod）') && text.includes('推荐值（全副本总和）'),
     'the table has the recommendation of one Pod and of all the replicas'
   );
-  assert.ok(text.includes('建议 Requests') && text.includes('建议 Limits'), 'the platform suggestion of both is given');
+  assert.ok(text.includes('平台推荐值'), 'the platform figures are given to be copied');
   assert.ok(text.includes('只读'), 'the question asks for an analysis and nothing else');
   assert.ok(
     text.includes('只输出 HTML') && text.includes('<td class="lv-warn">'),
@@ -134,4 +139,25 @@ test('an answer without the four rows of the comparison is told from one with th
     hasComparisonTable('<td>cpu&nbsp;requests</td><td>CPU limits</td><td>Memory   Requests</td><td>memory limits</td>'),
     true
   );
+});
+
+test('the recommended figures are whole, rounded up, and the total is the figure of one Pod times the replicas', () => {
+  const rows = recommendedFigures(detail());
+  assert.equal(rows.length, 4);
+  const cpu = rows[0];
+  assert.equal(cpu.label, 'CPU Requests');
+  // the suggestion of the fixture is 1 core a Pod (scale 1) and the module has the replicas of the fixture
+  assert.match(cpu.pod, /^\d+ (mCPU|cores?)$/);
+  assert.ok(rows[1].label === 'CPU Limits' && rows[2].label === 'Memory Requests' && rows[3].label === 'Memory Limits');
+  const text = buildAnalysisQuestion(detail(), '7d', 'zh-CN');
+  for (const row of rows) assert.ok(text.includes(row.pod), `the question gives ${row.label} ${row.pod}`);
+});
+
+test('an answer that does not write the platform figures is told', () => {
+  const d = detail();
+  const rows = recommendedFigures(d);
+  const good = rows.map(row => `<tr><td>${row.label}</td><td>${row.pod}</td><td>${row.total}</td></tr>`).join('');
+  assert.deepEqual(missingRecommendations(`<table>${good}</table>`, d), []);
+  const bad = `<table>${good.replace(rows[0].pod, '123456 foo')}</table>`;
+  assert.deepEqual(missingRecommendations(bad, d), ['CPU Requests']);
 });

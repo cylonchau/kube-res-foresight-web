@@ -740,7 +740,7 @@ const local = {
       disabled: 'disabled',
       recTitle: 'Requests / Limits: now and recommended',
       recHelp:
-        'Now is what Prometheus gives for the Requests / Limits (one Pod). The recommendation is made from the use in the window: Requests is the higher of P95 with a margin and P99 (memory: P99 with a margin and the highest), Limits is not below the P99 and the highest use, a memory limit is not below the recommended Requests; with an OOM or throttling it is never lowered. All the replicas is the recommendation of one Pod times the replicas.',
+        'The recommendation is the configuration the use supports and that is suggested for the Pod, not one that is in force: Requests is what is reserved for the Pod when it is scheduled (Reserved), Limits is the most it may use. Requests is the higher of P95 with a margin and P99 (memory: P99 with a margin and the highest), Limits is not below the P99 and the highest use, a memory limit is not below the recommended Requests; with an OOM or throttling it is never lowered. Figures are whole numbers and a recommendation is rounded up; the total for all the replicas is the whole figure of one Pod times the replicas. The figures now come from Prometheus only.',
       colItem: 'Item',
       colCurrent: 'Now',
       colPodRec: 'Recommended, one Pod',
@@ -748,6 +748,16 @@ const local = {
       currentTotal: 'total {value}',
       replicasUnit: 'replicas',
       noReplicas: 'The replicas were not found, so the total cannot be made: give the module a replicas metric.',
+      noRequestFigure: 'Prometheus gave no Requests, so this cannot be worked out',
+      tagReserved: 'reserved',
+      tagLimit: 'cap',
+      colNowPod: 'Now (one Pod)',
+      colNowTotal: 'Now (all replicas)',
+      colRecPod: 'Recommended (one Pod)',
+      colRecTotal: 'Recommended (all replicas)',
+      displayOnly: 'display only',
+      aiRecMismatch:
+        'The recommended values of the answer are not the ones the platform worked out (missing: {list}): the recommendation has to use the platform figures as they are. Press "Analyse again".',
       per_pod: 'one Pod',
       per_total: 'all replicas',
       clusterName: 'Cluster (data source)',
@@ -768,7 +778,7 @@ const local = {
         'One row per cluster: its data source, how many cluster metrics are declared, and which are not. A metric that is not declared is not asked and nothing else stands in for it. Pick a cluster to see its nodes, Pods, CPU and memory.',
       fromPrometheus: 'asked of Prometheus',
       metricNotSetUp:
-        'The module has no {kind} metric: add it to the metric sources of the module (a Prometheus query) to have the figure here.',
+        'The module has no {kind} bound: pick a metric template for it in the display metrics of the module management, and there will be a figure here.',
       oomCount: 'OOM count',
       oomCountHelp:
         'How many times a container was killed (OOMKilled) for running over its memory limit in the window, read from the OOM metric of the module in Prometheus. 0 means none happened.',
@@ -3237,7 +3247,7 @@ const local = {
           'The module samples every {step}s, finer than the {query}s query step of the metric template "{name}", and finer data cannot be made from coarser samples: set the module step to {query}s or a multiple of it, or set the step of that template to {step}s or finer',
         stepMultiple:
           'The module step ({step}s) must be a whole multiple of the {query}s query step of the metric template "{name}": change one of them',
-        title: 'Metrics used',
+        title: 'Algorithm metrics',
         preview: 'Preview',
         empty: 'The module has no metrics yet. Add a metric template; a metric that is not added takes no part.',
         add: 'Add a metric template',
@@ -3251,9 +3261,9 @@ const local = {
         templateDuplicate: 'Duplicate template: {name}',
         weightInvalid: 'The weight cannot be negative',
         kindDuplicate: 'There can be one "{kind}" among the dashboard metrics: the dashboard reads one query of each',
-        boardTitle: 'Dashboard metrics (Requests / Limits)',
+        boardTitle: 'Display metrics (Requests / Limits)',
         boardRules:
-          'The resource dashboard reads these from Prometheus as they are now, not from stored history. Pick a metric template for each of Requests / Limits and say whether its query returns one Pod or all the replicas together. They are not written into the history; the history metrics are set above, in the metrics the module is calculated from.',
+          'Metrics that are only shown: the resource dashboard, the history data and the charts show them, no algorithm reads them, so they have no weight and no algorithm switch. For each of Requests / Limits pick one metric template (any CPU / memory template with the right unit: cores for CPU, bytes for memory) and say whether its query returns one Pod or all the replicas together; the dashboard converts to the other with the replicas. Nothing bound, nothing shown.',
         col_per: 'The query returns',
         col_purpose: 'Used for',
         helpPer:
@@ -3265,7 +3275,12 @@ const local = {
         per_total: 'All replicas',
         purpose_dashboard: 'Dashboard only',
         purpose_both: 'Dashboard and history',
-        rules: 'A metric that is not added, or is disabled, takes no part in the module.'
+        rules:
+          'The metrics of the calculation: each has a weight and a switch, and the algorithms read only these. A metric that is not added, or is disabled, takes no part in the module. Metrics that are only shown, the Requests and the Limits, are not set here but in the display metrics below.',
+        looksDisplay:
+          '"{name}" looks like Requests / Limits: those are display metrics, and here they would be taken for a CPU / memory metric of the algorithms. Delete this row and bind it in the display metrics below.',
+        displayEmpty: 'Not bound: the dashboard shows "-" for it',
+        displayCol: 'Metric'
       }
     },
     ldap: {

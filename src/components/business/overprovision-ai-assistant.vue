@@ -4,7 +4,7 @@ import { NButton, NSpin, NTag, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
-import { hasComparisonTable } from '@/utils/overprovision-ai';
+import { hasComparisonTable, missingRecommendations } from '@/utils/overprovision-ai';
 import { looksLikeHtml, sanitizeAnswerHtml } from '@/utils/safe-html';
 
 defineOptions({ name: 'OverprovisionAiAssistant' });
@@ -31,8 +31,10 @@ interface Props {
   moduleName: string;
   /** the figures of the module are there to ask about */
   canAnalyze: boolean;
+  /** the analysis the answer is about: its recommended figures are the platform's, and an answer has to write them as they are */
+  detail?: Api.Overprovision.Detail | null;
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { detail: null });
 const emit = defineEmits<{ analyze: []; stop: [] }>();
 const { t } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
@@ -88,6 +90,13 @@ function pressButton() {
 const lacksComparison = computed(
   () => !props.ai.running && Boolean(props.ai.text) && !props.ai.error && !hasComparisonTable(props.ai.text)
 );
+
+/** the rows whose recommended figures the answer did not write as the platform worked them out */
+const mismatched = computed(() =>
+  !props.ai.running && props.ai.text && !props.ai.error && props.detail && !lacksComparison.value
+    ? missingRecommendations(props.ai.text, props.detail)
+    : []
+);
 </script>
 
 <template>
@@ -126,6 +135,9 @@ const lacksComparison = computed(
               {{ formatDateTime(ai.at) }} · {{ ai.window }}
             </div>
             <div v-if="lacksComparison" class="mb-6px text-12px text-[#c77d0a]">{{ p('aiNoComparison') }}</div>
+            <div v-else-if="mismatched.length" class="mb-6px text-12px text-[#c77d0a]">
+              {{ p('aiRecMismatch', { list: mismatched.join(', ') }) }}
+            </div>
             <div v-if="ai.error" class="text-13px text-[#d03050]">{{ ai.error }}</div>
             <!-- eslint-disable-next-line vue/no-v-html -- escaped first: see utils/mini-markdown -->
             <div v-else-if="ai.running || ai.text" class="ai-answer text-13px leading-22px" v-html="html"></div>

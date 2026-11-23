@@ -169,7 +169,7 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: Api.Forecast.Module) =>
-      h(NButton, { size: 'tiny', type: 'primary', secondary: true, onClick: () => open(row) }, () => p('analyze'))
+      h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => p('analyze'))
   }
 };
 const cfg = useTableColumnConfig({

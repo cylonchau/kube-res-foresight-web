@@ -72,7 +72,10 @@ const COLORS = {
   request: '#d03050',
   suggested: '#18a058',
   limit: '#f0a020',
-  quantile: '#909399'
+  // the three quantiles each have a colour of their own, none of them the colour of the use, the request, the suggestion or the limit
+  p90: '#8e44ad',
+  p95: '#00a3a3',
+  p99: '#8d5524'
 };
 
 /** how many lines the legend takes in a chart as wide as this */
@@ -178,9 +181,9 @@ async function draw() {
     dashed('limit', p('limit'), (props.limits?.[resource] ?? 0) * times, COLORS.limit);
     const q = props.quantiles?.[resource];
     if (q) {
-      dashed('p90', 'P90', q.p90, COLORS.quantile, 'dotted');
-      dashed('p95', 'P95', q.p95, COLORS.quantile, 'dotted');
-      dashed('p99', 'P99', q.p99, COLORS.quantile, 'dotted');
+      dashed('p90', 'P90', q.p90, COLORS.p90, 'dotted');
+      dashed('p95', 'P95', q.p95, COLORS.p95, 'dotted');
+      dashed('p99', 'P99', q.p99, COLORS.p99, 'dotted');
     }
 
     const all = [

@@ -177,6 +177,7 @@ onMounted(() => {
       :ai="ai.state"
       :module-name="detail?.name ?? ''"
       :can-analyze="Boolean(detail) && !detailLoading"
+      :detail="detail"
       @analyze="analyzeWithAi"
       @stop="ai.stop"
     />
