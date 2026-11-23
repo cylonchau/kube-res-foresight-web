@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onActivated, onDeactivated, ref, watch } from 'vue';
 import { NButton, NSpin, NTag, useThemeVars } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { formatDateTime } from '@/utils/date';
@@ -38,6 +38,18 @@ const props = withDefaults(defineProps<Props>(), { detail: null });
 const emit = defineEmits<{ analyze: []; stop: [] }>();
 const { t } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
+
+/**
+ * The helper is teleported to the body, so a page the tabs keep alive would leave it on screen over every other page: it shows only while the dashboard page is
+ * the active one (a page that is not kept alive is simply unmounted).
+ */
+const pageActive = ref(true);
+onActivated(() => {
+  pageActive.value = true;
+});
+onDeactivated(() => {
+  pageActive.value = false;
+});
 
 const open = ref(false);
 const expanded = ref(false);
@@ -101,7 +113,7 @@ const mismatched = computed(() =>
 
 <template>
   <Teleport to="body">
-    <div class="ai-fab-root">
+    <div v-if="pageActive" class="ai-fab-root">
       <Transition name="ai-window">
         <section
           v-show="open"

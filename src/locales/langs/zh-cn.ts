@@ -933,6 +933,7 @@ const local = {
         '这次的答案里没有“当前配置与推荐配置”的四行对比表（CPU/内存的 Requests 和 Limits），请点「重新分析」。',
       aiPickModule: '先选一个实例',
       aiNoFigures: '实例的数据还在加载',
+      loadingDetail: '正在从 Prometheus 读取该模块的数据，请稍候…',
       aiAgain: '重新分析',
       clusterNoAnswer: '数据源没有给出这个数，原因在下面的查询里',
       aiStart: '分析'
