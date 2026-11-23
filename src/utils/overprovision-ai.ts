@@ -37,11 +37,12 @@ function resourceLines(r: Api.Overprovision.Result, zh: boolean) {
         : `  all replicas together: P90 ${a(r.total.p90)}, P95 ${a(r.total.p95)}, P99 ${a(r.total.p99)}`
     );
   const suggested = r.suggested > 0 ? a(r.suggested) : zh ? '不给' : 'none';
-  const ratio = r.suggested > 0 ? formatPercent(r.ratio, 1) : '-';
+  const suggestedLimit = r.suggested_limit > 0 ? a(r.suggested_limit) : zh ? '不给' : 'none';
+  const ratio = r.suggested > 0 && r.request > 0 ? formatPercent(r.ratio, 1) : '-';
   lines.push(
     zh
-      ? `  平台的判定：${r.status}（${r.grade || '-'}），建议值 ${suggested}，超配比例 ${ratio}，可信度 ${r.confidence}，风险 ${r.risk}，数据覆盖 ${formatPercent(r.coverage, 0)}`
-      : `  verdict of the platform: ${r.status} (${r.grade || '-'}), suggested ${suggested}, over-provision ${ratio}, confidence ${r.confidence}, risk ${r.risk}, data coverage ${formatPercent(r.coverage, 0)}`
+      ? `  平台的判定：${r.status}（${r.grade || '-'}），建议 Requests ${suggested}，建议 Limits ${suggestedLimit}（都是单 Pod），超配比例 ${ratio}，可信度 ${r.confidence}，风险 ${r.risk}，数据覆盖 ${formatPercent(r.coverage, 0)}`
+      : `  verdict of the platform: ${r.status} (${r.grade || '-'}), suggested Requests ${suggested}, suggested Limits ${suggestedLimit} (both for one Pod), over-provision ${ratio}, confidence ${r.confidence}, risk ${r.risk}, data coverage ${formatPercent(r.coverage, 0)}`
   );
   if (r.formula) lines.push(`  ${zh ? '算法' : 'formula'}: ${r.formula}`);
   if (r.reasons.length) lines.push(`  ${zh ? '依据代码' : 'reason codes'}: ${r.reasons.join(', ')}`);
@@ -61,9 +62,9 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
         `分析模块 ${who} 在最近 ${windowLabel} 的资源使用情况（括号里最后一项是副本数）。数据全部来自 Prometheus 的实测，Requests 和 Limits 也是 Prometheus 查到的当前配置。`,
         '输出要求：',
         '1. 只输出 HTML，不要 Markdown、不要代码围栏、不要前后说明。',
-        '2. 第一张表必须是“当前配置与 AI 推荐配置对比”，固定四行：CPU Requests、CPU Limits、Memory Requests、Memory Limits；四列：资源项、当前配置（抄数据里 Prometheus 的值，没有就写“Prometheus 无数据”）、AI 推荐配置（必须是具体数值和单位，不能写“保持”“视情况”）、依据（一句话，引用数据里的数字）。',
+        '2. 第一张表必须是“当前配置与 AI 推荐配置对比”，固定四行：CPU Requests、CPU Limits、Memory Requests、Memory Limits；五列：资源项、当前值（单 Pod，抄数据里 Prometheus 的值，没有就写“Prometheus 无数据”）、单 Pod 推荐值、全副本总和推荐值（单 Pod 推荐值乘以副本数）、依据（一句话，引用数据里的数字）。推荐值必须是具体数值和单位，不能写“保持”“视情况”；副本数不明时总和写“-”。',
         '3. 其后用表格写“使用情况”（P50/P90/P95/P99/最大、利用率）和“判定”（状态、风险）；限流、OOM、JVM 只写有数据的项。',
-        '4. 推荐值的依据：Requests 以数据里平台公式的“建议值”为基础，有 OOM 或限流时只能上调、不能下调；Limits 不低于 P99 使用量，内存 Limits 不低于推荐的 Requests。',
+        '4. 推荐值的依据：以数据里平台算出的建议 Requests 和建议 Limits 为基础，有 OOM 或限流时只能上调、不能下调；Limits 不低于 P99 使用量，内存 Limits 不低于推荐的 Requests。',
         '5. 状态和风险的单元格加 class：lv-bad（有风险或欠配）、lv-warn（超配或需要关注）、lv-ok（正常）、lv-info（仅信息），例如 <td class="lv-warn">超配</td>。',
         '6. 直接写当前情况和优化后的数值；不写“下一步先核对”之类的引导语，不写“可能、大概、视情况”之类含糊的话，不写额外推荐，不写数据以外的内容。这是只读分析，不要执行任何改动。'
       ].join('\n')
@@ -71,9 +72,9 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
         `Analyse the resource use of the module ${who} over the last ${windowLabel} (the last item in the brackets is the replicas). All the data is measured by Prometheus, and so are the current Requests and Limits.`,
         'Output rules:',
         '1. Output HTML only: no Markdown, no code fence, no text before or after.',
-        '2. The first table must be "Current configuration vs AI recommended configuration" with exactly four rows: CPU Requests, CPU Limits, Memory Requests, Memory Limits; and four columns: item, current (copy the Prometheus value from the data, or write "no data in Prometheus"), AI recommended (a concrete number with its unit, never "keep" or "depends"), basis (one sentence quoting a number of the data).',
+        '2. The first table must be "Current configuration vs AI recommended configuration" with exactly four rows: CPU Requests, CPU Limits, Memory Requests, Memory Limits; and five columns: item, current (one Pod, copy the Prometheus value from the data, or write "no data in Prometheus"), recommended for one Pod, recommended for all replicas (the one-Pod value times the replicas), basis (one sentence quoting a number of the data). Recommended values are a concrete number with its unit, never "keep" or "depends"; when the replicas are unknown the total is "-".',
         '3. Then tables for "Use" (P50/P90/P95/P99/max, utilization) and "Verdict" (status, risk); throttling, OOM and JVM only where there is data.',
-        '4. Basis of the recommendation: take the "suggested" value of the platform formula in the data as the base for Requests, and with OOM or throttling only raise, never lower; Limits not below the P99 use, and the memory Limits not below the recommended Requests.',
+        '4. Basis of the recommendation: take the suggested Requests and suggested Limits the platform worked out in the data as the base, and with OOM or throttling only raise, never lower; Limits not below the P99 use, and the memory Limits not below the recommended Requests.',
         '5. Give the status and risk cells a class: lv-bad (at risk or under-provisioned), lv-warn (over-provisioned or to watch), lv-ok (fine), lv-info (information only), for example <td class="lv-warn">over-provisioned</td>.',
         '6. State the actual situation and the optimised values directly; no lead-ins such as "first check", no vague words (maybe, probably, depends), no extra recommendations, nothing beyond the data. This is a read-only analysis: change nothing.'
       ].join('\n');

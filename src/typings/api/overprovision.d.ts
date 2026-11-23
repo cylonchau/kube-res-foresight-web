@@ -29,7 +29,10 @@ declare namespace Api {
       total?: Usage;
       coverage: number;
       expected_points: number;
+      /** the request the use supports (one Pod), with or without a request to compare with; 0 when none is made */
       suggested: number;
+      /** the limit that goes with it: never below the P99, a memory limit never below the suggested request */
+      suggested_limit: number;
       ratio: number;
       numerator: number;
       denominator: number;
@@ -112,6 +115,8 @@ declare namespace Api {
       level: string;
       unit: string;
       query: string;
+      /** what the query answers: one Pod or all the replicas together */
+      per: 'pod' | 'total';
       /** the step of the range query: the figures are made of one sample for each step */
       step: string;
       /** how many samples the query answered */

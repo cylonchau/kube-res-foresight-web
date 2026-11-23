@@ -606,10 +606,10 @@ const local = {
       colName: 'Module',
       colWorkload: 'Workload',
       colReplicas: 'Replicas',
-      colCpuRequest: 'CPU request',
+      colCpuRequest: 'CPU Requests',
       colCpuUsage: 'CPU use P95',
       colCpuSuggested: 'CPU suggested',
-      colMemRequest: 'Memory request',
+      colMemRequest: 'Memory Requests',
       colMemUsage: 'Memory use P99',
       colMemSuggested: 'Memory suggested',
       colRatio: 'Over',
@@ -665,7 +665,8 @@ const local = {
       formulaTitle: 'How the suggestion was made',
       throttle: 'Share of time throttled',
       oomKills: 'OOM kills',
-      reason_no_request: 'The module records no Pod request, so there is nothing to compare.',
+      reason_no_request:
+        'Prometheus gave no Requests (the module has no such dashboard metric, or its query has no data): the recommendation is still made from the use, but whether it is over-provisioned cannot be told.',
       reason_no_usage: 'No use was measured in the window.',
       reason_coverage_low: 'Less than half of the window has data: no suggestion is made.',
       reason_coverage_medium: 'Part of the window has no data: the confidence is medium.',
@@ -716,7 +717,7 @@ const local = {
       requestsHelp:
         'What is reserved for the Pod, and what scheduling counts. Per Pod is one Pod, all replicas is that times the replicas.',
       limitsHelp:
-        'The most a container can use. With no limits metric it is the request times the limit ratio set on the module (what admission gives a new Pod), and says so; with neither it is unknown.',
+        'The most the container may use, from the Limits among the dashboard metrics of the module in Prometheus; "-" when that metric is not set up, nothing stands in for it.',
       limitFromModule: 'from the limit ratio of the module',
       limitFromMetric: 'measured',
       usedP95: 'used P95',
@@ -730,12 +731,25 @@ const local = {
       utilizationHelp:
         'The use (P95) over the request. 85% and over is orange and 95% red: little room is left for a peak; under 30% is orange too: the request is too much.',
       points: 'Points',
-      colCpuLimit: 'CPU limits',
-      colMemLimit: 'Memory limits',
+      colCpuLimit: 'CPU Limits',
+      colMemLimit: 'Memory Limits',
       resourcesFailed: 'Requests and limits could not be read',
       noModuleChosen: 'No module is chosen: pick one in the module list of the resource dashboard.',
       detailPageTitle: 'Module resource analysis',
       backToList: 'Back to the module list',
+      disabled: 'disabled',
+      recTitle: 'Requests / Limits: now and recommended',
+      recHelp:
+        'Now is what Prometheus gives for the Requests / Limits (one Pod). The recommendation is made from the use in the window: Requests is the higher of P95 with a margin and P99 (memory: P99 with a margin and the highest), Limits is not below the P99 and the highest use, a memory limit is not below the recommended Requests; with an OOM or throttling it is never lowered. All the replicas is the recommendation of one Pod times the replicas.',
+      colItem: 'Item',
+      colCurrent: 'Now',
+      colPodRec: 'Recommended, one Pod',
+      colTotalRec: 'Recommended, all replicas',
+      currentTotal: 'total {value}',
+      replicasUnit: 'replicas',
+      noReplicas: 'The replicas were not found, so the total cannot be made: give the module a replicas metric.',
+      per_pod: 'one Pod',
+      per_total: 'all replicas',
       clusterName: 'Cluster (data source)',
       clusterPrimary: 'primary',
       clusterShown: 'showing',
@@ -758,7 +772,7 @@ const local = {
       oomCount: 'OOM count',
       oomCountHelp:
         'How many times a container was killed (OOMKilled) for running over its memory limit in the window, read from the OOM metric of the module in Prometheus. 0 means none happened.',
-      oomNoSource: 'The module has no OOM metric set up',
+      oomNoSource: 'The module has no OOM metric: add the OOM kills in the OOM metrics of the module management',
       statP50: 'The median: half of the time the use is not above it.',
       statP90: '90% of the time the use is not above it.',
       statP95: '95% of the time the use is not above it: the request and the suggestion are made against this column.',
@@ -1515,7 +1529,7 @@ const local = {
           'The share of the memory score one OOM kill takes away (0.01 to 1, default 0.2); kills add up to at most 60%.',
         oomMetrics: 'OOM metrics',
         oomMetricsHint:
-          'The metrics the OOM protection reads: OOM kills, the working set before a kill, memory limits, JVM heap used and maximum. They are kept apart from the metrics of the forecast; without them the rule does not apply and the recommendation says so.',
+          'The metrics the OOM protection reads: OOM kills, the working set before a kill, JVM heap used and maximum (the memory limit is in the dashboard metrics, used for "Dashboard and history"). They are kept apart from the metrics of the forecast; without them the rule does not apply and the recommendation says so.',
         sectionPredict: 'Prediction',
         predictEnabled: 'Prediction',
         predictEnabledHint:
@@ -3236,6 +3250,21 @@ const local = {
         templateRequired: 'Every row needs a template',
         templateDuplicate: 'Duplicate template: {name}',
         weightInvalid: 'The weight cannot be negative',
+        kindDuplicate: 'There can be one "{kind}" among the dashboard metrics: the dashboard reads one query of each',
+        boardTitle: 'Dashboard metrics (Requests / Limits)',
+        boardRules:
+          'The resource dashboard reads these from Prometheus as they are now, not from stored history. Pick a metric template for each of Requests / Limits and say whether its query returns one Pod or all the replicas together. They are not written into the history; the history metrics are set above, in the metrics the module is calculated from.',
+        col_per: 'The query returns',
+        col_purpose: 'Used for',
+        helpPer:
+          'What the query returns: one Pod, or all the replicas added together (a query of the workload usually does). The dashboard converts to the other with the replicas. "By template level" lets the level of the metric template decide.',
+        helpPurpose:
+          'Dashboard metrics are for the resource dashboard only and are not stored as history. The memory limit is also what the OOM protection reads from the history: choose "Dashboard and history" when it is needed.',
+        per_default: 'By template level',
+        per_pod: 'One Pod',
+        per_total: 'All replicas',
+        purpose_dashboard: 'Dashboard only',
+        purpose_both: 'Dashboard and history',
         rules: 'A metric that is not added, or is disabled, takes no part in the module.'
       }
     },
