@@ -520,7 +520,8 @@ declare namespace Api {
       per: SourcePer;
     }
 
-    type SourcePurpose = 'dashboard' | 'history' | 'both';
+    /** a display source is only shown and read by no algorithm; an earlier release stored dashboard, history and both */
+    type SourcePurpose = 'algorithm' | 'display' | 'dashboard' | 'history' | 'both';
     type SourcePer = '' | 'pod' | 'total';
 
     /** a source of a dataset with what the page shows: its category, the query behind it and the grid it is sampled on */

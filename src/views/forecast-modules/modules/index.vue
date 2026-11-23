@@ -21,6 +21,7 @@ import PeriodEditor from '@/components/business/period-editor.vue';
 import BatchActions from '@/components/business/batch-actions.vue';
 import ListSearchCard from '@/components/business/list-search-card.vue';
 import PromqlTester from '@/components/business/promql-tester.vue';
+import ModuleDisplayMetrics from '@/components/business/module-display-metrics.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
 import ModuleNeedModal from '@/components/business/module-need-modal.vue';
 import type { QueryConfig } from '@/components/business/query-test-result.vue';
@@ -217,7 +218,7 @@ const cloneSource = ref<Api.Forecast.Module>();
 const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
 const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const oomMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
-const boardMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
+const boardMetricsEditor = ref<InstanceType<typeof ModuleDisplayMetrics>>();
 const bypassTarget = ref<Api.Forecast.Module>();
 /** the module whose need (replicas, CPU, memory) is being read, before it is configured to act */
 const needTarget = ref<Api.Forecast.Module>();
@@ -1290,11 +1291,7 @@ onMounted(() => {
             <div class="max-w-420px leading-22px">{{ t('page.forecast.moduleMetrics.boardRules') }}</div>
           </IconTooltip>
         </div>
-        <ModuleMetrics
-          ref="boardMetricsEditor"
-          scope="dashboard"
-          @preview="source => showPreview(editing?.id ?? null, source)"
-        />
+        <ModuleDisplayMetrics ref="boardMetricsEditor" @preview="source => showPreview(editing?.id ?? null, source)" />
 
         <NDivider class="!my-18px" />
         <div class="mb-8px flex items-center gap-6px font-medium">

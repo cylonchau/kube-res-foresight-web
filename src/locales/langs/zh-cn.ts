@@ -717,7 +717,7 @@ const local = {
       disabled: '已禁用',
       recTitle: 'Requests / Limits：当前与推荐',
       recHelp:
-        '当前值是 Prometheus 查到的 Requests / Limits（单 Pod）。推荐值由窗口内的使用量算出：Requests 取 P95 加余量与 P99 的较大者（内存取 P99 加余量与最大值的较大者），Limits 不低于 P99 和最大使用量，内存 Limits 不低于推荐 Requests；有 OOM 或限流时只升不降。全副本总和是单 Pod 推荐值乘以副本数。',
+        '「推荐值」是按窗口内使用量算出、建议写进 Pod 的配置，不是已经生效的：Requests 是调度时给 Pod 预留（Reserved）的量，Limits 是它最多能用的量。Requests 取 P95 加余量与 P99 的较大者（内存取 P99 加余量与最大值的较大者），Limits 不低于 P99 和最大使用量，内存 Limits 不低于推荐 Requests；有 OOM 或限流时只升不降。数值取整，推荐值向上取整；全副本总和是单 Pod 的整数值乘以副本数。当前值只来自 Prometheus。',
       colItem: '资源项',
       colCurrent: '当前值',
       colPodRec: '单 Pod 推荐值',
@@ -725,6 +725,16 @@ const local = {
       currentTotal: '总和 {value}',
       replicasUnit: '个副本',
       noReplicas: '没有查到副本数，算不出全副本总和：给模块配一个副本数指标。',
+      noRequestFigure: 'Prometheus 没有查到 Requests，没法算',
+      tagReserved: '预留',
+      tagLimit: '上限',
+      colNowPod: '当前值（单 Pod）',
+      colNowTotal: '当前值（全副本总和）',
+      colRecPod: '推荐值（单 Pod）',
+      colRecTotal: '推荐值（全副本总和）',
+      displayOnly: '仅展示',
+      aiRecMismatch:
+        '答案里的推荐值和平台算出的不一致（缺：{list}）：推荐配置必须原样用平台算好的数值，请点「重新分析」。',
       per_pod: '单 Pod',
       per_total: '全副本总和',
       clusterName: '集群（数据源）',
@@ -744,7 +754,7 @@ const local = {
       clusterListHelp:
         '每个集群一行：它的数据源、已经声明了多少项集群指标，以及还没声明的是哪些。没声明的指标大盘不会去查，也不会用别的查询代替。选一个集群看它的节点、Pod、CPU 和内存。',
       fromPrometheus: '来自 Prometheus 的查询',
-      metricNotSetUp: '模块没有配置 {kind} 指标：在模块的指标来源里加上它（Prometheus 查询），这里才有数。',
+      metricNotSetUp: '模块没有绑定 {kind}：到模块管理的“监控展示指标”里为它选一个指标模板，这里才有数。',
       oomCount: 'OOM 数量',
       oomCountHelp:
         '窗口内容器因内存超限被系统杀掉（OOMKilled）的次数，由模块的 OOM 指标向 Prometheus 查出。0 表示窗口内没有发生。',
@@ -3084,7 +3094,7 @@ const local = {
         stepFiner:
           '模块每 {step} 秒采样一次，比指标模板「{name}」{query} 秒的查询步长更细，数据无法从更粗的样本里得到：请把模块的采样间隔改成 {query} 秒或它的整数倍，或把该模板的查询步长改成 {step} 秒或更细',
         stepMultiple: '模块的采样间隔（{step} 秒）必须是指标模板「{name}」查询步长（{query} 秒）的整数倍：请改其中一个',
-        title: '参与计算的指标',
+        title: '算法计算指标',
         preview: '预览',
         empty:
           '这个模块还没有指标。点“添加指标模板”，选择要用的模板并设置权重；没有添加的指标不参与它的预测、评分和资源决策。',
@@ -3101,9 +3111,9 @@ const local = {
         templateDuplicate: '指标模板重复：{name}',
         weightInvalid: '权重不能为负数',
         kindDuplicate: '大盘指标里「{kind}」只能有一条：资源大盘每种只读一条查询',
-        boardTitle: '大盘指标（Requests / Limits）',
+        boardTitle: '监控展示指标（Requests / Limits）',
         boardRules:
-          '资源大盘只从 Prometheus 实时读这里的指标，不读平台保存的历史。每种 Requests / Limits 选一个指标模板，并说明这条查询返回的是单 Pod 还是全副本总和；这里的指标不会写进历史数据，历史指标在上面的「参与计算的指标」里单独配置。',
+          '只用来展示的指标：资源大盘、历史数据和图表都显示它们，不参与任何算法，所以没有权重、也没有算法的启用开关。每个模块为 Requests / Limits 各选一个指标模板（任何 CPU / 内存的模板都行，单位要对：CPU 是 cores，内存是 bytes），并说明这条查询返回单 Pod 还是全副本总和，大盘会用副本数换算另一种。不绑定就不显示。',
         col_per: '查询结果为',
         col_purpose: '用途',
         helpPer:
@@ -3115,7 +3125,11 @@ const local = {
         purpose_dashboard: '仅大盘',
         purpose_both: '大盘和历史',
         rules:
-          '每个模块各自绑定自己的指标，不同模块可以不一样。没有添加或被禁用的指标，不参与该模块的预测、评分和资源决策。'
+          '这里是参与算法计算的指标：有权重和启用状态，算法只读这里的指标。每个模块各自绑定自己的指标，没有添加或被禁用的指标，不参与该模块的预测、评分和资源决策。Requests / Limits 这类只用来展示的指标不放这里，放在下面的“监控展示指标”。',
+        looksDisplay:
+          '「{name}」看起来是 Requests / Limits：它们是监控展示指标，放在这里会被当成 CPU / 内存的算法指标。请删掉这一行，在下面的“监控展示指标”里绑定。',
+        displayEmpty: '没有绑定：大盘上这一项显示“-”',
+        displayCol: '指标'
       }
     },
     ldap: {

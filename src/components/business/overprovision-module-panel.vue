@@ -6,6 +6,7 @@ import OverprovisionCardWall, { type WallCard } from '@/components/business/over
 import OverprovisionUsageChart from '@/components/business/overprovision-usage-chart.vue';
 import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
 import HelpLabel from '@/components/common/help-label.vue';
+import { amountText, wholeAmount, wholeText } from '@/utils/amount';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
 
@@ -124,8 +125,10 @@ const wall = computed<WallCard[]>(() => {
     const name = resName(resource);
     const used = props.basis === 'total' && r.total ? r.total.p95 : r.usage.p95;
     const reserved = r.request * times.value;
+    const known = reserved > 0;
     const left = reserved - used;
-    const rate = reserved > 0 ? used / reserved : null;
+    const rate = known ? used / reserved : null;
+    const noRequest = whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests') || p('noRequestFigure');
     cards.push({
       key: `${resource}Used`,
       label: `${name} ${p('usedP95')}`,
@@ -137,20 +140,16 @@ const wall = computed<WallCard[]>(() => {
       key: `${resource}Left`,
       label: `${name} ${p('available')}`,
       help: p('availableHelp'),
-      value: reserved > 0 ? fmt(resource, Math.max(left, 0)) : '-',
-      sub:
-        left < 0
-          ? p('belowUse')
-          : reserved > 0
-            ? undefined
-            : whyMissing(resource === 'cpu' ? 'k8s_cpu_requests' : 'k8s_mem_requests'),
-      level: left < 0 ? 'danger' : reserved > 0 ? 'good' : 'neutral'
+      value: known ? fmt(resource, Math.max(left, 0)) : '-',
+      sub: !known ? noRequest : left < 0 ? p('belowUse') : undefined,
+      level: !known ? 'neutral' : left < 0 ? 'danger' : 'good'
     });
     cards.push({
       key: `${resource}Rate`,
       label: `${name} ${p('utilization')}`,
       help: p('utilizationHelp'),
       value: rateText(rate),
+      sub: known ? undefined : noRequest,
       level: rate === null ? 'neutral' : rate >= 0.95 ? 'danger' : rate >= 0.85 ? 'warn' : rate < 0.3 ? 'warn' : 'good'
     });
   }
@@ -162,6 +161,8 @@ const wall = computed<WallCard[]>(() => {
 interface RecRow {
   key: string;
   label: string;
+  /** what the figure is: the Requests are what is reserved for the Pod, the Limits are the most it may use */
+  tag: 'reserved' | 'limit';
   resource: Res;
   /** one Pod: the figure now (0 = none) and the figure the use supports (0 = none) */
   current: number;
@@ -181,6 +182,7 @@ const recRows = computed<RecRow[]>(() => {
     rows.push({
       key: `${resource}-req`,
       label: resource === 'cpu' ? p('cpuRequests') : p('memRequests'),
+      tag: 'reserved',
       resource,
       current: r.request,
       recommended: r.suggested,
@@ -191,6 +193,7 @@ const recRows = computed<RecRow[]>(() => {
     rows.push({
       key: `${resource}-lim`,
       label: resource === 'cpu' ? p('cpuLimits') : p('memLimits'),
+      tag: 'limit',
       resource,
       current: r.limit,
       recommended: r.suggested_limit,
@@ -200,22 +203,16 @@ const recRows = computed<RecRow[]>(() => {
   }
   return rows;
 });
-/** how far the recommendation is from the figure now, as a signed share of it; null when either is missing */
-function change(row: RecRow) {
-  if (!(row.current > 0) || !(row.recommended > 0)) return null;
-  return (row.recommended - row.current) / row.current;
-}
-function changeText(row: RecRow) {
-  const c = change(row);
-  if (c === null) return '';
-  return `${c > 0 ? '+' : ''}${formatPercent(c, 0)}`;
-}
-function changeType(row: RecRow): 'success' | 'warning' | 'error' | 'default' {
-  const c = change(row);
-  if (c === null || Math.abs(c) < 0.05) return 'default';
-  // a lower request is what gets given back; a higher one is what the use needs
-  return c < 0 ? 'success' : 'error';
-}
+/** with no recommendation at all (too little data) the table is the figures now and their total, nothing more */
+const hasRecommendation = computed(() => recRows.value.some(row => row.recommended > 0));
+/** the figures are whole numbers; a recommendation is rounded up, so it is never less than the use needs, and its total is the whole figure of one Pod times the replicas */
+const cellNow = (row: RecRow) => (row.current > 0 ? wholeText(row.resource, row.current) : '-');
+const cellNowTotal = (row: RecRow) =>
+  row.current > 0 && replicas.value > 0 ? wholeText(row.resource, row.current * replicas.value) : '-';
+const recPod = (row: RecRow) => (row.recommended > 0 ? wholeAmount(row.resource, row.recommended, 'up') : 0);
+const cellRec = (row: RecRow) => (recPod(row) > 0 ? amountText(row.resource, recPod(row)) : '-');
+const cellRecTotal = (row: RecRow) =>
+  recPod(row) > 0 && replicas.value > 0 ? amountText(row.resource, recPod(row) * replicas.value) : '-';
 
 // ---- the quantiles, with the samples they are made of
 
@@ -300,7 +297,7 @@ function metricValue(m: Api.Overprovision.MetricStat, value: number) {
 function metricCards(items: Api.Overprovision.MetricStat[], group: string): WallCard[] {
   return items.map(m => ({
     key: m.key,
-    label: m.name,
+    label: m.display ? `${m.name} · ${p('displayOnly')}` : m.name,
     value: m.points ? metricValue(m, m.latest) : '-',
     sub: m.points
       ? `P90 ${metricValue(m, m.p90)} · P95 ${metricValue(m, m.p95)} · P99 ${metricValue(m, m.p99)}`
@@ -317,7 +314,7 @@ const promItems = computed<PromqlItem[]>(() =>
   (props.detail?.queries ?? [])
     .filter(q => q.query || q.error)
     .map(q => ({
-      name: `${q.name} · ${kindName(q.kind)}`,
+      name: `${q.name} · ${kindName(q.kind)}${q.display ? ` · ${p('displayOnly')}` : ''}`,
       query: q.query || '-',
       value: q.points
         ? `${p('queryPoints', { step: q.step, n: q.points })}${q.per ? ` · ${p(`per_${q.per}`)}` : ''}`
@@ -366,42 +363,39 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
             <thead>
               <tr>
                 <th>{{ p('colItem') }}</th>
-                <th>{{ p('colCurrent') }}</th>
-                <th class="key">{{ p('colPodRec') }}</th>
-                <th class="key">{{ p('colTotalRec') }}</th>
+                <th>{{ p('colNowPod') }}</th>
+                <th>{{ p('colNowTotal') }}</th>
+                <template v-if="hasRecommendation">
+                  <th class="key">{{ p('colRecPod') }}</th>
+                  <th class="key">{{ p('colRecTotal') }}</th>
+                </template>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in recRows" :key="row.key">
-                <td class="font-medium">{{ row.label }}</td>
+                <td class="font-medium">
+                  {{ row.label }}
+                  <span class="font-normal opacity-60">
+                    （{{ p(row.tag === 'reserved' ? 'tagReserved' : 'tagLimit') }}）
+                  </span>
+                </td>
                 <td :title="row.current > 0 ? p('fromPrometheus') : row.whyNoCurrent">
-                  <template v-if="row.current > 0">
-                    {{ fmt(row.resource, row.current) }}
-                    <span v-if="replicas > 0" class="opacity-60">
-                      · {{ p('currentTotal', { value: fmt(row.resource, row.current * replicas) }) }}
-                    </span>
-                  </template>
-                  <span v-else class="opacity-60">-</span>
+                  <span :class="{ 'opacity-60': row.current <= 0 }">{{ cellNow(row) }}</span>
                 </td>
-                <td class="key" :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
-                  <template v-if="row.recommended > 0">
-                    {{ fmt(row.resource, row.recommended) }}
-                    <NTag v-if="changeText(row)" size="tiny" :bordered="false" :type="changeType(row)" class="ml-4px">
-                      {{ changeText(row) }}
-                    </NTag>
-                  </template>
-                  <span v-else class="opacity-60">{{ p('suggestedNone') }}</span>
+                <td :title="row.current > 0 && replicas <= 0 ? p('noReplicas') : row.whyNoCurrent">
+                  <span :class="{ 'opacity-60': cellNowTotal(row) === '-' }">{{ cellNowTotal(row) }}</span>
                 </td>
-                <td
-                  class="key"
-                  :title="row.recommended > 0 && replicas > 0 ? undefined : row.whyNoRecommended || p('noReplicas')"
-                >
-                  <template v-if="row.recommended > 0 && replicas > 0">
-                    {{ fmt(row.resource, row.recommended * replicas) }}
-                    <span class="opacity-60">· {{ replicas }} {{ p('replicasUnit') }}</span>
-                  </template>
-                  <span v-else class="opacity-60">-</span>
-                </td>
+                <template v-if="hasRecommendation">
+                  <td class="key" :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
+                    <span :class="{ 'opacity-60': cellRec(row) === '-' }">{{ cellRec(row) }}</span>
+                  </td>
+                  <td
+                    class="key"
+                    :title="row.recommended > 0 && replicas <= 0 ? p('noReplicas') : row.whyNoRecommended"
+                  >
+                    <span :class="{ 'opacity-60': cellRecTotal(row) === '-' }">{{ cellRecTotal(row) }}</span>
+                  </td>
+                </template>
               </tr>
             </tbody>
           </NTable>

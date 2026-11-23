@@ -117,6 +117,9 @@ declare namespace Api {
       query: string;
       /** what the query answers: one Pod or all the replicas together */
       per: 'pod' | 'total';
+      /** the metric template the query comes from, and whether the metric is only shown (no weight, no algorithm) */
+      template: string;
+      display: boolean;
       /** the step of the range query: the figures are made of one sample for each step */
       step: string;
       /** how many samples the query answered */
@@ -140,6 +143,8 @@ declare namespace Api {
       p95: number;
       p99: number;
       max: number;
+      /** a metric that is only shown: no weight, no algorithm */
+      display: boolean;
     }
 
     /** where the text of a query of the cluster comes from: a metric mapping of the data source, the system parameter, or the default */
