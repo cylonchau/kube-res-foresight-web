@@ -5,7 +5,7 @@ import {
   replicaDeltaParts,
   replicaView,
   requestsGap,
-  schemeRows,
+  schemeGroups,
   statusLevel
 } from './overprovision-replicas.ts';
 
@@ -69,28 +69,36 @@ test('one colour is one meaning', () => {
   assert.equal(statusLevel('limited'), 'info');
 });
 
-test('the Pod stays in the way of the replicas, and the replicas stay in the way of the Pod', () => {
-  const [byReplicas, byConfig] = schemeRows(detail());
+test('each way has a row for each of its three items, and the Pod stays in the way of the replicas', () => {
+  const [byReplicas, byConfig] = schemeGroups(detail());
   assert.equal(byReplicas.first, true);
-  assert.equal(byReplicas.replicasNow, '12');
-  assert.equal(byReplicas.replicasRec, '15');
-  assert.equal(byReplicas.cpuNow, '4 cores');
-  assert.equal(byReplicas.cpuRec, '4 cores');
-  assert.equal(byReplicas.level, 'bad');
+  assert.deepEqual(
+    byReplicas.items.map(i => [i.item, i.now, i.rec]),
+    [
+      ['replicas', '12', '15'],
+      ['cpu', '4 cores', '4 cores'],
+      ['memory', '6 GiB', '6 GiB']
+    ]
+  );
+  assert.equal(byReplicas.items[0].level, 'bad');
   assert.equal(byConfig.first, false);
-  assert.equal(byConfig.replicasRec, '12');
-  assert.equal(byConfig.cpuRec, '3.5 cores');
-  assert.equal(byConfig.memRec, '9.94 GiB');
-  assert.equal(byConfig.level, 'bad');
+  assert.deepEqual(
+    byConfig.items.map(i => [i.item, i.now, i.rec, i.level]),
+    [
+      ['replicas', '12', '12', 'ok'],
+      ['cpu', '4 cores', '3.5 cores', 'warn'],
+      ['memory', '6 GiB', '9.94 GiB', 'bad']
+    ]
+  );
 });
 
 test('the Pod is taken first when the replicas cannot do it', () => {
-  const [byReplicas, byConfig] = schemeRows(
+  const [byReplicas, byConfig] = schemeGroups(
     detail({ primary: 'config', direction: 'same', needed: 12, delta: 0, share: 0 })
   );
   assert.equal(byReplicas.first, false);
   assert.equal(byConfig.first, true);
-  assert.equal(byReplicas.level, 'ok');
+  assert.equal(byReplicas.items[0].level, 'ok');
 });
 
 test('the gap of a Requests is its amount of one Pod and its share', () => {

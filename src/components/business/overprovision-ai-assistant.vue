@@ -346,6 +346,8 @@ const lacksComparison = computed(
 }
 .ai-answer :deep(table) {
   width: 100%;
+  table-layout: fixed;
+  overflow-wrap: anywhere;
   margin: 8px 0;
   border-collapse: collapse;
   font-size: 12px;

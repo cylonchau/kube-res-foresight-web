@@ -10,7 +10,13 @@ import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { allText, amountText, podsOf, totalText } from '@/utils/amount';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
-import { type Level, directionLevel, replicaDeltaParts, replicaView, schemeRows } from '@/utils/overprovision-replicas';
+import {
+  type Level,
+  directionLevel,
+  replicaDeltaParts,
+  replicaView,
+  schemeGroups
+} from '@/utils/overprovision-replicas';
 import { adjustmentOf, adjustmentText, shareText } from '@/utils/overprovision-verdict';
 
 defineOptions({ name: 'OverprovisionModulePanel' });
@@ -362,16 +368,71 @@ function adjustHelp(row: RecRow): string[] {
   return lines;
 }
 
-/** the table of the two ways: the replicas change and the Pod stays, or the Pod changes and the replicas stay */
-const scheme = computed(() => {
-  const rows = schemeRows(props.detail);
-  const requestRows = recRows.value.filter(row => row.key.endsWith('-req'));
-  const byConfig = requestRows.map(row => `${resName(row.resource)} ${cellAdjust(row).text}`).join('；');
-  return rows.map(row => ({
-    ...row,
-    adjust: row.key === 'replicas' ? replicaAdjust.value.text : byConfig || '-',
-    level: row.key === 'replicas' ? replicaAdjust.value.level : (row.level as Level)
-  }));
+/** the table of the two ways: for each way its three items, one row each, so the table is as wide as the page and no wider */
+interface SchemeCell {
+  key: string;
+  label: string;
+  now: string;
+  rec: string;
+  adjust: string;
+  level: Level;
+}
+const schemeLabel = (item: 'replicas' | 'cpu' | 'memory') =>
+  item === 'replicas' ? p('configReplicas') : item === 'cpu' ? p('schemeCpuReq') : p('schemeMemReq');
+const scheme = computed(() =>
+  schemeGroups(props.detail).map(group => ({
+    key: group.key,
+    first: group.first,
+    cells: group.items.map<SchemeCell>(item => {
+      const key = `${group.key}-${item.item}`;
+      const base = { key, label: schemeLabel(item.item), now: item.now, rec: item.rec };
+      if (item.item === 'replicas')
+        return group.key === 'replicas'
+          ? { ...base, adjust: replicaAdjust.value.text, level: replicaAdjust.value.level }
+          : { ...base, adjust: p('repKept'), level: 'ok' };
+      if (group.key === 'replicas') return { ...base, adjust: p('podKept'), level: 'ok' };
+      const row = recRows.value.find(x => x.key === `${item.item}-req`);
+      const cell = row ? cellAdjust(row) : null;
+      return { ...base, adjust: cell?.text ?? '-', level: item.level };
+    })
+  }))
+);
+
+/** how the number of replicas is worked out: for each resource what each percentile of the use of all the replicas asks of, and what the guard of the Limits asks */
+const basis = computed(() => {
+  const plan = (props.detail?.recommend ?? props.detail?.windows[0])?.replica_plan;
+  if (!plan) return [];
+  return plan.resources.map(need => {
+    const resource = need.resource === 'memory' ? 'memory' : 'cpu';
+    return {
+      key: need.resource,
+      name: resName(need.resource),
+      request: amountText(resource, need.request),
+      parts: need.parts.map(part => ({
+        name: part.name,
+        use: fmt(need.resource, part.total),
+        share: formatPercent(part.target, 0),
+        needed: formatDecimal(part.needed, 2)
+      })),
+      limit: need.limit > 0 ? amountText(resource, need.limit) : '',
+      limitNeeded: need.limit_needed > 0 ? formatDecimal(need.limit_needed, 2) : '',
+      needed: need.needed,
+      binding: plan.binding === need.resource
+    };
+  });
+});
+const planLimits = computed(() => {
+  const l = repView.value?.limits;
+  const parts: string[] = [];
+  if (l?.min) parts.push(p('limMin', { n: l.min }));
+  if (l?.max) parts.push(p('limMax', { n: l.max }));
+  if (l?.scale_up_step) parts.push(p('limUp', { n: l.scale_up_step }));
+  if (l?.scale_down_step) parts.push(p('limDown', { n: l.scale_down_step }));
+  return parts.length ? parts.join('，') : p('limNone');
+});
+const bindingName = computed(() => {
+  const binding = repView.value?.binding;
+  return binding ? resName(binding) : '';
 });
 const schemeReasons = computed(() => (repView.value?.reasons ?? []).map(code => p(`reason_${code}`)));
 
@@ -621,45 +682,101 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
       <!-- the replicas now and recommended, and the two ways to the recommendation: the replicas change (the Pod stays) or the Pod changes (the replicas stay) -->
       <div v-if="scheme.length" class="flex-col gap-4px">
         <HelpLabel :label="p('schemeTitle')" :help="p('schemeHelp')" class="text-13px font-medium" />
-        <div class="table-scroll">
-          <NTable size="small" :bordered="true" :single-line="false" class="rec text-12px">
+        <NTable size="small" :bordered="true" :single-line="false" class="rec scheme text-12px">
+          <colgroup>
+            <col style="width: 22%" />
+            <col style="width: 20%" />
+            <col style="width: 15%" />
+            <col style="width: 15%" />
+            <col style="width: 28%" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>{{ p('colScheme') }}</th>
+              <th>{{ p('colSchemeItem') }}</th>
+              <th>{{ p('colCurrent') }}</th>
+              <th class="key">{{ p('colRecShort') }}</th>
+              <th>{{ p('colAdjust') }}</th>
+            </tr>
+          </thead>
+          <tbody v-for="group in scheme" :key="group.key">
+            <tr v-for="(cell, index) in group.cells" :key="cell.key">
+              <td v-if="index === 0" :rowspan="group.cells.length" class="scheme-name">
+                <div class="font-medium">
+                  {{ group.key === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}
+                </div>
+                <div class="opacity-70">
+                  {{ group.key === 'replicas' ? p('schemeByReplicasNote') : p('schemeByConfigNote') }}
+                </div>
+                <NTag v-if="group.first" size="tiny" :bordered="false" type="primary" class="mt-4px">
+                  {{ p('schemeFirst') }}
+                </NTag>
+              </td>
+              <td>{{ cell.label }}</td>
+              <td>{{ cell.now }}</td>
+              <td class="key">{{ cell.rec }}</td>
+              <td>
+                <NTag size="small" :bordered="false" :type="LEVEL_TAG[cell.level]">{{ cell.adjust }}</NTag>
+              </td>
+            </tr>
+          </tbody>
+        </NTable>
+        <div v-if="repView?.primary === 'config'" class="text-12px opacity-75">{{ p('schemeConfigFirst') }}</div>
+        <div v-if="basis.length" class="mt-4px flex-col gap-4px">
+          <div class="text-12px font-medium">{{ p('basisTitle') }}</div>
+          <NTable size="small" :bordered="true" :single-line="false" class="rec basis text-12px">
+            <colgroup>
+              <col style="width: 12%" />
+              <col style="width: 13%" />
+              <col style="width: 17%" />
+              <col style="width: 17%" />
+              <col style="width: 17%" />
+              <col style="width: 14%" />
+              <col style="width: 10%" />
+            </colgroup>
             <thead>
               <tr>
-                <th>{{ p('colScheme') }}</th>
-                <th>{{ p('colReplicasNow') }}</th>
-                <th class="key">{{ p('colReplicasRec') }}</th>
-                <th>{{ p('colCpuReqNow') }}</th>
-                <th class="key">{{ p('colCpuReqRec') }}</th>
-                <th>{{ p('colMemReqNow') }}</th>
-                <th class="key">{{ p('colMemReqRec') }}</th>
-                <th>{{ p('colAdjust') }}</th>
+                <th>{{ p('basisRes') }}</th>
+                <th>{{ p('basisRequest') }}</th>
+                <th>P90</th>
+                <th>P95</th>
+                <th>P99</th>
+                <th>{{ p('basisLimit') }}</th>
+                <th class="key">{{ p('basisNeed') }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in scheme" :key="row.key">
-                <td class="font-medium">
-                  {{ row.key === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}
-                  <NTag v-if="row.first" size="tiny" :bordered="false" type="primary" class="ml-4px">
-                    {{ p('schemeFirst') }}
-                  </NTag>
+              <tr v-for="row in basis" :key="row.key">
+                <td class="font-medium">{{ row.name }}</td>
+                <td>{{ row.request }}</td>
+                <td v-for="part in row.parts" :key="part.name">
+                  {{ p('basisPart', { use: part.use, share: part.share }) }}
+                  <br />
+                  <b>{{ part.needed }}</b>
                 </td>
-                <td>{{ row.replicasNow }}</td>
-                <td class="key">{{ row.replicasRec }}</td>
-                <td>{{ row.cpuNow }}</td>
-                <td class="key">{{ row.cpuRec }}</td>
-                <td>{{ row.memNow }}</td>
-                <td class="key">{{ row.memRec }}</td>
                 <td>
-                  <NTag size="small" :bordered="false" :type="LEVEL_TAG[row.level]">{{ row.adjust }}</NTag>
+                  <template v-if="row.limit">
+                    {{ p('basisLimitUse', { limit: row.limit }) }}
+                    <br />
+                    <b>{{ row.limitNeeded }}</b>
+                  </template>
+                  <span v-else class="opacity-60">-</span>
+                </td>
+                <td class="key">
+                  {{ row.needed }}
+                  <NTag v-if="row.binding" size="tiny" :bordered="false" type="info">{{ p('basisDecides') }}</NTag>
                 </td>
               </tr>
             </tbody>
           </NTable>
-        </div>
-        <div v-if="repView?.primary === 'config'" class="text-12px opacity-75">{{ p('schemeConfigFirst') }}</div>
-        <div v-for="reason in schemeReasons" :key="reason" class="text-12px opacity-75">{{ reason }}</div>
-        <div v-if="repView?.formula" class="break-all text-12px opacity-60">
-          {{ p('schemeFormula', { formula: repView.formula }) }}
+          <div class="text-12px opacity-75">
+            {{ p('basisLine', { resource: bindingName, n: repView?.raw ?? 0 }) }}
+          </div>
+          <div class="text-12px opacity-75">{{ p('schemeLimits', { text: planLimits }) }}</div>
+          <div v-if="repView && repView.max > 0" class="text-12px opacity-75">
+            {{ p('schemeRange', { min: repView.min, max: repView.max, now: repView.current }) }}
+          </div>
+          <div v-for="reason in schemeReasons" :key="reason" class="text-12px opacity-75">{{ reason }}</div>
         </div>
         <div class="text-12px opacity-60">{{ p('schemeLegend') }}</div>
       </div>
@@ -859,6 +976,33 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 .rec :deep(th.key),
 .rec :deep(td.key) {
   font-weight: 600;
+}
+
+.rec {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.rec :deep(td),
+.rec :deep(th) {
+  overflow-wrap: anywhere;
+}
+
+/* a tag in these tables wraps inside its cell, it does not stretch the table */
+.rec :deep(.n-tag) {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+}
+
+.rec :deep(.n-tag__content) {
+  white-space: normal;
+  line-height: 18px;
+  padding: 2px 0;
+}
+
+.scheme-name {
+  vertical-align: top;
 }
 
 .help-pop {

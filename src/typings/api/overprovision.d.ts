@@ -118,9 +118,22 @@ declare namespace Api {
     }
 
     /** what one resource asks of the number of replicas when the Pod keeps the Requests it has */
+    interface ReplicaPart {
+      name: string;
+      /** the sum of the use of all the Pods at that percentile */
+      total: number;
+      /** the share of the Requests of a Pod the percentile is wanted to take */
+      target: number;
+      needed: number;
+    }
+
     interface ReplicaNeed {
       resource: string;
       needed: number;
+      request: number;
+      limit: number;
+      parts: ReplicaPart[];
+      limit_needed: number;
       formula: string;
     }
 
