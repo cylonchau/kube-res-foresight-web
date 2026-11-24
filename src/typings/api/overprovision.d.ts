@@ -30,6 +30,8 @@ declare namespace Api {
       usage: Usage;
       /** over all the Pods together; absent when it could not be made */
       total?: Usage;
+      /** the request each percentile asks for alone; the one that asks for the most decides the recommendation */
+      candidates: Candidate[];
       coverage: number;
       expected_points: number;
       /** the request the use supports (one Pod), with or without a request to compare with; 0 when none is made */
@@ -155,6 +157,19 @@ declare namespace Api {
       /** the share of the Requests of a Pod the percentile is wanted to take */
       target: number;
       needed: number;
+      /** whether the part counted in the plan it is in */
+      counted: boolean;
+    }
+
+    /** what one percentile asks of the request on its own (use at the percentile / the share it is wanted to take, then the floors, rounded) and the Limits that goes with it */
+    interface Candidate {
+      name: 'P90' | 'P95' | 'P99';
+      use: number;
+      target: number;
+      needed: number;
+      suggested: number;
+      suggested_limit: number;
+      decides: boolean;
     }
 
     interface ReplicaNeed {
@@ -186,6 +201,10 @@ declare namespace Api {
       limits: ReplicaLimits;
       reasons: string[];
       formula: string;
+      /** the percentiles the plan was made of: empty for the three together, or P90, P95, P99 alone */
+      caliber?: string;
+      /** the plan made of one percentile at a time (only on the plan of the three together) */
+      by_caliber?: Record<string, ReplicaPlan>;
     }
 
     interface Window {
@@ -206,9 +225,16 @@ declare namespace Api {
       /** where the replicas now come from: what the workload is set to in Kubernetes (read by the operator), the replicas metric of Prometheus, or the newest sample stored of it; empty when there is none */
       /** the coefficients of the module in module management (the card of the capacity reserve coefficient shows them) */
       coefficients?: ModuleCoefficients;
-      replicas_from?: 'kubernetes' | 'prometheus' | 'stored' | '';
+      replicas_from?: 'kubernetes' | 'prometheus' | 'estimated' | 'stored' | '';
       /** how many of them are ready (when they come from Kubernetes) */
       replicas_ready?: number;
+      /** the Pods that are not ready, the Pods that exist (more than the replicas while a rollout runs old and new side by side) and whether a rollout is under way */
+      replicas_abnormal?: number;
+      replicas_pods?: number;
+      replicas_updating?: boolean;
+      /** why Kubernetes could not give the replicas (no_operator, stale, missing, error), and the newest figure of Prometheus when it was set aside as a rollout's */
+      replicas_why?: string;
+      replicas_latest?: number;
       /** when they were measured (unix seconds), and the fewest and the most of the recommendation period */
       replicas_at?: number;
       replicas_min?: number;
