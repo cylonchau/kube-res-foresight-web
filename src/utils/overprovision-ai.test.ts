@@ -208,6 +208,7 @@ const plan = (over: Partial<Api.Overprovision.ReplicaPlan> = {}): Api.Overprovis
   resources: [],
   primary: 'replicas',
   reasons: [],
+  limits: { min: 0, max: 0, scale_up_step: 0, scale_down_step: 0 },
   formula: 'cpu replicas = max(P95 3.3 / (4 x 85%) = 0.97)',
   ...over
 });
@@ -225,9 +226,13 @@ test('the AI is asked for its own conclusion on the measured data, and the platf
     zh.includes('AI 与平台推荐的差异') && zh.includes('原因'),
     'the differences from the platform are explained'
   );
-  assert.ok(zh.includes('副本不低于 2') && zh.includes('不减副本'), 'no unreasonable scale-in');
   assert.ok(
-    zh.includes('当前副本数 4（来自 Kubernetes 的实测，Prometheus），推荐周期内最少 4、最多 9'),
+    zh.includes('模块管理里这个模块配置的约束') && zh.includes('不减副本'),
+    'no unreasonable scale-in, within the module constraints'
+  );
+  assert.ok(zh.includes('模块没有配置副本数约束'), 'a module that sets none is told so');
+  assert.ok(
+    zh.includes('当前副本数 4（Prometheus 实测的就绪副本数），推荐周期内最少 4、最多 9'),
     "the replicas now are the cluster's"
   );
   // the data comes before the platform figures, which come last and short
@@ -277,4 +282,14 @@ test('the mail has the tables of the platform: the two ways and the current agai
   );
   assert.equal(configs.rows[0][5].text, '超配 3 cores (75.0%)');
   assert.equal(configs.rows[0][5].level, 'warn');
+});
+
+test('the constraints of the module are given to the AI, and where the replicas come from', () => {
+  const d = detail();
+  d.windows[0].replica_plan = plan({ limits: { min: 3, max: 20, scale_up_step: 4, scale_down_step: 2 } });
+  d.replicas_from = 'kubernetes';
+  d.replicas_ready = 3;
+  const zh = buildAnalysisQuestion(d, '7d', 'zh-CN');
+  assert.ok(zh.includes('最少 3 个，最多 20 个，每次最多增加 4 个，每次最多减少 2 个'));
+  assert.ok(zh.includes('当前副本数 4（Kubernetes 的 spec.replicas，operator 读取，其中就绪 3）'));
 });

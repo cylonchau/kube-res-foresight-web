@@ -38,6 +38,7 @@ const detail = (plan: Partial<Api.Overprovision.ReplicaPlan> = {}) =>
         primary: 'replicas',
         reasons: [],
         formula: 'f',
+        limits: { min: 0, max: 0, scale_up_step: 0, scale_down_step: 0 },
         ...plan
       }
     }

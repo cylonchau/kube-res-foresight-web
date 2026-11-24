@@ -139,6 +139,26 @@ export function replicaWords(view: ReplicaView | null, zh: boolean): { text: str
   return { text: zh ? '副本数合适，无需调整' : 'replicas are right, no change', level };
 }
 
+const source: Record<string, [string, string]> = {
+  kubernetes: ['Kubernetes 的 spec.replicas，operator 读取', 'spec.replicas of Kubernetes, read by the operator'],
+  prometheus: ['Prometheus 实测的就绪副本数', 'the ready replicas measured by Prometheus'],
+  stored: ['平台保存的最近一次实测采样', 'the newest measured sample stored']
+};
+
+/** the constraints of the module on its replicas, in words (module management has them; unset is said so, not made up) */
+function limitWords(view: ReplicaView | null, zh: boolean): string {
+  const l = view?.limits;
+  const parts: string[] = [];
+  if (l?.min) parts.push(zh ? `最少 ${l.min} 个` : `at least ${l.min}`);
+  if (l?.max) parts.push(zh ? `最多 ${l.max} 个` : `at most ${l.max}`);
+  if (l?.scale_up_step)
+    parts.push(zh ? `每次最多增加 ${l.scale_up_step} 个` : `at most ${l.scale_up_step} added at a time`);
+  if (l?.scale_down_step)
+    parts.push(zh ? `每次最多减少 ${l.scale_down_step} 个` : `at most ${l.scale_down_step} removed at a time`);
+  if (!parts.length) return zh ? '模块没有配置副本数约束' : 'the module sets no replica constraint';
+  return parts.join(zh ? '，' : ', ');
+}
+
 /** what the question tells the model of the replicas the cluster has now */
 function replicaFacts(view: ReplicaView | null, zh: boolean): string {
   if (!view || view.current <= 0)
@@ -152,8 +172,8 @@ function replicaFacts(view: ReplicaView | null, zh: boolean): string {
         : `, fewest ${view.min} and most ${view.max} in the period`
       : '';
   return zh
-    ? `当前副本数 ${view.current}（来自 Kubernetes 的实测，${view.from === 'stored' ? '平台保存的最近采样' : 'Prometheus'}）${range}`
-    : `replicas now ${view.current} (measured from Kubernetes, ${view.from === 'stored' ? 'the newest stored sample' : 'by Prometheus'})${range}`;
+    ? `当前副本数 ${view.current}（${source[view.from]?.[0] ?? 'Prometheus'}${view.ready > 0 ? `，其中就绪 ${view.ready}` : ''}）${range}`
+    : `replicas now ${view.current} (${source[view.from]?.[1] ?? 'by Prometheus'}${view.ready > 0 ? `, ${view.ready} of them ready` : ''})${range}`;
 }
 
 function resourceLines(r: Api.Overprovision.Result, zh: boolean) {
@@ -205,7 +225,7 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
         '1. 只输出 HTML，不要 Markdown、代码围栏、前后说明。这是只读分析，不执行任何改动。',
         '2. 独立判断：根据“实测数据”（使用量分位数、峰值、OOM、限流、JVM、副本变化）自己得出结论并写出算式。“平台推荐”只用来对照，不得照抄或原样转写；你的数值可以和它不同，但要说明原因。',
         `3. 两种方案都给：①Pod 配置不变，需要几个副本（全副本使用量总和 ÷ 每个 Pod 的 Requests ÷ 目标比例）；②副本数不变，每个 Pod 的 Requests 和 Limits 应是多少。优先推荐调整副本数，副本数调不动时才改 Pod 配置并说明为什么。${bands ? `目标比例（使用量占 Requests）可参考 ${bands}，可依据数据另作判断。` : ''}`,
-        '4. 安全边界，避免不合理缩容：副本不低于 2，一次最多减一半；有 OOM 或 CPU 被限流时不减副本也不降配置；缩容后单 Pod 的 P99 不能接近 Limits；偶发的最大值不作依据；内存比 CPU 更保守。',
+        '4. 安全边界，避免不合理缩容：推荐的副本数必须在模块管理里这个模块配置的约束内（见下面“副本数约束”：最少、最多、每次最多增减的个数），没有约束时自行把握，不得缩到只剩一个；有 OOM 或 CPU 被限流时不减副本也不降配置；缩容后单 Pod 的 P99 不能接近 Limits；偶发的最大值不作依据；内存比 CPU 更保守。',
         '5. 第一张表“当前配置与 AI 推荐配置对比”，五行：副本数、CPU Requests、CPU Limits、Memory Requests、Memory Limits；七列：资源项、当前值（单 Pod）、当前值（全副本总和）、推荐值（单 Pod）、推荐值（全副本总和）、调整（超配、欠配或合理，副本数写增加或减少，带数量和比例）、依据（引用数据里的数字）。副本数行的当前值写当前副本数。没有当前值写“Prometheus 无数据”。',
         '6. 第二张表“AI 与平台推荐的差异”：列：项、平台推荐、AI 推荐、差异、原因。一致写“一致”；不一致必须写明差异和原因。',
         '7. 其后用表格写“使用情况”和“判定”（状态、风险）；限流、OOM、JVM 只写有数据的项。状态单元格加 class：lv-bad（有风险或欠配）、lv-warn（超配或需要关注）、lv-ok（正常）、lv-info（仅信息），例如 <td class="lv-warn">超配</td>。',
@@ -217,13 +237,20 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
         '1. Output HTML only: no Markdown, no code fence, no text before or after. This is a read-only analysis: change nothing.',
         '2. Judge on your own: from the "measured data" (the quantiles of the use, peaks, OOM, throttling, JVM, the change of the replicas) reach your own conclusion and write the arithmetic. The "platform recommendation" is there to compare with: do not copy or re-write it; your figures may differ from it, but say why.',
         `3. Give both ways: 1) the Pod stays, how many replicas are needed (the sum of the use of all the replicas / the Requests of a Pod / the target share); 2) the replicas stay, what the Requests and Limits of a Pod should be. Recommend changing the replicas first, and change the Pod only when the replicas cannot move, saying why.${bands ? ` The target share of the use of the Requests may be taken from ${bands} and changed on the data.` : ''}`,
-        '4. Safety, no unreasonable scale-in: not below 2 replicas, at most half of them in one step; with OOM or CPU throttling remove no replica and lower no configuration; after a scale-in the P99 of one Pod must not come near its Limits; a peak that came once is no basis; be more careful with memory than with CPU.',
+        '4. Safety, no unreasonable scale-in: the recommended replicas must stay within the constraints this module has in module management (below under "replica constraints": the least, the most, the most added or removed at a time); where it sets none use your own judgement and never go down to one; with OOM or CPU throttling remove no replica and lower no configuration; after a scale-in the P99 of one Pod must not come near its Limits; a peak that came once is no basis; be more careful with memory than with CPU.',
         '5. The first table is "Current configuration vs AI recommended configuration" with five rows: Replicas, CPU Requests, CPU Limits, Memory Requests, Memory Limits; and seven columns: item, now (one Pod), now (all replicas), recommended (one Pod), recommended (all replicas), adjustment (over-provisioned, under-provisioned or reasonable; for the replicas add or remove, with the amount and the share), basis (quote a number of the data). The Replicas row has the replicas now. Write "no data in Prometheus" where there is no current figure.',
         '6. The second table is "AI vs platform recommendation": columns item, platform, AI, difference, reason. Write "same" where they agree; where they differ the difference and the reason are required.',
         '7. Then tables for "Use" and "Verdict" (status, risk); throttling, OOM and JVM only where there is data. Give the status cells a class: lv-bad (at risk or under-provisioned), lv-warn (over-provisioned or to watch), lv-ok (fine), lv-info (information only), for example <td class="lv-warn">over-provisioned</td>.',
         '8. State the actual situation and the figures directly; no lead-ins such as "first check", no vague words (maybe, probably, depends), nothing beyond the data.'
       ].join('\n');
-  const lines: string[] = [head, zh ? '实测数据：' : 'Measured data:', replicaFacts(view, zh)];
+  const lines: string[] = [
+    head,
+    zh ? '实测数据：' : 'Measured data:',
+    replicaFacts(view, zh),
+    zh
+      ? `模块管理里这个模块的副本数约束：${limitWords(view, zh)}`
+      : `replica constraints of this module (module management): ${limitWords(view, zh)}`
+  ];
   for (const r of [win?.cpu, win?.memory]) if (r) lines.push(...resourceLines(r, zh));
   const metrics = detail.metrics ?? [];
   if (metrics.length) {

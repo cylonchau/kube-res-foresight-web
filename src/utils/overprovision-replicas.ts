@@ -33,6 +33,9 @@ export interface ReplicaView {
   reasons: string[];
   formula: string;
   binding: string;
+  /** the constraints the module sets on its replicas (module management) */
+  limits: Api.Overprovision.ReplicaLimits;
+  ready: number;
   /** where the replicas now come from, when they were measured (unix seconds) and the fewest and the most of the period */
   from: string;
   at: number;
@@ -56,6 +59,8 @@ export function replicaView(detail: Api.Overprovision.Detail | null | undefined)
     reasons: plan?.reasons ?? [],
     formula: plan?.formula ?? '',
     binding: plan?.binding ?? '',
+    limits: plan?.limits ?? { min: 0, max: 0, scale_up_step: 0, scale_down_step: 0 },
+    ready: detail.replicas_ready ?? 0,
     from: detail.replicas_from ?? '',
     at: detail.replicas_at ?? 0,
     min: detail.replicas_min ?? 0,

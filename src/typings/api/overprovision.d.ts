@@ -107,8 +107,14 @@ declare namespace Api {
       coverage_high: number;
       coverage_mid: number;
       peak_near_limit: number;
-      min_replicas?: number;
-      max_scale_in?: number;
+    }
+
+    /** the constraints the module sets on its replicas in module management (0 = not set) */
+    interface ReplicaLimits {
+      min: number;
+      max: number;
+      scale_up_step: number;
+      scale_down_step: number;
     }
 
     /** what one resource asks of the number of replicas when the Pod keeps the Requests it has */
@@ -133,6 +139,8 @@ declare namespace Api {
       resources: ReplicaNeed[];
       /** what to change first: the replicas, the Pod spec (when the replicas cannot do it) or nothing */
       primary: 'replicas' | 'config' | 'none';
+      /** the constraints of the module the plan was held to */
+      limits: ReplicaLimits;
       reasons: string[];
       formula: string;
     }
@@ -152,8 +160,10 @@ declare namespace Api {
       workload_kind: string;
       workload: string;
       replicas: number;
-      /** where the replicas now come from: the replicas metric read from Prometheus, or the newest sample stored of it; empty when there is none */
-      replicas_from?: 'prometheus' | 'stored' | '';
+      /** where the replicas now come from: what the workload is set to in Kubernetes (read by the operator), the replicas metric of Prometheus, or the newest sample stored of it; empty when there is none */
+      replicas_from?: 'kubernetes' | 'prometheus' | 'stored' | '';
+      /** how many of them are ready (when they come from Kubernetes) */
+      replicas_ready?: number;
       /** when they were measured (unix seconds), and the fewest and the most of the recommendation period */
       replicas_at?: number;
       replicas_min?: number;

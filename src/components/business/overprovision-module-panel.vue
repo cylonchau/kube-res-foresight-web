@@ -159,6 +159,8 @@ const wall = computed<WallCard[]>(() => {
   const at = view?.at ? formatDateTime(view.at * 1000) : '';
   const subLines: string[] = [];
   if (d.replicas && view?.from === 'stored') subLines.push(p('replicasStored', { time: at }));
+  else if (d.replicas && view?.from === 'kubernetes')
+    subLines.push(p('replicasFromK8s', { time: at, ready: view.ready }));
   else if (d.replicas) subLines.push(p('replicasFromProm', { time: at }));
   else subLines.push(p('replicasNone'));
   if (d.replicas && view && view.max > 0 && view.min > 0)
