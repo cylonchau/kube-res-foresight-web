@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
-import { formatPercent } from '@/utils/format';
+import { formatBytes, formatCores, formatPercent } from '@/utils/format';
 
 defineOptions({ name: 'OverprovisionLoadProfile' });
 
@@ -51,6 +51,98 @@ const bars = computed(() =>
     title: p('profileHourTitle', { hour: hourText(h.hour), need: h.need, cpu: h.cpu || '-', memory: h.memory || '-' })
   }))
 );
+
+// ---- the use itself over the last 24 hours: 24 blocks (one for each hour), each cut into cells of 5 or 10 minutes
+
+interface LoadCell {
+  key: string;
+  style: Record<string, string>;
+  title: string;
+  high: boolean;
+}
+interface LoadHour {
+  hour: number;
+  style: Record<string, string>;
+  high: number;
+  cells: LoadCell[];
+}
+interface LoadRow {
+  resource: 'cpu' | 'memory';
+  name: string;
+  capacity: string;
+  columns: number;
+  hours: LoadHour[];
+}
+
+const figure = (resource: string, value: number) =>
+  resource === 'memory' ? formatBytes(value, 2) : formatCores(value, 2);
+const two = (n: number) => String(n).padStart(2, '0');
+/** a cell under what the normal count carries is blue, the deeper the closer to it; over it is orange to red; no data is grey */
+function cellColor(ratio: number): string {
+  if (ratio < 0) return 'rgba(128,128,128,0.15)';
+  if (ratio > 1)
+    return `rgba(240, ${Math.round(150 - Math.min(ratio - 1, 1) * 90)}, 40, ${0.6 + Math.min(ratio - 1, 1) * 0.4})`;
+  return `rgba(32,128,240,${0.12 + 0.6 * ratio})`;
+}
+
+const loadRows = computed<LoadRow[]>(() => {
+  const prof = props.profile;
+  const cellSeconds = prof.cell_seconds ?? 0;
+  if (!prof.recent?.length || !cellSeconds || !prof.recent_hours?.length) return [];
+  const perHour = Math.max(Math.floor(3600 / cellSeconds), 1);
+  return prof.recent.map(load => {
+    const hours: LoadHour[] = prof.recent_hours!.map((hour, h) => {
+      const cells: LoadCell[] = [];
+      let sum = 0;
+      let count = 0;
+      let high = 0;
+      for (let c = 0; c < perHour; c += 1) {
+        const value = load.values[h * perHour + c] ?? -1;
+        const ratio = value < 0 || !(load.capacity > 0) ? -1 : value / load.capacity;
+        const at = `${two(hour)}:${two(Math.floor((c * cellSeconds) / 60))}`;
+        const isHigh = ratio > 1;
+        if (value >= 0) {
+          sum += ratio;
+          count += 1;
+        }
+        if (isHigh) high += 1;
+        cells.push({
+          key: `${h}-${c}`,
+          style: { background: cellColor(ratio) },
+          high: isHigh,
+          title:
+            value < 0
+              ? p('profileCellNone', { at })
+              : p('profileCellTitle', {
+                  at,
+                  use: figure(load.resource, value),
+                  share: formatPercent(ratio, 0),
+                  level: isHigh ? p('profileHigh') : p('profileNormal')
+                })
+        });
+      }
+      const mean = count ? sum / count : -1;
+      return {
+        hour,
+        high,
+        cells,
+        style: {
+          background: cellColor(mean).replace(/[\d.]+\)$/, '0.18)'),
+          borderColor: high ? 'rgb(240,140,40)' : 'transparent'
+        }
+      };
+    });
+    return {
+      resource: load.resource,
+      name: p(load.resource === 'memory' ? 'sectionMemory' : 'sectionCpu'),
+      capacity: figure(load.resource, load.capacity),
+      columns: Math.min(perHour, 6),
+      hours
+    };
+  });
+});
+const cellMinutes = computed(() => Math.round((props.profile.cell_seconds ?? 0) / 60));
+
 const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sectionMemory' : 'sectionCpu'));
 </script>
 
@@ -65,30 +157,78 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
       </IconTooltip>
       <span class="plan-note">{{ p('profileNote', { days: profile.days }) }}</span>
     </div>
-    <div class="bars">
-      <div v-for="bar in bars" :key="bar.hour" class="bar-col" :title="bar.title">
-        <div class="bar" :class="{ busy: bar.busy }" :style="{ height: `${bar.height}%` }"></div>
-        <div class="bar-label">{{ bar.hour % 3 === 0 ? String(bar.hour).padStart(2, '0') : '' }}</div>
+
+    <!-- the replicas each hour of the day asks for -->
+    <section class="area">
+      <div class="area-title">{{ p('profileReplicasTitle') }}</div>
+      <div class="bars">
+        <div v-for="bar in bars" :key="bar.hour" class="bar-col" :title="bar.title">
+          <div class="bar" :class="{ busy: bar.busy }" :style="{ height: `${bar.height}%` }"></div>
+          <div class="bar-label">{{ bar.hour % 3 === 0 ? String(bar.hour).padStart(2, '0') : '' }}</div>
+        </div>
       </div>
-    </div>
-    <div class="text-12px">
-      {{ p('profileSummary', { normal: profile.normal, peak: profile.peak }) }}
-      <template v-if="busy">{{ p('profilePeakHours', { hours: peakRanges }) }}</template>
-    </div>
-    <div v-if="profile.above && profile.above.share > 0" class="text-12px opacity-80">
-      {{
-        p('profileAbove', {
-          r: resourceName,
-          normal: profile.normal,
-          share: formatPercent(profile.above.share, 1),
-          events: profile.above.events,
-          longest: profile.above.longest_minutes
-        })
-      }}
-    </div>
-    <div class="text-12px" :class="worth ? 'text-primary' : 'opacity-80'">
-      {{ worth ? p('profileWorth', { saved: formatPercent(profile.saved, 0), peak: profile.peak }) : p('profileFlat') }}
-    </div>
+      <div class="text-12px">
+        {{ p('profileSummary', { normal: profile.normal, peak: profile.peak }) }}
+        <template v-if="busy">{{ p('profilePeakHours', { hours: peakRanges }) }}</template>
+      </div>
+      <div v-if="profile.above && profile.above.share > 0" class="text-12px opacity-80">
+        {{
+          p('profileAbove', {
+            r: resourceName,
+            normal: profile.normal,
+            share: formatPercent(profile.above.share, 1),
+            events: profile.above.events,
+            longest: profile.above.longest_minutes
+          })
+        }}
+      </div>
+      <div class="text-12px" :class="worth ? 'text-primary' : 'opacity-80'">
+        {{
+          worth ? p('profileWorth', { saved: formatPercent(profile.saved, 0), peak: profile.peak }) : p('profileFlat')
+        }}
+      </div>
+    </section>
+
+    <!-- the use itself over the last 24 hours: a block for each hour, a cell for each 5 or 10 minutes -->
+    <section v-if="loadRows.length" class="area">
+      <div class="area-title">
+        {{ p('profileLoadTitle') }}
+        <IconTooltip placement="top">
+          <div class="help-pop">{{ p('profileLoadHelp') }}</div>
+        </IconTooltip>
+        <span class="plan-note">{{ p('profileLoadNote', { m: cellMinutes }) }}</span>
+      </div>
+      <div class="legend text-12px">
+        <span class="swatch" :style="{ background: 'rgba(32,128,240,0.4)' }"></span>
+        {{ p('profileNormal') }}
+        <span class="swatch" :style="{ background: 'rgba(240,120,40,0.85)' }"></span>
+        {{ p('profileHigh') }}
+        <span class="swatch" :style="{ background: 'rgba(128,128,128,0.25)' }"></span>
+        {{ p('profileNoData') }}
+      </div>
+      <div v-for="row in loadRows" :key="row.resource" class="load-row">
+        <div class="load-name">
+          <b>{{ row.name }}</b>
+          <span class="opacity-70">{{ p('profileCapacity', { n: profile.normal, v: row.capacity }) }}</span>
+        </div>
+        <div class="hours">
+          <div v-for="hour in row.hours" :key="hour.hour" class="hour" :style="hour.style">
+            <div class="cells" :style="{ gridTemplateColumns: `repeat(${row.columns}, minmax(0, 1fr))` }">
+              <span
+                v-for="cell in hour.cells"
+                :key="cell.key"
+                class="cell"
+                :style="cell.style"
+                :title="cell.title"
+              ></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hours labels">
+        <div v-for="(h, i) in profile.recent_hours" :key="i" class="hour-label">{{ String(h).padStart(2, '0') }}</div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -139,6 +279,78 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
 
 .bar.busy {
   background: rgba(240, 160, 32, 0.8);
+}
+
+.area {
+  display: grid;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(128, 128, 128, 0.3);
+}
+
+.area-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 8px;
+  border-radius: 2px;
+}
+
+.load-row {
+  display: grid;
+  gap: 2px;
+}
+
+.load-name {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.hours {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.hour {
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+.cells {
+  display: grid;
+  gap: 1px;
+}
+
+.cell {
+  display: block;
+  height: 14px;
+  border-radius: 1px;
+}
+
+.hour-label {
+  font-size: 10px;
+  text-align: center;
+  opacity: 0.6;
 }
 
 .bar-label {

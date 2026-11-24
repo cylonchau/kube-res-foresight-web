@@ -10,6 +10,7 @@ import {
   statusLevel
 } from './overprovision-replicas.ts';
 import { adjustmentOf, adjustmentText } from './overprovision-verdict.ts';
+import { identityTables } from './mail-identity.ts';
 
 /**
  * The question of the AI analysis of a module. It gives the assistant what was measured (the use of one Pod and of all the replicas, the Requests and Limits and the replicas
@@ -235,7 +236,8 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
   const zh = lang === 'zh-CN';
   const win = recommendationOf(detail);
   const view = replicaView(detail);
-  const who = `${detail.name} (${detail.namespace}/${detail.workload}, ${detail.replicas || '?'})`;
+  const cluster = detail.identity?.cluster ? `${detail.identity.cluster}, ` : '';
+  const who = `${detail.name} (${cluster}${detail.namespace}/${detail.workload}, ${detail.replicas || '?'})`;
   const bands = detail.params
     ? `P90 ${formatPercent(detail.params.p90.target, 0)}、P95 ${formatPercent(detail.params.p95.target, 0)}、P99 ${formatPercent(detail.params.p99.target, 0)}`
     : '';
@@ -342,7 +344,8 @@ export interface MailTable {
  * and the recommended configuration of the platform. The colours are the ones of the page.
  */
 export function mailTables(detail: Api.Overprovision.Detail, zh = true): MailTable[] {
-  const tables: MailTable[] = [];
+  // which module this is (the cluster, the namespace, the Pods) and how it has been running come first, so the figures below are never taken for another module's
+  const tables: MailTable[] = identityTables(detail, zh);
   const view = replicaView(detail);
   const rep = replicaWords(view, zh);
   const groups = schemeGroups(detail);

@@ -270,6 +270,19 @@ declare namespace Api {
       above: { level: number; share: number; events: number; longest_minutes: number } | null;
       resource: string;
       saved: number;
+      /** the use itself over the last 24 hours (whole hours, the last one cut at now), in cells of cell_seconds: the mean use of all the Pods, -1 where a cell has none */
+      recent?: RecentLoad[];
+      recent_start?: number;
+      /** the hour of the day of each of the 24 hours, in the module's time zone */
+      recent_hours?: number[];
+      cell_seconds?: number;
+    }
+
+    /** the use of all the Pods of one resource over the last day; capacity is what the normal count of replicas carries (a cell above it is a high load) */
+    interface RecentLoad {
+      resource: 'cpu' | 'memory';
+      capacity: number;
+      values: number[];
     }
 
     interface Detail {
@@ -282,6 +295,8 @@ declare namespace Api {
       /** where the replicas now come from: what the workload is set to in Kubernetes (read by the operator), the replicas metric of Prometheus, or the newest sample stored of it; empty when there is none */
       /** the coefficients of the module in module management (the card of the capacity reserve coefficient shows them) */
       coefficients?: ModuleCoefficients;
+      /** which workload this is in the cluster, as the operator last reported it: the cluster, the namespace, the kind and name and its Pods by name; absent when it never did */
+      identity?: WorkloadIdentity;
       replicas_from?: 'kubernetes' | 'prometheus' | 'estimated' | 'stored' | '';
       /** how many of them are ready (when they come from Kubernetes) */
       replicas_ready?: number;
@@ -313,6 +328,16 @@ declare namespace Api {
       /** the time limit of the request stopped some of the queries (skipped counts them); the others are complete */
       partial: boolean;
       skipped: number;
+    }
+
+    interface WorkloadIdentity {
+      cluster: string;
+      namespace: string;
+      kind: string;
+      name: string;
+      pods: Array<{ name: string; node?: string; phase?: string; ready: boolean; restarts: number }>;
+      observed_at: number;
+      missing?: boolean;
     }
 
     /** the query sent to Prometheus for one metric of the module */

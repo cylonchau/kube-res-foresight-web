@@ -266,7 +266,13 @@ test('the words and the colours of the replicas', () => {
 test('the mail has the tables of the platform: one row for each item of each way, and the current against the recommended configuration', () => {
   const d = detail();
   d.windows[0].replica_plan = plan();
-  const tables = mailTables(d, true);
+  const all = mailTables(d, true);
+  // the tables that say which module it is and how it ran come first; the figures of the analysis follow
+  assert.equal(all[0].caption, '模块与工作负载');
+  assert.ok(all.some(table => table.caption === '模块近期运行情况'));
+  const tables = all.filter(
+    table => !['模块与工作负载', 'Pod（operator 上报）', '模块近期运行情况'].includes(table.caption)
+  );
   assert.equal(tables.length, 2);
   const [ways, configs] = tables;
   assert.deepEqual(ways.columns, ['方案', '项目', '当前', '推荐', '调整']);
