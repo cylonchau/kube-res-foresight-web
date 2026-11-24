@@ -51,7 +51,9 @@ export function replicaBasisLines(
   }));
   const guard = params.peak_near_limit;
   if (need.limit > 0 && need.limit_needed > 0) {
-    const p99 = need.parts.find(part => part.name === 'P99')?.total ?? 0;
+    // the guard is of the peak as it was measured (raw), not of the use held for the sustain window
+    const p99part = need.parts.find(part => part.name === 'P99');
+    const p99 = p99part?.raw || p99part?.total || 0;
     lines.push({
       label: w.limitGuard,
       tokens: [
