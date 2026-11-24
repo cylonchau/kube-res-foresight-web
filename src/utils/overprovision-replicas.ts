@@ -149,6 +149,6 @@ export function schemeGroups(detail: Api.Overprovision.Detail | null | undefined
 /** the amount of one Pod that a Requests is more or less than recommended, "0.5 cores (12.5%)", or '' when it cannot be said or there is nothing to change */
 export function requestsGap(r: Api.Overprovision.Result | null | undefined): string {
   if (!r) return '';
-  const a = adjustmentOf(r.request, r.suggested);
+  const a = adjustmentOf(r.request, r.suggested, r.resource);
   return a && a.direction !== 'same' ? adjustmentText(resourceOf(r), a) : '';
 }
