@@ -113,21 +113,25 @@ export function configBasisLines(
       res(show(point.suggested))
     ]
   });
-  const p99 = (r.candidates ?? []).find(c => c.name === 'P99')?.use ?? r.usage.p99;
+  // the Limits is made of the Requests that is recommended in the end (a Requests the verdict keeps at what it is now is the one it counts) and of the raw P99, not the
+  // sustained one; it is rounded up like the Requests
+  const requestsOfLimits = caliber === 'all' && r.suggested > 0 ? r.suggested : point.suggested;
   lines.push({
     label: w.limitsLine,
     tokens: [
       name(w.limits),
       op('='),
+      op('⌈'),
       name('max'),
       op('('),
-      num(show(point.suggested)),
+      num(show(requestsOfLimits)),
       op(','),
       name('P99'),
-      num(show(p99)),
+      num(show(r.usage.p99)),
       op('×'),
       coef(pct(limitFactor), w.limitFactor),
       op(')'),
+      op('⌉'),
       op('='),
       res(show(point.limit))
     ]

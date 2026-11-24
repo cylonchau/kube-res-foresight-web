@@ -69,3 +69,9 @@ test('the floors of an OOM kill and of throttling are lines, and the margin of t
   assert.ok(lines.some(line => line.label === 'Throttle floor'));
   assert.ok(lines.find(line => line.label === 'Largest')!.tokens.some(t => t.kind === 'coef' && t.text === '10%'));
 });
+
+test('the Limits line counts the Requests that is recommended in the end and the raw P99, and says it is rounded up', () => {
+  const kept = { ...result, suggested: 3, needed: 3.76, suggested_limit: 4.2 } as unknown as Api.Overprovision.Result;
+  const lines = configBasisLines(kept, params, 'all', words);
+  assert.equal(plain(lines[5].tokens), 'Limits = ⌈ max ( 3 cores , P99 3.5 cores × 120% ) ⌉ = 4.2 cores');
+});
