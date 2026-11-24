@@ -595,7 +595,6 @@ const local = {
         '{r}：使用量超过推荐的 {level} 的时间占 {share}，分 {events} 段，最长连续 {longest} 分钟；超过现在的 Requests 的时间占 {now}。',
       basisLimitRatio:
         '{r}：Limits 是 Requests 的倍数，现在 {now} 倍，推荐 {rec} 倍（推荐 Limits = max(推荐 Requests, P99 × Limits 系数)，所以不会低于推荐 Requests）。',
-      replicasRowResource: '{r}（单 Pod 当前 Requests）',
       repThisRound: '本次动作到',
       repThisRoundNote: '单次最多 {step} 个，要 {rounds} 次到位',
       schemeByReplicasNote: '口径：单 Pod 规格不变（{spec}），只调整副本数',
@@ -608,13 +607,24 @@ const local = {
       oomScoreHelp:
         '100 × (1 − OOM 次数 × {weight})，最低 0。它是预测算法的内存评分：OOM 会扣算法的评分，影响平台跟随哪个算法，不改这个页面的推荐 Requests 和副本数。改推荐值的是“OOM 保护下限”卡片。',
       caliberLabel: '计算口径',
-      caliberAll: '综合（取最大）',
+      caliberAll: '综合',
       caliberAllColumn: '综合',
       colByPercentile: '按 {c} 推荐',
       profileTitle: '常态与高负载时段',
       profileHelp:
         '把全副本使用量按一天里的小时分开（时区用模块的时区），每个小时取这段时间里所有天的 P{pct}，除以单 Pod 的 Requests 和目标占比 {target}，向上取整，就是这个小时需要的副本数（CPU、内存取较大者）。“常态”是 24 个小时里居中的那个小时需要的副本数，“最忙”是最大的。全天保持最忙的副本数，等于为每天只有几个小时的高负载常年付费；按时段调整常态和高峰，可以在模块管理的“时间周期”里设置。',
       profileNote: '按小时看，共 {days} 天',
+      profileReplicasTitle: '副本数时段分布',
+      profileLoadTitle: '实际资源负载时段分布',
+      profileLoadHelp:
+        '最近 24 小时（整点到整点，最后一个小时到现在为止）的实际使用量，按小时分成 24 个大方块，每个大方块里是 5 或 10 分钟一格的小方块，颜色是这一格全副本使用量的平均值占“常态副本数能承载的量”的比例：蓝色是常态负载，越深越接近上限；橙到红是高负载（超过常态副本数能承载的量）；灰色是这段时间没有数据。大方块的底色是这个小时各格的平均，有高负载的小时边框是橙色。',
+      profileLoadNote: '最近 24 小时，每格 {m} 分钟',
+      profileCapacity: '常态 {n} 个副本能承载 {v}',
+      profileNormal: '常态负载',
+      profileHigh: '高负载',
+      profileNoData: '没有数据',
+      profileCellTitle: '{at}：全副本使用 {use}，占常态承载的 {share}（{level}）',
+      profileCellNone: '{at}：没有数据',
       profileHourTitle: '{hour}：需要 {need} 个副本（CPU {cpu}，内存 {memory}）',
       profileSummary: '常态每小时需要 {normal} 个副本，最忙的小时需要 {peak} 个。',
       profilePeakHours: '高于常态的时段：{hours}。',
@@ -624,7 +634,7 @@ const local = {
         '按时段调整（常态 + 高峰时段加到最忙的数量），比全天保持 {peak} 个副本，副本小时约少 {saved}。扩缩容要有提前量和冷却，实际省的会少一些。',
       profileFlat:
         '各小时需要的副本数相近（或高于常态的时段省不了多少），没有按时段调整的空间；这时全天的副本数由最忙的那个资源决定，比如内存常驻、CPU 有高峰。',
-      caliberAllName: '综合（P90、P95、P99 取最大）',
+      caliberAllName: '综合',
       caliberHelp:
         '推荐值可以按哪个百分位算：P90、P95、P99 各算一个，“综合”是三个里需求最大的那个（平台的推荐值就是它，再经过模块的边界）。选了某个口径，“调整”一列和计算依据都按它更新；上面每一列是各口径单独算的结果。',
       repCount: '{n} 个副本',
@@ -966,6 +976,8 @@ const local = {
       colMemReqNow: 'Memory Requests 当前（单 Pod）',
       colMemReqRec: 'Memory Requests 推荐（单 Pod）',
       colSchemeItem: '项目',
+      repRequestsCaliberHelp:
+        '这个区域里的 CPU Requests、Memory Requests 都是单 Pod 的口径：每个 Pod 现在的 Requests，副本数按它来算。',
       colRecShort: '推荐值',
       schemeCpuReq: 'CPU Requests（单 Pod）',
       schemeMemReq: 'Memory Requests（单 Pod）',

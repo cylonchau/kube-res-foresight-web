@@ -526,7 +526,7 @@ const replicaRows = computed<PlanRow[]>(() => {
     const request = rec.value?.[resource]?.request ?? 0;
     rows.push({
       key: `need-${resource}`,
-      label: p('replicasRowResource', { r: resName(resource) }),
+      label: resource === 'memory' ? p('memRequests') : p('cpuRequests'),
       // the figure now is the Requests of one Pod, the figure the replicas are worked out against
       now: request > 0 ? amountText(resource, request) : '-',
       cells: cellsOf(c => count(planOf(c)?.resources.find(need => need.resource === resource)?.needed)),
@@ -962,7 +962,12 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
               <NTable size="small" :bordered="true" :single-line="false" class="rec plan text-12px">
                 <thead>
                   <tr>
-                    <th>{{ p('colSchemeItem') }}</th>
+                    <th>
+                      {{ p('colSchemeItem') }}
+                      <IconTooltip v-if="way === 'replicas'" placement="top">
+                        <div class="help-pop">{{ p('repRequestsCaliberHelp') }}</div>
+                      </IconTooltip>
+                    </th>
                     <th>{{ p('colCurrent') }}</th>
                     <th v-for="c in COLUMNS" :key="c" :class="{ sel: caliber === c }">
                       {{ c === 'all' ? p('caliberAllColumn') : p('colByPercentile', { c }) }}

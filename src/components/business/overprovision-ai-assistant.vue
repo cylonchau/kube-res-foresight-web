@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { fetchMailAssistantAnswer } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
+import { mailTitle } from '@/utils/mail-identity';
 import { hasComparisonTable, mailTables } from '@/utils/overprovision-ai';
 import { looksLikeHtml, sanitizeAnswerHtml } from '@/utils/safe-html';
 
@@ -113,7 +114,7 @@ async function sendMail() {
   sending.value = true;
   try {
     const { data, error } = await fetchMailAssistantAnswer({
-      title: [props.moduleName, props.ai.window].filter(Boolean).join(' · '),
+      title: mailTitle(props.detail, props.moduleName, props.ai.window),
       content: props.ai.text,
       // the tables of the platform's own figures go first, so the mail has its tables whatever the answer holds
       tables: props.detail ? mailTables(props.detail, locale.value !== 'en-US') : []

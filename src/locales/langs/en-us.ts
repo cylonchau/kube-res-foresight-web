@@ -605,7 +605,6 @@ const local = {
         '{r}: the use was above the recommended {level} for {share} of the time, in {events} stretches, the longest {longest} minutes; above the Requests now for {now}.',
       basisLimitRatio:
         '{r}: the Limits is a multiple of the Requests, {now} times now and {rec} times recommended (recommended Limits = max(recommended Requests, P99 x Limits coefficient), so never below the recommended Requests).',
-      replicasRowResource: '{r} (Requests of a Pod now)',
       repThisRound: 'Reached by one action',
       repThisRoundNote: 'at most {step} at once, {rounds} actions',
       schemeByReplicasNote: 'Caliber: one Pod, its spec unchanged ({spec}); only the replicas change',
@@ -618,13 +617,24 @@ const local = {
       oomScoreHelp:
         '100 x (1 - kills x {weight}), at least 0. It is the memory score of a forecasting algorithm: a kill takes from the score of an algorithm and so changes which algorithm the platform follows; it does not change the recommended Requests or replicas of this page. What changes them is the OOM protection floor card.',
       caliberLabel: 'Caliber',
-      caliberAll: 'Together (the largest)',
+      caliberAll: 'Together',
       caliberAllColumn: 'Together',
       colByPercentile: 'By {c}',
       profileTitle: 'The normal part and the busy part of the day',
       profileHelp:
         'The use of all the replicas is taken apart by the hour of the day (in the time zone of the module); for each hour the P{pct} over every day of the period is divided by the Requests of a Pod and the target share {target}, and rounded up: the replicas that hour asks for (the larger of CPU and memory). "Normal" is what the typical hour of the 24 asks for, "busiest" the largest. Keeping the busiest count all day pays for a load of a few hours every day; a count that follows the hours can be set in the periods of module management.',
       profileNote: 'by the hour, {days} days',
+      profileReplicasTitle: 'Replicas by the hour',
+      profileLoadTitle: 'The use itself by the hour',
+      profileLoadHelp:
+        'The use over the last 24 hours (whole hours; the last one up to now) in 24 blocks, one for each hour, each cut into cells of 5 or 10 minutes. The colour of a cell is the mean use of all the replicas against what the normal count of replicas carries: blue is the normal load, deeper nearer the limit; orange to red is a high load (over what the normal count carries); grey is no data. The ground of a block is the mean of its cells, and an hour with a high load has an orange border.',
+      profileLoadNote: 'the last 24 hours, {m} minutes a cell',
+      profileCapacity: '{n} normal replicas carry {v}',
+      profileNormal: 'normal load',
+      profileHigh: 'high load',
+      profileNoData: 'no data',
+      profileCellTitle: '{at}: all replicas use {use}, {share} of what the normal count carries ({level})',
+      profileCellNone: '{at}: no data',
       profileHourTitle: '{hour}: {need} replicas (CPU {cpu}, memory {memory})',
       profileSummary: 'The normal hour asks for {normal} replicas, the busiest {peak}.',
       profilePeakHours: 'Above the normal count: {hours}.',
@@ -634,7 +644,7 @@ const local = {
         'A count that follows the hours (normal, and the busiest count in the busy hours) runs about {saved} fewer replica-hours than {peak} replicas all day. A scale-out needs lead time and a cooldown, so less is saved in practice.',
       profileFlat:
         'The hours ask for about the same count (or the busy hours save little): there is no room for a count that follows the hours, and the replicas of the whole day are set by the busiest resource, for example a memory that stays and a CPU that peaks.',
-      caliberAllName: 'Together (the largest of P90, P95, P99)',
+      caliberAllName: 'Together',
       caliberHelp:
         'Which percentile the recommendation is made of: P90, P95 and P99 are each worked out, and "together" is the one that needs the most (it is what the platform recommends, after the bounds of the module). The caliber chosen updates the adjustment column and the basis; every column above is the result of that caliber alone.',
       repCount: '{n} replicas',
@@ -1003,6 +1013,8 @@ const local = {
       colMemReqNow: 'Memory Requests now (one Pod)',
       colMemReqRec: 'Memory Requests recommended (one Pod)',
       colSchemeItem: 'Item',
+      repRequestsCaliberHelp:
+        'The CPU Requests and Memory Requests in this area are those of one Pod: the Requests each Pod has now, which the replicas are worked out against.',
       colRecShort: 'Recommended',
       schemeCpuReq: 'CPU Requests (one Pod)',
       schemeMemReq: 'Memory Requests (one Pod)',
