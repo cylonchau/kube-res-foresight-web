@@ -25,6 +25,8 @@ export interface ReplicaView {
   /** the replicas the cluster has now (0 = not known) and the number recommended (0 = no plan) */
   current: number;
   recommended: number;
+  /** the number the use asks for before the constraints of the module */
+  raw: number;
   direction: Api.Overprovision.ReplicaPlan['direction'];
   /** recommended - current, and its share of the current */
   delta: number;
@@ -52,6 +54,7 @@ export function replicaView(detail: Api.Overprovision.Detail | null | undefined)
   return {
     current,
     recommended: plan && plan.needed > 0 ? plan.needed : 0,
+    raw: plan?.raw ?? 0,
     direction: plan?.direction ?? 'unknown',
     delta: plan?.delta ?? 0,
     share: plan?.share ?? 0,
@@ -76,62 +79,69 @@ export const replicaDeltaParts = (view: ReplicaView) => ({
 
 const resourceOf = (r: Api.Overprovision.Result) => (r.resource === 'memory' ? 'memory' : 'cpu');
 
-/** one row of the table of the two ways: the replicas and the Requests of one Pod, now and recommended */
-export interface SchemeRow {
-  key: 'replicas' | 'config';
-  /** this is the way to take first */
-  first: boolean;
-  replicasNow: string;
-  replicasRec: string;
-  /** the Requests of one Pod ("-" when there is none) */
-  cpuNow: string;
-  cpuRec: string;
-  memNow: string;
-  memRec: string;
+/** what a way of the recommendation changes: the replicas, or the Requests of the CPU or of the memory of one Pod */
+export type SchemeItemKey = 'replicas' | 'cpu' | 'memory';
+
+export interface SchemeItem {
+  item: SchemeItemKey;
+  /** the figure now and the recommended one, as text ("-" when there is none) */
+  now: string;
+  rec: string;
+  /** the verdict on a Requests of the way of the Pod (null for the replicas and for a way that keeps the Pod), and the colour */
+  status: string | null;
   level: Level;
 }
 
+/** a way to the recommendation with the three things it is about: the replicas, the CPU Requests and the memory Requests of one Pod */
+export interface SchemeGroup {
+  key: 'replicas' | 'config';
+  /** this is the way to take first */
+  first: boolean;
+  items: SchemeItem[];
+}
+
 /**
- * The rows of the table of the two ways. The first keeps the Pod: its Requests are the ones now and the replicas are the plan's. The second keeps the replicas: its
- * Requests are the recommended ones of the platform.
+ * The two ways, each with its three items (the layout of the page, the mail and the question to the AI is one row for each item, so a table never has to be wider than
+ * the page). The first keeps the Pod: its Requests are the ones now and the replicas are the plan's. The second keeps the replicas: its Requests are the recommended ones.
  */
-export function schemeRows(detail: Api.Overprovision.Detail | null | undefined): SchemeRow[] {
+export function schemeGroups(detail: Api.Overprovision.Detail | null | undefined): SchemeGroup[] {
   const view = replicaView(detail);
   if (!detail || !view) return [];
   const win = detail.recommend ?? detail.windows[0];
-  const cpu = win?.cpu ?? null;
-  const mem = win?.memory ?? null;
+  const results = [win?.cpu ?? null, win?.memory ?? null];
   const count = (n: number) => (n > 0 ? String(n) : '-');
-  const nowOf = (r: Api.Overprovision.Result | null) => (r ? amountText(resourceOf(r), r.request) : '-');
-  const recOf = (r: Api.Overprovision.Result | null) => (r ? amountText(resourceOf(r), r.suggested) : '-');
-  const configLevel = (): Level => {
-    const levels = [cpu, mem].filter(Boolean).map(r => statusLevel((r as Api.Overprovision.Result).status));
-    if (levels.includes('bad')) return 'bad';
-    if (levels.includes('warn')) return 'warn';
-    return levels.includes('info') ? 'info' : 'ok';
-  };
+  const requests = (keepPod: boolean): SchemeItem[] =>
+    results
+      .filter((r): r is Api.Overprovision.Result => Boolean(r))
+      .map(r => ({
+        item: r.resource === 'memory' ? ('memory' as const) : ('cpu' as const),
+        now: amountText(resourceOf(r), r.request),
+        rec: amountText(resourceOf(r), keepPod ? r.request : r.suggested),
+        status: keepPod ? null : r.status,
+        level: keepPod ? ('ok' as Level) : statusLevel(r.status)
+      }));
   return [
     {
       key: 'replicas',
       first: view.primary === 'replicas',
-      replicasNow: count(view.current),
-      replicasRec: count(view.recommended),
-      cpuNow: nowOf(cpu),
-      cpuRec: nowOf(cpu),
-      memNow: nowOf(mem),
-      memRec: nowOf(mem),
-      level: directionLevel(view.direction)
+      items: [
+        {
+          item: 'replicas',
+          now: count(view.current),
+          rec: count(view.recommended),
+          status: null,
+          level: directionLevel(view.direction)
+        },
+        ...requests(true)
+      ]
     },
     {
       key: 'config',
       first: view.primary === 'config',
-      replicasNow: count(view.current),
-      replicasRec: count(view.current),
-      cpuNow: nowOf(cpu),
-      cpuRec: recOf(cpu),
-      memNow: nowOf(mem),
-      memRec: recOf(mem),
-      level: configLevel()
+      items: [
+        { item: 'replicas', now: count(view.current), rec: count(view.current), status: null, level: 'ok' },
+        ...requests(false)
+      ]
     }
   ];
 }

@@ -263,18 +263,22 @@ test('the words and the colours of the replicas', () => {
   assert.equal(replicaWords(null, true).level, 'info');
 });
 
-test('the mail has the tables of the platform: the two ways and the current against the recommended configuration', () => {
+test('the mail has the tables of the platform: one row for each item of each way, and the current against the recommended configuration', () => {
   const d = detail();
   d.windows[0].replica_plan = plan();
   const tables = mailTables(d, true);
   assert.equal(tables.length, 2);
   const [ways, configs] = tables;
-  assert.deepEqual(ways.columns.slice(0, 3), ['方案', '当前副本数', '推荐副本数']);
-  assert.equal(ways.rows.length, 2);
-  assert.equal(ways.rows[0][1].text, '4');
-  assert.equal(ways.rows[0][2].text, '3');
-  assert.equal(ways.rows[0][2].level, 'warn');
+  assert.deepEqual(ways.columns, ['方案', '项目', '当前', '推荐', '调整']);
+  assert.equal(ways.rows.length, 6);
+  assert.equal(ways.rows[0][1].text, '副本数');
+  assert.equal(ways.rows[0][2].text, '4');
+  assert.equal(ways.rows[0][3].text, '3');
+  assert.equal(ways.rows[0][3].level, 'warn');
   assert.ok(ways.rows[0][0].text.includes('优先'));
+  assert.equal(ways.rows[1][4].text, 'Pod 配置不变');
+  assert.equal(ways.rows[4][1].text, 'CPU Requests');
+  assert.equal(ways.rows[4][4].text, '超配 3 cores (75.0%)');
   assert.equal(configs.rows.length, 4);
   assert.deepEqual(
     configs.rows.map(row => row[0].text),
@@ -282,6 +286,17 @@ test('the mail has the tables of the platform: the two ways and the current agai
   );
   assert.equal(configs.rows[0][5].text, '超配 3 cores (75.0%)');
   assert.equal(configs.rows[0][5].level, 'warn');
+});
+
+test('the AI compares like with like: one figure to a cell, the ways named, the platform figures by way', () => {
+  const d = detail();
+  d.windows[0].replica_plan = plan();
+  const zh = buildAnalysisQuestion(d, '7d', 'zh-CN');
+  assert.ok(zh.includes('副本数（方案①）') && zh.includes('CPU Requests（方案②）'));
+  assert.ok(zh.includes('不要写“主方案”“备选”'));
+  assert.ok(zh.includes('方案①（Pod 配置不变）副本数：当前 4；平台推荐 3'));
+  assert.ok(zh.includes('方案②（副本数不变）CPU Requests：当前 单 Pod 4 cores'));
+  assert.ok(zh.length <= 3900);
 });
 
 test('the constraints of the module are given to the AI, and where the replicas come from', () => {
