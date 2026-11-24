@@ -769,13 +769,72 @@ const local = {
       adjLimited: 'Limited (OOM or throttling), not lowered',
       adjLimitsLower: 'Could be lowered by {amount}',
       adjLimitsRaise: 'Needs raising by {amount}',
+      schemeTitle: 'Replicas and the two ways to the recommendation',
+      schemeHelp:
+        'The same use can be brought to its range in two ways, worked out and listed apart: 1. change the replicas, the Requests of a Pod stays: the sum of the use of all the replicas is divided by the Requests of a Pod (P90, P95 and P99 each by its own target share), the largest number is taken, and it is held by the least replicas, the share one step may take away, and no replica is taken away under OOM or throttling; 2. change the Pod, the replicas stay: the Requests and Limits of one Pod are recommended (the table "Requests / Limits: now and recommended" below). The replicas come first: they change no Pod configuration and the load is shared again by itself; the Pod configuration is what is recommended only when the replicas cannot move (they are at the least, the number needed is the one now, or OOM / throttling keeps them). The first way assumes the Pods share the load evenly and the use of a Pod goes the other way with the replicas; a part every Pod pays for (the heap of a JVM) does not, so read it with the JVM data.',
+      colScheme: 'Way',
+      colReplicasNow: 'Replicas now',
+      colReplicasRec: 'Replicas recommended',
+      colCpuReqNow: 'CPU Requests now (one Pod)',
+      colCpuReqRec: 'CPU Requests recommended (one Pod)',
+      colMemReqNow: 'Memory Requests now (one Pod)',
+      colMemReqRec: 'Memory Requests recommended (one Pod)',
+      schemeByReplicas: '1. Change the replicas (the Pod stays)',
+      schemeByConfig: '2. Change the Pod (the replicas stay)',
+      schemeFirst: 'first',
+      schemeLegend:
+        'Colours: green = reasonable, nothing to change; orange = more than needed (fewer replicas, a lower Requests); red = less than needed (more replicas, a higher Requests); blue = information only (OOM, throttling or too little data).',
+      repOut: 'add {n} replicas ({share})',
+      repIn: 'remove {n} replicas ({share})',
+      repSame: 'The replicas are right, no change',
+      repUnknown: 'The replicas now are not known: only the number needed is given, not by how many',
+      repNoPlan: 'The use of all the replicas together is not known, so the replicas cannot be worked out',
+      schemeConfigFirst: 'The replicas cannot move, so change the Pod: ',
+      schemeFormula: 'Recommended replicas from: {formula}',
+      fixedReplicasNote:
+        'The table below is the detail of way 2: the replicas stay at {n} and only the Requests / Limits of one Pod change.',
+      recReplicas: 'Recommended replicas',
+      recReplicasHelp:
+        'The replicas needed when every Pod keeps the Requests it has now, from the sum of the use of all the replicas over the recommendation period. It is worked out apart from the replicas now and never changes them.',
+      replicasHelp:
+        'The replicas the cluster has now, from the replicas metric of the module (Prometheus reading what Kubernetes has), the newest sample. A forecast, a recommendation or an old result never stands in for it.',
+      replicasFromProm: 'measured by Prometheus · {time}',
+      replicasRange: 'in the recommendation period: fewest {min}, most {max}',
+      replicasStored: 'Prometheus gave no replicas; this is the newest measured sample the platform stored ({time})',
+      replicasNone:
+        'The replicas now were not found, and no forecast or recommendation stands in for them: give the module a replicas metric, or check its query.',
+      reason_replicas_no_current:
+        'The replicas now are not known: only the number needed is given, not whether it is more or fewer.',
+      reason_replicas_no_total:
+        'The use of all the replicas together is not known, so the replicas cannot be worked out.',
+      reason_replicas_floor: 'Held to the least replicas (a system parameter).',
+      reason_replicas_step:
+        'One step takes away only a share of the replicas now (a system parameter): this goes that far, the next analysis goes on.',
+      reason_replicas_limited:
+        'The CPU was throttled or the memory was OOM-killed: the use understates the need, so no replica is taken away.',
+      reason_replicas_limit:
+        'The guard of the Limits asks for more replicas: with fewer, the P99 of a Pod would come near its Limits.',
+      adjHelpTitle: 'How this figure is worked out',
+      adjHelpMeaning_over:
+        'Over-provisioned: the Requests now is more than the use needs, and the difference can be given back.',
+      adjHelpMeaning_under: 'Under-provisioned: the Requests now is less than the use needs, and has to be raised.',
+      adjHelpMeaning_ok:
+        'Reasonable: the use is in its range; when the use supports a lower figure, the amount that could be given back is written.',
+      adjHelpMeaning_limited:
+        'Limited: the CPU was throttled or the memory was OOM-killed, so the use understates the need and nothing is lowered.',
+      adjHelpMeaning_limits: 'A Limits has only the difference from the recommended Limits, no status of its own.',
+      adjHelpFormula:
+        "Calculation: difference = {'|'}now - recommended{'|'} = {'|'}{now} - {rec}{'|'} = {gap}; share = difference / now = {share}.",
+      adjHelpUnits:
+        'Units: CPU in cores (1 core = 1000 mCPU), memory in binary units (1 GiB = 1024 MiB); both are the amount of one Pod, not of all the replicas together.',
+      adjHelpSource:
+        'Data: measured by Prometheus; the recommendation period is {period} and does not follow the chart window; the figures now are not rounded.',
+      adjHelpRecipe: 'Recommended: {formula}',
       jvmHeapChart: 'JVM Heap',
       jvmNonHeapChart: 'JVM Non-Heap',
       reason_burst_tail:
         'The steady use is low but the P99 is above its reasonable range: Requests is held for a peak that comes now and then, so it is not called over-provisioned and not lowered.',
       displayOnly: 'display only',
-      aiRecMismatch:
-        'The recommended values of the answer are not the ones the platform worked out (missing: {list}): the recommendation has to use the platform figures as they are. Press "Analyse again".',
       per_pod: 'one Pod',
       per_total: 'all replicas',
       clusterName: 'Cluster (data source)',
@@ -979,9 +1038,9 @@ const local = {
       aiExpand: 'Enlarge',
       aiCollapse: 'Collapse',
       aiEmpty:
-        'Press "Analyse": the AI writes the table of the current and the recommended configuration from the Prometheus figures on this page. Nothing is analysed until you press it, and no configuration is changed.',
+        'Press the button at the lower right: the AI analyses the figures measured by Prometheus on its own and writes its own recommended configuration and replicas, with how they differ from the platform recommendation. No configuration is changed.',
       aiNoComparison:
-        'This answer has no four-row table of the current and the recommended configuration (the Requests and Limits of CPU and memory): press "Analyse again".',
+        'This answer has no table of the current and the AI recommended configuration (the replicas, and the Requests and Limits of CPU and memory): press "Analyse again".',
       aiPickModule: 'Pick an instance first',
       aiNoFigures: 'The data of the instance is still loading',
       loadingDetail: 'Reading the data of this module from Prometheus, one moment…',

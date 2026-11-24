@@ -107,6 +107,34 @@ declare namespace Api {
       coverage_high: number;
       coverage_mid: number;
       peak_near_limit: number;
+      min_replicas?: number;
+      max_scale_in?: number;
+    }
+
+    /** what one resource asks of the number of replicas when the Pod keeps the Requests it has */
+    interface ReplicaNeed {
+      resource: string;
+      needed: number;
+      formula: string;
+    }
+
+    /** the recommendation of the replicas for the Pod the module has now: the other way to the same use (the Pod spec stays, the replicas move) */
+    interface ReplicaPlan {
+      /** the replicas the cluster has now (0 = not known) */
+      current: number;
+      /** the recommended number (0 = no plan), and the number the use asks for before the floor, the step and the guards */
+      needed: number;
+      raw: number;
+      direction: 'out' | 'in' | 'same' | 'unknown';
+      /** needed - current (negative: fewer), and its share of the replicas now */
+      delta: number;
+      share: number;
+      binding: string;
+      resources: ReplicaNeed[];
+      /** what to change first: the replicas, the Pod spec (when the replicas cannot do it) or nothing */
+      primary: 'replicas' | 'config' | 'none';
+      reasons: string[];
+      formula: string;
     }
 
     interface Window {
@@ -114,6 +142,7 @@ declare namespace Api {
       window_minutes: number;
       cpu: Result | null;
       memory: Result | null;
+      replica_plan?: ReplicaPlan | null;
     }
 
     interface Detail {
@@ -123,6 +152,12 @@ declare namespace Api {
       workload_kind: string;
       workload: string;
       replicas: number;
+      /** where the replicas now come from: the replicas metric read from Prometheus, or the newest sample stored of it; empty when there is none */
+      replicas_from?: 'prometheus' | 'stored' | '';
+      /** when they were measured (unix seconds), and the fewest and the most of the recommendation period */
+      replicas_at?: number;
+      replicas_min?: number;
+      replicas_max?: number;
       at: string;
       windows: Window[];
       /** the analysis over the recommendation period (a system parameter, apart from the window): the verdict and the recommended Requests and Limits are its */

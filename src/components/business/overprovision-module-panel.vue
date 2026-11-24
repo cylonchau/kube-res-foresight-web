@@ -6,9 +6,11 @@ import OverprovisionCardWall, { type WallCard } from '@/components/business/over
 import OverprovisionLineChart, { type ChartSpec } from '@/components/business/overprovision-line-chart.vue';
 import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
 import HelpLabel from '@/components/common/help-label.vue';
+import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { allText, amountText, podsOf, totalText } from '@/utils/amount';
 import { formatDateTime } from '@/utils/date';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
+import { type Level, directionLevel, replicaDeltaParts, replicaView, schemeRows } from '@/utils/overprovision-replicas';
 import { adjustmentOf, adjustmentText, shareText } from '@/utils/overprovision-verdict';
 
 defineOptions({ name: 'OverprovisionModulePanel' });
@@ -101,6 +103,33 @@ function rateText(rate: number | null) {
   return rate > 2 ? '> 200%' : formatPercent(rate, 0);
 }
 
+// ---- the replicas: the ones the cluster has now, and the plan for them (the Pod keeps its Requests, the replicas move)
+
+const repView = computed(() => replicaView(props.detail));
+/** one colour for one meaning, in the cards, the tags and the table: see utils/overprovision-replicas */
+const LEVEL_TAG: Record<Level, 'success' | 'warning' | 'error' | 'info'> = {
+  ok: 'success',
+  warn: 'warning',
+  bad: 'error',
+  info: 'info'
+};
+const LEVEL_CARD: Record<Level, 'good' | 'warn' | 'danger' | 'info'> = {
+  ok: 'good',
+  warn: 'warn',
+  bad: 'danger',
+  info: 'info'
+};
+/** what the plan says of the replicas, in words, and its colour */
+const replicaAdjust = computed<{ text: string; level: Level }>(() => {
+  const view = repView.value;
+  if (!view || view.recommended <= 0) return { text: p('repNoPlan'), level: 'info' };
+  if (view.direction === 'unknown' || view.current <= 0) return { text: p('repUnknown'), level: 'info' };
+  const level = directionLevel(view.direction);
+  if (view.direction === 'out') return { text: p('repOut', replicaDeltaParts(view)), level };
+  if (view.direction === 'in') return { text: p('repIn', replicaDeltaParts(view)), level };
+  return { text: p('repSame'), level };
+});
+
 const wall = computed<WallCard[]>(() => {
   const d = props.detail;
   if (!d) return [];
@@ -124,12 +153,33 @@ const wall = computed<WallCard[]>(() => {
       level: 'danger'
     });
   }
+  // the replicas now are the cluster's (Prometheus reads what Kubernetes has): where and when they were measured, and the fewest and the most of the period are written
+  // beside the number, so a figure that differs from another page is explained by the figure itself
+  const view = repView.value;
+  const at = view?.at ? formatDateTime(view.at * 1000) : '';
+  const subLines: string[] = [];
+  if (d.replicas && view?.from === 'stored') subLines.push(p('replicasStored', { time: at }));
+  else if (d.replicas) subLines.push(p('replicasFromProm', { time: at }));
+  else subLines.push(p('replicasNone'));
+  if (d.replicas && view && view.max > 0 && view.min > 0)
+    subLines.push(p('replicasRange', { min: view.min, max: view.max }));
   cards.push({
     key: 'replicas',
     label: p('configReplicas'),
+    help: p('replicasHelp'),
     value: d.replicas ? String(d.replicas) : '-',
-    level: 'neutral'
+    sub: subLines.join(' · '),
+    level: !d.replicas ? 'neutral' : view?.from === 'stored' ? 'warn' : 'neutral'
   });
+  if (view && view.recommended > 0)
+    cards.push({
+      key: 'recReplicas',
+      label: p('recReplicas'),
+      help: p('recReplicasHelp'),
+      value: String(view.recommended),
+      sub: replicaAdjust.value.text,
+      level: LEVEL_CARD[replicaAdjust.value.level]
+    });
   for (const { resource, result: r } of results.value) {
     const name = resName(resource);
     const used = props.basis === 'total' && r.total ? r.total.p95 : r.usage.p95;
@@ -243,8 +293,8 @@ function cellAdjust(row: RecRow): AdjustCell {
   if (a.direction === 'same') return { text: p('adjSame'), type: 'success' };
   if (row.status === null)
     return a.direction === 'over'
-      ? { text: p('adjLimitsLower', { amount }), type: 'default' }
-      : { text: p('adjLimitsRaise', { amount }), type: 'default' };
+      ? { text: p('adjLimitsLower', { amount }), type: 'warning' }
+      : { text: p('adjLimitsRaise', { amount }), type: 'error' };
   if (row.status === 'ok')
     return a.direction === 'over'
       ? { text: p('adjOkCouldGive', { amount }), type: 'success' }
@@ -277,6 +327,51 @@ const shareLines = computed(() => {
       };
     });
 });
+
+/**
+ * The "?" beside an adjustment: what the word means, how the figure is worked out with the numbers put into it, the units and where the data comes from. The
+ * figure is the one of the row, so "over-provisioned 300 mCPU" is explained by its own 4 cores, its 3.7 cores and the use that gave them.
+ */
+function adjustHelp(row: RecRow): string[] {
+  const result = rec.value?.[row.resource] ?? null;
+  const a = adjustmentOf(row.current, row.recommended);
+  const meaning =
+    row.status === null
+      ? 'limits'
+      : row.status === 'limited'
+        ? 'limited'
+        : row.status === 'unknown'
+          ? 'ok'
+          : row.status;
+  const lines = [p(`adjHelpMeaning_${meaning}`)];
+  if (a && a.direction !== 'same')
+    lines.push(
+      p('adjHelpFormula', {
+        now: cellNow(row),
+        rec: cellRec(row),
+        gap: amountText(row.resource, a.amount),
+        share: formatPercent(a.share, 1)
+      })
+    );
+  const share = shareLines.value.find(line => line.key === row.resource);
+  if (share) lines.push(share.text);
+  if (result?.formula) lines.push(p('adjHelpRecipe', { formula: result.formula }));
+  lines.push(p('adjHelpUnits'), p('adjHelpSource', { period: recLabel.value }));
+  return lines;
+}
+
+/** the table of the two ways: the replicas change and the Pod stays, or the Pod changes and the replicas stay */
+const scheme = computed(() => {
+  const rows = schemeRows(props.detail);
+  const requestRows = recRows.value.filter(row => row.key.endsWith('-req'));
+  const byConfig = requestRows.map(row => `${resName(row.resource)} ${cellAdjust(row).text}`).join('；');
+  return rows.map(row => ({
+    ...row,
+    adjust: row.key === 'replicas' ? replicaAdjust.value.text : byConfig || '-',
+    level: row.key === 'replicas' ? replicaAdjust.value.level : (row.level as Level)
+  }));
+});
+const schemeReasons = computed(() => (repView.value?.reasons ?? []).map(code => p(`reason_${code}`)));
 
 // ---- the quantiles, with the samples they are made of
 
@@ -521,9 +616,56 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 
       <div v-if="!results.length" class="text-13px opacity-70">{{ p('noData') }}</div>
 
+      <!-- the replicas now and recommended, and the two ways to the recommendation: the replicas change (the Pod stays) or the Pod changes (the replicas stay) -->
+      <div v-if="scheme.length" class="flex-col gap-4px">
+        <HelpLabel :label="p('schemeTitle')" :help="p('schemeHelp')" class="text-13px font-medium" />
+        <div class="table-scroll">
+          <NTable size="small" :bordered="true" :single-line="false" class="rec text-12px">
+            <thead>
+              <tr>
+                <th>{{ p('colScheme') }}</th>
+                <th>{{ p('colReplicasNow') }}</th>
+                <th class="key">{{ p('colReplicasRec') }}</th>
+                <th>{{ p('colCpuReqNow') }}</th>
+                <th class="key">{{ p('colCpuReqRec') }}</th>
+                <th>{{ p('colMemReqNow') }}</th>
+                <th class="key">{{ p('colMemReqRec') }}</th>
+                <th>{{ p('colAdjust') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in scheme" :key="row.key">
+                <td class="font-medium">
+                  {{ row.key === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}
+                  <NTag v-if="row.first" size="tiny" :bordered="false" type="primary" class="ml-4px">
+                    {{ p('schemeFirst') }}
+                  </NTag>
+                </td>
+                <td>{{ row.replicasNow }}</td>
+                <td class="key">{{ row.replicasRec }}</td>
+                <td>{{ row.cpuNow }}</td>
+                <td class="key">{{ row.cpuRec }}</td>
+                <td>{{ row.memNow }}</td>
+                <td class="key">{{ row.memRec }}</td>
+                <td>
+                  <NTag size="small" :bordered="false" :type="LEVEL_TAG[row.level]">{{ row.adjust }}</NTag>
+                </td>
+              </tr>
+            </tbody>
+          </NTable>
+        </div>
+        <div v-if="repView?.primary === 'config'" class="text-12px opacity-75">{{ p('schemeConfigFirst') }}</div>
+        <div v-for="reason in schemeReasons" :key="reason" class="text-12px opacity-75">{{ reason }}</div>
+        <div v-if="repView?.formula" class="break-all text-12px opacity-60">
+          {{ p('schemeFormula', { formula: repView.formula }) }}
+        </div>
+        <div class="text-12px opacity-60">{{ p('schemeLegend') }}</div>
+      </div>
+
       <!-- Requests and Limits: now, and what the use supports for one Pod and for all the replicas -->
       <div v-if="recRows.length" class="flex-col gap-4px">
         <HelpLabel :label="p('recTitle')" :help="p('recHelp')" class="text-13px font-medium" />
+        <div v-if="replicas > 0" class="text-12px opacity-60">{{ p('fixedReplicasNote', { n: replicas }) }}</div>
         <div class="table-scroll">
           <NTable size="small" :bordered="true" :single-line="false" class="rec text-12px">
             <thead>
@@ -558,7 +700,17 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                     <span :class="{ 'opacity-60': cellRecTotal(row) === '-' }">{{ cellRecTotal(row) }}</span>
                   </td>
                   <td :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
-                    <NTag size="small" :bordered="false" :type="cellAdjust(row).type">{{ cellAdjust(row).text }}</NTag>
+                    <span class="inline-flex items-center gap-4px">
+                      <NTag size="small" :bordered="false" :type="cellAdjust(row).type">
+                        {{ cellAdjust(row).text }}
+                      </NTag>
+                      <IconTooltip placement="top">
+                        <div class="help-pop">
+                          <div class="font-medium">{{ p('adjHelpTitle') }}</div>
+                          <div v-for="(line, index) in adjustHelp(row)" :key="index">{{ line }}</div>
+                        </div>
+                      </IconTooltip>
+                    </span>
                   </td>
                 </template>
               </tr>
@@ -705,6 +857,16 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 .rec :deep(th.key),
 .rec :deep(td.key) {
   font-weight: 600;
+}
+
+.help-pop {
+  max-width: 380px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.help-pop > * + * {
+  margin-top: 4px;
 }
 
 /* a table wider than the page scrolls in its own box, it does not push the page sideways */

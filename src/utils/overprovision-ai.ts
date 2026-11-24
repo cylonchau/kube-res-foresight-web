@@ -1,10 +1,21 @@
 import { allText, amountText, podsOf, totalText } from './amount.ts';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from './format.ts';
+import {
+  type Level,
+  type ReplicaView,
+  directionLevel,
+  replicaDeltaParts,
+  replicaView,
+  schemeRows,
+  statusLevel
+} from './overprovision-replicas.ts';
 import { adjustmentOf, adjustmentText } from './overprovision-verdict.ts';
 
 /**
- * The question of the AI analysis of a module: the figures of the analysis the page shows, written out, so the answer rests on them and
- * on nothing the model makes up. It asks for an analysis only; the assistant has no tool that changes anything.
+ * The question of the AI analysis of a module. It gives the assistant what was measured (the use of one Pod and of all the replicas, the Requests and Limits and the replicas
+ * the cluster has now, the throttling, the OOM kills, the JVM) and asks for its own conclusion: its own recommended configuration and replicas, the way it got them, and where it
+ * differs from the platform and why. The recommendation of the platform is given as a figure to compare with, not as an answer to write out again. The question asks for an
+ * analysis only; the assistant has no tool that changes anything.
  */
 export type AiLang = 'zh-CN' | 'en-US';
 
@@ -30,62 +41,56 @@ function requestText(r: Api.Overprovision.Result, zh: boolean) {
       : 'no data in Prometheus';
 }
 
-/** one row of the comparison: the figure now and the one the platform worked out, for one Pod and for all the replicas, as the table of the page writes them */
+/** one row of the platform's own comparison: the figure now and the one the platform worked out, for one Pod and for all the replicas, as the table of the page writes them */
 export interface RecommendedFigure {
   label: string;
   /** the figure now of one Pod and of all the replicas; "-" when Prometheus gave none */
   nowPod: string;
   nowTotal: string;
-  /** what the use supports, for one Pod and for all the replicas; "-" when no recommendation could be made */
+  /** what the platform recommends, for one Pod and for all the replicas; "-" when no recommendation could be made */
   pod: string;
   total: string;
-  /** how the figure now stands against the recommendation: over-provisioned, under-provisioned or reasonable, with the amount of one Pod and its share; "-" when it cannot be said */
+  /** how the figure now stands against the platform's recommendation: over-provisioned, under-provisioned or reasonable, with the amount of one Pod and its share; "-" when it cannot be said */
   adjust: string;
+  /** the colour of that: one colour for one meaning (see utils/overprovision-replicas) */
+  level: Level;
 }
 
 /** the analysis the verdict and the recommendation are of: the one of the recommendation period, or (an older answer of the platform) the one of the window */
 export const recommendationOf = (detail: Api.Overprovision.Detail) => detail.recommend ?? detail.windows[0];
 
-/** the words of how a figure stands against the recommended one */
+/** the words of how a figure stands against the recommended one, and its colour */
 function adjustWords(
   resource: 'cpu' | 'memory',
   now: number,
   recommended: number,
   status: string | null,
   zh: boolean
-): string {
+): { text: string; level: Level } {
   const a = adjustmentOf(now, recommended);
-  if (!a) return '-';
+  if (!a) return { text: '-', level: 'info' };
   const delta = adjustmentText(resource, a);
-  if (status === 'limited') return zh ? '受限（OOM 或限流），不下调' : 'limited (OOM or throttling), not lowered';
-  if (a.direction === 'same') return zh ? '合理，无需调整' : 'reasonable, no change';
+  if (status === 'limited')
+    return { text: zh ? '受限（OOM 或限流），不下调' : 'limited (OOM or throttling), not lowered', level: 'info' };
+  if (a.direction === 'same') return { text: zh ? '合理，无需调整' : 'reasonable, no change', level: 'ok' };
   if (status === null)
     // a Limits has no verdict of its own: it is told how far it is from the recommended one
     return a.direction === 'over'
-      ? zh
-        ? `可降低 ${delta}`
-        : `could be lowered by ${delta}`
-      : zh
-        ? `需提高 ${delta}`
-        : `needs raising by ${delta}`;
+      ? { text: zh ? `可降低 ${delta}` : `could be lowered by ${delta}`, level: 'warn' }
+      : { text: zh ? `需提高 ${delta}` : `needs raising by ${delta}`, level: 'bad' };
   if (status === 'ok')
     return a.direction === 'over'
-      ? zh
-        ? `合理，可优化 ${delta}`
-        : `reasonable, could give back ${delta}`
-      : zh
-        ? `合理，推荐高出当前 ${delta}`
-        : `reasonable, recommended is above now by ${delta}`;
+      ? { text: zh ? `合理，可优化 ${delta}` : `reasonable, could give back ${delta}`, level: 'ok' }
+      : {
+          text: zh ? `合理，推荐高出当前 ${delta}` : `reasonable, recommended is above now by ${delta}`,
+          level: 'ok'
+        };
   return a.direction === 'over'
-    ? zh
-      ? `超配 ${delta}`
-      : `over-provisioned by ${delta}`
-    : zh
-      ? `欠配 ${delta}`
-      : `under-provisioned by ${delta}`;
+    ? { text: zh ? `超配 ${delta}` : `over-provisioned by ${delta}`, level: statusLevel('over') }
+    : { text: zh ? `欠配 ${delta}` : `under-provisioned by ${delta}`, level: statusLevel('under') };
 }
 
-/** the four rows of the comparison, as the table of the page has them: the recommendation is the platform's (rounded up to a figure a spec can say), and its total is that figure times the replicas. */
+/** the four rows of the platform's comparison, as the table of the page has them: the recommendation is the platform's (rounded up to a figure a spec can say), and its total is that figure times the Pods the total now is of. */
 export function recommendedFigures(detail: Api.Overprovision.Detail, zh = true): RecommendedFigure[] {
   const win = recommendationOf(detail);
   const replicas = Math.max(detail.replicas ?? 0, 0);
@@ -100,6 +105,7 @@ export function recommendedFigures(detail: Api.Overprovision.Detail, zh = true):
       [`${name} Requests`, r.request, r.request_total, r.suggested, r.status],
       [`${name} Limits`, r.limit, r.limit_total, r.suggested_limit, null]
     ] as const) {
+      const adjust = adjustWords(resource, now, recommended, status, zh);
       rows.push({
         label,
         nowPod: amountText(resource, now),
@@ -107,19 +113,47 @@ export function recommendedFigures(detail: Api.Overprovision.Detail, zh = true):
         pod: amountText(resource, recommended),
         // the total of the recommendation is of the Pods the total now is of, as the table of the page has it
         total: totalText(resource, recommended, podsOf(now, nowTotal, replicas)),
-        adjust: adjustWords(resource, now, recommended, status, zh)
+        adjust: adjust.text,
+        level: adjust.level
       });
     }
   }
   return rows;
 }
 
-/** the labels of the rows whose recommended figures are not in the answer: the answer has to write the figures of the platform as they are */
-export function missingRecommendations(answer: string, detail: Api.Overprovision.Detail): string[] {
-  const text = answer.replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
-  return recommendedFigures(detail)
-    .filter(row => (row.pod !== '-' && !text.includes(row.pod)) || (row.total !== '-' && !text.includes(row.total)))
-    .map(row => row.label);
+/** the words of what the replica plan of the platform says, and its colour */
+export function replicaWords(view: ReplicaView | null, zh: boolean): { text: string; level: Level } {
+  if (!view || view.recommended <= 0)
+    return {
+      text: zh ? '无推荐（没有全副本使用量）' : 'none (the use of all the replicas is not known)',
+      level: 'info'
+    };
+  if (view.direction === 'unknown' || view.current <= 0)
+    return { text: zh ? '没有当前副本数，不判断增减' : 'the replicas now are not known', level: 'info' };
+  const level = directionLevel(view.direction);
+  const { n, share } = replicaDeltaParts(view);
+  if (view.direction === 'out')
+    return { text: zh ? `增加 ${n} 个副本（${share}）` : `add ${n} replicas (${share})`, level };
+  if (view.direction === 'in')
+    return { text: zh ? `减少 ${n} 个副本（${share}）` : `remove ${n} replicas (${share})`, level };
+  return { text: zh ? '副本数合适，无需调整' : 'replicas are right, no change', level };
+}
+
+/** what the question tells the model of the replicas the cluster has now */
+function replicaFacts(view: ReplicaView | null, zh: boolean): string {
+  if (!view || view.current <= 0)
+    return zh
+      ? '当前副本数：Prometheus 无数据（不要用预测或推荐值代替）'
+      : 'replicas now: no data in Prometheus (do not stand in a forecast or a recommendation)';
+  const range =
+    view.max > 0
+      ? zh
+        ? `，推荐周期内最少 ${view.min}、最多 ${view.max}`
+        : `, fewest ${view.min} and most ${view.max} in the period`
+      : '';
+  return zh
+    ? `当前副本数 ${view.current}（来自 Kubernetes 的实测，${view.from === 'stored' ? '平台保存的最近采样' : 'Prometheus'}）${range}`
+    : `replicas now ${view.current} (measured from Kubernetes, ${view.from === 'stored' ? 'the newest stored sample' : 'by Prometheus'})${range}`;
 }
 
 function resourceLines(r: Api.Overprovision.Result, zh: boolean) {
@@ -128,30 +162,27 @@ function resourceLines(r: Api.Overprovision.Result, zh: boolean) {
   const a = (v: number) => amount(r.resource, v);
   const lines = [
     zh
-      ? `${name}：Requests ${requestText(r, zh)}，Limits ${limitText(r, zh)}；单 Pod 使用 P50 ${a(u.p50)}、P90 ${a(u.p90)}、P95 ${a(u.p95)}、P99 ${a(u.p99)}、最大 ${a(u.max)}`
-      : `${name}: Requests ${requestText(r, zh)}, Limits ${limitText(r, zh)}; use of one Pod P50 ${a(u.p50)}, P90 ${a(u.p90)}, P95 ${a(u.p95)}, P99 ${a(u.p99)}, max ${a(u.max)}`
+      ? `${name}：Requests ${requestText(r, zh)}，Limits ${limitText(r, zh)}（单 Pod）；单 Pod 使用 P50 ${a(u.p50)}、P90 ${a(u.p90)}、P95 ${a(u.p95)}、P99 ${a(u.p99)}、最大 ${a(u.max)}`
+      : `${name}: Requests ${requestText(r, zh)}, Limits ${limitText(r, zh)} (one Pod); use of one Pod P50 ${a(u.p50)}, P90 ${a(u.p90)}, P95 ${a(u.p95)}, P99 ${a(u.p99)}, max ${a(u.max)}`
   ];
   if (r.total)
     lines.push(
       zh
-        ? `  全副本总和使用 P90 ${a(r.total.p90)}、P95 ${a(r.total.p95)}、P99 ${a(r.total.p99)}`
-        : `  all replicas together: P90 ${a(r.total.p90)}, P95 ${a(r.total.p95)}, P99 ${a(r.total.p99)}`
+        ? `  全副本总和使用 P50 ${a(r.total.p50)}、P90 ${a(r.total.p90)}、P95 ${a(r.total.p95)}、P99 ${a(r.total.p99)}、最大 ${a(r.total.max)}`
+        : `  all replicas together: P50 ${a(r.total.p50)}, P90 ${a(r.total.p90)}, P95 ${a(r.total.p95)}, P99 ${a(r.total.p99)}, max ${a(r.total.max)}`
     );
   const sh = r.shares;
   if (sh)
     lines.push(
       zh
-        ? `  使用量占 Requests 的比例：P90 ${formatPercent(sh.p90, 1)}、P95 ${formatPercent(sh.p95, 1)}、P99 ${formatPercent(sh.p99, 1)}`
+        ? `  使用量占 Requests：P90 ${formatPercent(sh.p90, 1)}、P95 ${formatPercent(sh.p95, 1)}、P99 ${formatPercent(sh.p99, 1)}`
         : `  use as a share of the Requests: P90 ${formatPercent(sh.p90, 1)}, P95 ${formatPercent(sh.p95, 1)}, P99 ${formatPercent(sh.p99, 1)}`
     );
-  const ratio = r.suggested > 0 && r.request > 0 ? formatPercent(r.ratio, 1) : '-';
   lines.push(
     zh
-      ? `  平台的判定：${r.status}（${r.grade || '-'}），超配比例（负数是欠配）${ratio}，可信度 ${r.confidence}，风险 ${r.risk}，数据覆盖 ${formatPercent(r.coverage, 0)}；推荐值见上面“平台推荐值”`
-      : `  verdict of the platform: ${r.status} (${r.grade || '-'}), over-provision (negative is under) ${ratio}, confidence ${r.confidence}, risk ${r.risk}, data coverage ${formatPercent(r.coverage, 0)}; the recommended figures are in "platform recommendation" above`
+      ? `  数据覆盖 ${formatPercent(r.coverage, 0)}，采样 ${r.usage.points} 个`
+      : `  data coverage ${formatPercent(r.coverage, 0)}, ${r.usage.points} samples`
   );
-  if (r.formula) lines.push(`  ${zh ? '算法' : 'formula'}: ${r.formula}`);
-  if (r.reasons.length) lines.push(`  ${zh ? '依据代码' : 'reason codes'}: ${r.reasons.join(', ')}`);
   if (r.resource === 'cpu' && r.throttle > 0)
     lines.push(`  ${zh ? '被限流的时间占比' : 'share of time throttled'}: ${formatPercent(r.throttle, 1)}`);
   if (r.resource === 'memory' && r.oom_kills > 0)
@@ -162,39 +193,37 @@ function resourceLines(r: Api.Overprovision.Result, zh: boolean) {
 export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLabel: string, lang: AiLang): string {
   const zh = lang === 'zh-CN';
   const win = recommendationOf(detail);
+  const view = replicaView(detail);
   const who = `${detail.name} (${detail.namespace}/${detail.workload}, ${detail.replicas || '?'})`;
+  const bands = detail.params
+    ? `P90 ${formatPercent(detail.params.p90.target, 0)}、P95 ${formatPercent(detail.params.p95.target, 0)}、P99 ${formatPercent(detail.params.p99.target, 0)}`
+    : '';
   const head = zh
     ? [
-        `分析模块 ${who} 在最近 ${windowLabel} 的资源使用情况（括号里最后一项是副本数；这是平台的推荐分析周期，不随图表窗口变化）。数据全部来自 Prometheus 的实测，Requests 和 Limits 也是 Prometheus 查到的当前配置。`,
-        '输出要求：',
-        '1. 只输出 HTML，不要 Markdown、不要代码围栏、不要前后说明。',
-        '2. 第一张表必须是“当前配置与 AI 推荐配置对比”，固定四行：CPU Requests、CPU Limits、Memory Requests、Memory Limits；七列：资源项、当前值（单 Pod）、当前值（全副本总和）、推荐值（单 Pod）、推荐值（全副本总和）、调整（超配、欠配或合理，带具体数量和比例）、依据（一句话，引用数据里的数字，例如 P95 使用量占 Requests 的比例）。当前值、推荐值和调整都逐字抄“平台推荐值”一节的“当前”“推荐”“调整”，不得自己重新计算、换算或改动；没有当前值写“Prometheus 无数据”，那里写“-”的推荐列写“无推荐”。Requests 是调度时预留（Reserved）的量，Limits 是上限。不能只写“合理”：有数量和比例就写出来。',
-        '3. 其后用表格写“使用情况”（P50/P90/P95/P99/最大、利用率）和“判定”（状态、风险）；限流、OOM、JVM 只写有数据的项。',
-        '4. 推荐值是平台按分位数算好的（P90、P95、P99 各自要求的 Requests 取最大者；Limits 为 P99 加余量且不低于推荐的 Requests；有 OOM 或限流时只升不降；偶发的最大值不参与）：你只写依据，不改数值。',
-        '5. 状态和风险的单元格加 class：lv-bad（有风险或欠配）、lv-warn（超配或需要关注）、lv-ok（正常）、lv-info（仅信息），例如 <td class="lv-warn">超配</td>。',
-        '6. 直接写当前情况和优化后的数值；不写“下一步先核对”之类的引导语，不写“可能、大概、视情况”之类含糊的话，不写额外推荐，不写数据以外的内容。这是只读分析，不要执行任何改动。'
+        `独立分析模块 ${who} 最近 ${windowLabel} 的资源使用，给出你自己的推荐配置和推荐副本数（括号里最后一项是当前副本数；周期是平台的推荐分析周期，不随图表窗口变）。数据全部来自 Prometheus 实测。`,
+        '要求：',
+        '1. 只输出 HTML，不要 Markdown、代码围栏、前后说明。这是只读分析，不执行任何改动。',
+        '2. 独立判断：根据“实测数据”（使用量分位数、峰值、OOM、限流、JVM、副本变化）自己得出结论并写出算式。“平台推荐”只用来对照，不得照抄或原样转写；你的数值可以和它不同，但要说明原因。',
+        `3. 两种方案都给：①Pod 配置不变，需要几个副本（全副本使用量总和 ÷ 每个 Pod 的 Requests ÷ 目标比例）；②副本数不变，每个 Pod 的 Requests 和 Limits 应是多少。优先推荐调整副本数，副本数调不动时才改 Pod 配置并说明为什么。${bands ? `目标比例（使用量占 Requests）可参考 ${bands}，可依据数据另作判断。` : ''}`,
+        '4. 安全边界，避免不合理缩容：副本不低于 2，一次最多减一半；有 OOM 或 CPU 被限流时不减副本也不降配置；缩容后单 Pod 的 P99 不能接近 Limits；偶发的最大值不作依据；内存比 CPU 更保守。',
+        '5. 第一张表“当前配置与 AI 推荐配置对比”，五行：副本数、CPU Requests、CPU Limits、Memory Requests、Memory Limits；七列：资源项、当前值（单 Pod）、当前值（全副本总和）、推荐值（单 Pod）、推荐值（全副本总和）、调整（超配、欠配或合理，副本数写增加或减少，带数量和比例）、依据（引用数据里的数字）。副本数行的当前值写当前副本数。没有当前值写“Prometheus 无数据”。',
+        '6. 第二张表“AI 与平台推荐的差异”：列：项、平台推荐、AI 推荐、差异、原因。一致写“一致”；不一致必须写明差异和原因。',
+        '7. 其后用表格写“使用情况”和“判定”（状态、风险）；限流、OOM、JVM 只写有数据的项。状态单元格加 class：lv-bad（有风险或欠配）、lv-warn（超配或需要关注）、lv-ok（正常）、lv-info（仅信息），例如 <td class="lv-warn">超配</td>。',
+        '8. 直接写当前情况和数值，不写“下一步先核对”之类的引导语，不写“可能、大概、视情况”之类含糊的话，不写数据以外的内容。'
       ].join('\n')
     : [
-        `Analyse the resource use of the module ${who} over the last ${windowLabel} (the last item in the brackets is the replicas; this is the recommendation period of the platform, it does not follow the window of the charts). All the data is measured by Prometheus, and so are the current Requests and Limits.`,
-        'Output rules:',
-        '1. Output HTML only: no Markdown, no code fence, no text before or after.',
-        '2. The first table must be "Current configuration vs AI recommended configuration" with exactly four rows: CPU Requests, CPU Limits, Memory Requests, Memory Limits; and seven columns: item, now (one Pod), now (all replicas), recommended (one Pod), recommended (all replicas), adjustment (over-provisioned, under-provisioned or reasonable, with the amount and the share), basis (one sentence quoting a number of the data, for example the P95 use as a share of the Requests). Copy the now, recommended and adjustment figures from the "platform recommendation" section word for word: never recalculate, convert or change them; write "no data in Prometheus" where there is no current figure and "no recommendation" where it says "-". Requests is what is reserved for the Pod when it is scheduled, Limits is the cap. Never write only "reasonable": give the amount and the share when there is one.',
-        '3. Then tables for "Use" (P50/P90/P95/P99/max, utilization) and "Verdict" (status, risk); throttling, OOM and JVM only where there is data.',
-        '4. The platform has worked the recommendation out from the percentiles (the largest of what P90, P95 and P99 each ask of the Requests; Limits is the P99 plus a margin and never below the recommended Requests; with OOM or throttling it is only raised; a peak that came once takes no part): you write the basis only and change no number.',
-        '5. Give the status and risk cells a class: lv-bad (at risk or under-provisioned), lv-warn (over-provisioned or to watch), lv-ok (fine), lv-info (information only), for example <td class="lv-warn">over-provisioned</td>.',
-        '6. State the actual situation and the optimised values directly; no lead-ins such as "first check", no vague words (maybe, probably, depends), no extra recommendations, nothing beyond the data. This is a read-only analysis: change nothing.'
+        `Analyse the resource use of the module ${who} over the last ${windowLabel} on your own and give your own recommended configuration and replicas (the last item in the brackets is the replicas now; the period is the recommendation period of the platform, it does not follow the chart window). All the data is measured by Prometheus.`,
+        'Rules:',
+        '1. Output HTML only: no Markdown, no code fence, no text before or after. This is a read-only analysis: change nothing.',
+        '2. Judge on your own: from the "measured data" (the quantiles of the use, peaks, OOM, throttling, JVM, the change of the replicas) reach your own conclusion and write the arithmetic. The "platform recommendation" is there to compare with: do not copy or re-write it; your figures may differ from it, but say why.',
+        `3. Give both ways: 1) the Pod stays, how many replicas are needed (the sum of the use of all the replicas / the Requests of a Pod / the target share); 2) the replicas stay, what the Requests and Limits of a Pod should be. Recommend changing the replicas first, and change the Pod only when the replicas cannot move, saying why.${bands ? ` The target share of the use of the Requests may be taken from ${bands} and changed on the data.` : ''}`,
+        '4. Safety, no unreasonable scale-in: not below 2 replicas, at most half of them in one step; with OOM or CPU throttling remove no replica and lower no configuration; after a scale-in the P99 of one Pod must not come near its Limits; a peak that came once is no basis; be more careful with memory than with CPU.',
+        '5. The first table is "Current configuration vs AI recommended configuration" with five rows: Replicas, CPU Requests, CPU Limits, Memory Requests, Memory Limits; and seven columns: item, now (one Pod), now (all replicas), recommended (one Pod), recommended (all replicas), adjustment (over-provisioned, under-provisioned or reasonable; for the replicas add or remove, with the amount and the share), basis (quote a number of the data). The Replicas row has the replicas now. Write "no data in Prometheus" where there is no current figure.',
+        '6. The second table is "AI vs platform recommendation": columns item, platform, AI, difference, reason. Write "same" where they agree; where they differ the difference and the reason are required.',
+        '7. Then tables for "Use" and "Verdict" (status, risk); throttling, OOM and JVM only where there is data. Give the status cells a class: lv-bad (at risk or under-provisioned), lv-warn (over-provisioned or to watch), lv-ok (fine), lv-info (information only), for example <td class="lv-warn">over-provisioned</td>.',
+        '8. State the actual situation and the figures directly; no lead-ins such as "first check", no vague words (maybe, probably, depends), nothing beyond the data.'
       ].join('\n');
-  const lines: string[] = [
-    head,
-    zh ? '平台推荐值（表里要原样使用）：' : 'Platform recommendation (use as it is in the table):'
-  ];
-  for (const row of recommendedFigures(detail, zh))
-    lines.push(
-      zh
-        ? `  ${row.label}：当前 单 Pod ${row.nowPod}，全副本总和 ${row.nowTotal}；推荐 单 Pod ${row.pod}，全副本总和 ${row.total}；调整 ${row.adjust}`
-        : `  ${row.label}: now one Pod ${row.nowPod}, all replicas ${row.nowTotal}; recommended one Pod ${row.pod}, all replicas ${row.total}; adjustment ${row.adjust}`
-    );
-  lines.push(zh ? '数据：' : 'Data:');
+  const lines: string[] = [head, zh ? '实测数据：' : 'Measured data:', replicaFacts(view, zh)];
   for (const r of [win?.cpu, win?.memory]) if (r) lines.push(...resourceLines(r, zh));
   const metrics = detail.metrics ?? [];
   if (metrics.length) {
@@ -209,14 +238,124 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
     }
   }
   if (detail.jvm?.hints.length) lines.push(`${zh ? 'JVM 提示' : 'JVM hints'}: ${detail.jvm.hints.join(', ')}`);
+  // the platform's own figures go last and short: they are what the answer is compared with, and if the message is cut it is the comparison that is cut, not the data
+  lines.push(zh ? '平台推荐（仅供对照，不要照抄）：' : 'Platform recommendation (to compare with, do not copy):');
+  lines.push(
+    zh
+      ? `  副本数：当前 ${view?.current || '-'}；平台推荐 ${view?.recommended || '-'}（${replicaWords(view, zh).text}）`
+      : `  Replicas: now ${view?.current || '-'}; platform ${view?.recommended || '-'} (${replicaWords(view, zh).text})`
+  );
+  for (const row of recommendedFigures(detail, zh))
+    lines.push(
+      zh
+        ? `  ${row.label}：当前 单 Pod ${row.nowPod}；平台推荐 单 Pod ${row.pod}，全副本 ${row.total}；${row.adjust}`
+        : `  ${row.label}: now one Pod ${row.nowPod}; platform one Pod ${row.pod}, all replicas ${row.total}; ${row.adjust}`
+    );
   return lines.join('\n').slice(0, MAX_CHARS);
 }
 
-/** the four rows the answer has to compare, current against recommended */
+/** the rows the answer has to compare, current against recommended */
 const COMPARISON_ROWS = ['cpu requests', 'cpu limits', 'memory requests', 'memory limits'];
 
-/** whether an answer holds the comparison of the four configurations (CPU and memory, Requests and Limits); one that does not is told so and asked again */
+/** whether an answer holds the comparison of the configurations (CPU and memory, Requests and Limits, and the replicas); one that does not is told so and asked again */
 export function hasComparisonTable(answer: string): boolean {
   const text = answer.replace(/&nbsp;/g, ' ').toLowerCase();
-  return COMPARISON_ROWS.every(row => new RegExp(row.replace(' ', '\\s*')).test(text));
+  return COMPARISON_ROWS.every(row => new RegExp(row.replace(' ', '\\s*')).test(text)) && /replicas|副本/.test(text);
+}
+
+/** one cell of a table written into the mail */
+export interface MailCell {
+  text: string;
+  level?: Level | '';
+}
+/** a table written into the mail by the platform from its own figures, so the mail has the tables whatever the answer of the model holds */
+export interface MailTable {
+  caption: string;
+  columns: string[];
+  rows: MailCell[][];
+}
+
+/**
+ * The tables of the mail: the current and the recommended configuration of the platform (one Pod and all the replicas, with the adjustment) and the two ways with the replicas
+ * now and recommended side by side. The colours are the ones of the page.
+ */
+export function mailTables(detail: Api.Overprovision.Detail, zh = true): MailTable[] {
+  const tables: MailTable[] = [];
+  const view = replicaView(detail);
+  const rep = replicaWords(view, zh);
+  const rows = schemeRows(detail);
+  if (rows.length) {
+    const cell = (text: string, level?: Level | ''): MailCell => ({ text, level: level ?? '' });
+    tables.push({
+      caption: zh ? '副本数与推荐方案（平台）' : 'Replicas and the two ways (platform)',
+      columns: zh
+        ? [
+            '方案',
+            '当前副本数',
+            '推荐副本数',
+            'CPU Requests 当前（单 Pod）',
+            'CPU Requests 推荐（单 Pod）',
+            'Memory Requests 当前（单 Pod）',
+            'Memory Requests 推荐（单 Pod）',
+            '调整'
+          ]
+        : [
+            'Way',
+            'Replicas now',
+            'Replicas recommended',
+            'CPU Requests now (one Pod)',
+            'CPU Requests recommended (one Pod)',
+            'Memory Requests now (one Pod)',
+            'Memory Requests recommended (one Pod)',
+            'Adjustment'
+          ],
+      rows: rows.map(row => {
+        const figures = recommendedFigures(detail, zh).filter(f => f.label.endsWith('Requests'));
+        const byConfig = figures.map(f => `${f.label.replace(' Requests', '')} ${f.adjust}`).join(zh ? '；' : '; ');
+        const first = row.first ? (zh ? '（优先）' : ' (first)') : '';
+        return [
+          cell(
+            (row.key === 'replicas'
+              ? zh
+                ? '① 调整副本数（Pod 配置不变）'
+                : '1. Change the replicas (the Pod stays)'
+              : zh
+                ? '② 调整单 Pod 配置（副本数不变）'
+                : '2. Change the Pod (the replicas stay)') + first
+          ),
+          cell(row.replicasNow),
+          cell(row.replicasRec, row.key === 'replicas' ? rep.level : ''),
+          cell(row.cpuNow),
+          cell(row.cpuRec),
+          cell(row.memNow),
+          cell(row.memRec),
+          cell(row.key === 'replicas' ? rep.text : byConfig || '-', row.level)
+        ];
+      })
+    });
+  }
+  const figures = recommendedFigures(detail, zh);
+  if (figures.length)
+    tables.push({
+      caption: zh ? '当前配置与平台推荐配置' : 'Current and platform recommended configuration',
+      columns: zh
+        ? ['资源项', '当前值（单 Pod）', '当前值（全副本总和）', '推荐值（单 Pod）', '推荐值（全副本总和）', '调整']
+        : [
+            'Item',
+            'Now (one Pod)',
+            'Now (all replicas)',
+            'Recommended (one Pod)',
+            'Recommended (all replicas)',
+            'Adjustment'
+          ],
+      rows: figures.map(f => [
+        { text: f.label },
+        { text: f.nowPod },
+        { text: f.nowTotal },
+        { text: f.pod },
+        { text: f.total },
+        { text: f.adjust, level: f.level }
+      ])
+    });
+  return tables;
 }
