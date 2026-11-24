@@ -32,6 +32,13 @@ declare namespace Api {
       total?: Usage;
       /** the request each percentile asks for alone; the one that asks for the most decides the recommendation */
       candidates: Candidate[];
+      /** the quantiles of the use held for sustain_minutes (what the recommended Requests and the replicas are made of), of one Pod and of the sum; absent when the use is not held */
+      sustained?: Usage;
+      total_sustained?: Usage;
+      sustain_minutes: number;
+      /** how long the use of a Pod was above the recommended Requests and above the Requests it has now (the raw points) */
+      exceed_suggested?: Exceed;
+      exceed_now?: Exceed;
       coverage: number;
       expected_points: number;
       /** the request the use supports (one Pod), with or without a request to compare with; 0 when none is made */
@@ -93,6 +100,19 @@ declare namespace Api {
       scored: boolean;
     }
 
+    /** what the kills did to the memory recommendation: it is not below the floor, and no replica is taken away */
+    interface OOMProtection {
+      kills: number;
+      period_minutes: number;
+      working_set: number;
+      uplift: number;
+      request: number;
+      floor: number;
+      need_before: number;
+      floor_raised: boolean;
+      replicas_held: boolean;
+    }
+
     /** what the OOM metric says over the window: the kills, the moments and the score */
     interface OOM {
       configured: boolean;
@@ -101,6 +121,7 @@ declare namespace Api {
       moments: number;
       events: Array<{ ts: number; count: number }>;
       lookback_days: number;
+      protection?: OOMProtection;
       score_on: boolean;
       weight: number;
       score: number;
@@ -139,6 +160,7 @@ declare namespace Api {
       coverage_high: number;
       coverage_mid: number;
       peak_near_limit: number;
+      sustain_minutes: number;
     }
 
     /** the constraints the module sets on its replicas in module management (0 = not set) */
@@ -157,8 +179,18 @@ declare namespace Api {
       /** the share of the Requests of a Pod the percentile is wanted to take */
       target: number;
       needed: number;
+      /** the sum as it was measured at the percentile (total is the sum as it counts, held for the sustain window) */
+      raw: number;
       /** whether the part counted in the plan it is in */
       counted: boolean;
+    }
+
+    interface Exceed {
+      level: number;
+      /** the share of the points above the level, the number of separate stretches and the longest in minutes */
+      share: number;
+      events: number;
+      longest_minutes: number;
     }
 
     /** what one percentile asks of the request on its own (use at the percentile / the share it is wanted to take, then the floors, rounded) and the Limits that goes with it */
@@ -188,6 +220,8 @@ declare namespace Api {
       current: number;
       /** the recommended number (0 = no plan), and the number the use asks for before the floor, the step and the guards */
       needed: number;
+      /** the count one action of the operator reaches: needed held to the pace of the module (differs from needed only while the pace holds it back) */
+      this_round?: number;
       raw: number;
       direction: 'out' | 'in' | 'same' | 'unknown';
       /** needed - current (negative: fewer), and its share of the replicas now */
@@ -234,6 +268,8 @@ declare namespace Api {
       replicas_updating?: boolean;
       /** why Kubernetes could not give the replicas (no_operator, stale, missing, error), and the newest figure of Prometheus when it was set aside as a rollout's */
       replicas_why?: string;
+      /** where the Requests and the Limits of a Pod come from: the Pod template Kubernetes has, or worked out of the sums of Prometheus */
+      pod_spec_from?: 'kubernetes' | 'estimated' | '';
       replicas_latest?: number;
       /** when they were measured (unix seconds), and the fewest and the most of the recommendation period */
       replicas_at?: number;

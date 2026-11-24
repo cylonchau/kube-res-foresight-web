@@ -186,6 +186,21 @@ const wall = computed<WallCard[]>(() => {
       level: !oom.score_on ? 'neutral' : oom.score < 60 ? 'danger' : oom.score < 90 ? 'warn' : 'good'
     });
   }
+  const prot = oom?.protection;
+  if (prot)
+    cards.push({
+      key: 'oomProtection',
+      label: p('oomProtection'),
+      help: p('oomProtectionHelp'),
+      value: fmt('memory', prot.floor),
+      sub: p('oomProtectionSub', {
+        n: formatDecimal(prot.kills, 0),
+        ws: fmt('memory', prot.working_set),
+        up: prot.uplift,
+        raised: prot.floor_raised ? p('oomProtectionRaised') : p('oomProtectionKept')
+      }),
+      level: prot.floor_raised ? 'danger' : 'warn'
+    });
   if (oomKills.value !== null && oomKills.value > 0) {
     cards.push({
       key: 'oomWs',
@@ -503,12 +518,15 @@ const replicaRows = computed<PlanRow[]>(() => {
   const planOf = (c: Caliber) => (c === 'all' ? plan : (plan.by_caliber?.[c] ?? null));
   const count = (n?: number) => (n && n > 0 ? p('repCount', { n }) : '-');
   const rows: PlanRow[] = [];
+  // CPU and memory each ask for a number of replicas; the recommendation is the larger of the two, so the one that asks for fewer cannot leave the other short
   for (const resource of ['cpu', 'memory'] as Res[]) {
     if (!plan.resources.some(need => need.resource === resource)) continue;
+    const request = rec.value?.[resource]?.request ?? 0;
     rows.push({
       key: `need-${resource}`,
-      label: p('replicasNeedBy', { r: resName(resource) }),
-      now: '-',
+      label: p('replicasRowResource', { r: resName(resource) }),
+      // the figure now is the Requests of one Pod, the figure the replicas are worked out against
+      now: request > 0 ? amountText(resource, request) : '-',
       cells: cellsOf(c => count(planOf(c)?.resources.find(need => need.resource === resource)?.needed)),
       decides: plan.binding === resource ? 'all' : '',
       adjust: { text: '-', type: 'default' },
@@ -538,6 +556,24 @@ const replicaRows = computed<PlanRow[]>(() => {
     adjust,
     strong: true
   });
+  // what one action reaches, when the pace of the module is what holds it back: the recommendation above is not changed by it
+  if (COLUMNS.some(c => (planOf(c)?.this_round ?? 0) > 0 && planOf(c)?.this_round !== planOf(c)?.needed)) {
+    const step = chosen && chosen.needed < view.current ? plan.limits.scale_down_step : plan.limits.scale_up_step;
+    const rounds =
+      chosen && step > 0 && view.current > 0 ? Math.ceil(Math.abs(chosen.needed - view.current) / step) : 0;
+    rows.push({
+      key: 'round',
+      label: p('repThisRound'),
+      now: '-',
+      cells: cellsOf(c => count(planOf(c)?.this_round)),
+      decides: '',
+      adjust:
+        chosen && chosen.this_round !== chosen.needed
+          ? { text: p('repThisRoundNote', { step, rounds }), type: 'info' }
+          : { text: '-', type: 'default' },
+      strong: false
+    });
+  }
   return rows;
 });
 
@@ -566,6 +602,17 @@ const configRows = computed<PlanRow[]>(() => {
       };
     });
 });
+/** the Pod the replicas are worked out for, as one phrase: the Requests of its CPU and its memory */
+const podSpecText = computed(
+  () =>
+    (['cpu', 'memory'] as Res[])
+      .map(resource => {
+        const request = rec.value?.[resource]?.request ?? 0;
+        return request > 0 ? `${resource === 'cpu' ? 'CPU' : p('sectionMemory')} ${amountText(resource, request)}` : '';
+      })
+      .filter(Boolean)
+      .join(' / ') || '-'
+);
 const hasPlans = computed(() => replicaRows.value.length > 0 || configRows.value.length > 0);
 /** what to change first: the replicas, or (when they cannot do it) the Pod */
 const firstScheme = computed(() => repView.value?.primary ?? 'none');
@@ -892,7 +939,11 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                 </div>
               </IconTooltip>
               <span class="plan-note">
-                {{ way === 'replicas' ? p('schemeByReplicasNote') : p('schemeByConfigNote', { n: replicas || '-' }) }}
+                {{
+                  way === 'replicas'
+                    ? p('schemeByReplicasNote', { spec: podSpecText })
+                    : p('schemeByConfigNote', { n: replicas || '-' })
+                }}
               </span>
               <NButton
                 v-if="way === 'config' || basisAvailable"

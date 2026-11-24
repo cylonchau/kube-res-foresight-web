@@ -67,6 +67,11 @@ const NOTES: Record<string, ConfigNote> = {
     purpose:
       '推荐的副本数下，所有 Pod 的 P99 使用量总和不得超过它们 Limits 总和的这个比例（30-100），防止副本被减得太少、峰值顶到 Limits；它也是结果风险判断里“峰值接近 Limits”的界线。模块可以在模块管理的计算系数里设自己的值。'
   },
+  'analysis.rec_sustain_minutes': {
+    name: '推荐：持续时间窗口（分钟）',
+    purpose:
+      '推荐 Requests 和副本数用的 P90、P95、P99，取的是“持续使用量”：每个点是它之前这么多分钟的平均值（0-720）。比窗口短的峰值被摊开，不会抬高长期配置；持续超过窗口的高负载仍然算数。Limits 仍按原始峰值。0 表示按原始点取百分位。模块可以在模块管理的计算系数里设自己的值。'
+  },
   'analysis.baseline_window_days': {
     name: '推荐分析周期（天）',
     purpose:

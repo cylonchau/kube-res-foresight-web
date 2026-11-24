@@ -559,6 +559,54 @@ const local = {
       openEffect: 'Effect report'
     },
     overprovision: {
+      basisRaw1: 'raw {v}',
+      basisSustained:
+        'The recommendation is made of the sustained use: every point is the mean of the use over the {n} minutes before it; the small figure is the percentile of the raw points. A peak shorter than {n} minutes is spread over it, a high load that lasts longer counts in full; the Limits is still sized for the raw peak.',
+      basisNotSustained:
+        'The use is not held (the window is 0, or the step is coarser than the window): the percentiles are of the raw points.',
+      basisSources: 'Where the figures come from',
+      basisSourceNone: 'not read',
+      basisSpecKubernetes:
+        'Kubernetes: the Pod template the operator read (the Requests and Limits of its containers added up), not a figure worked out of Prometheus',
+      basisSpecEstimated:
+        'Worked out of the sums of Prometheus: the median of the sum over the last 6 hours divided by the median of the replicas over the same hours. There is no report of the operator, so this is not the Pod spec; once it reports, the Pod spec is what counts',
+      unitCoresBytes: 'CPU cores, memory MiB / GiB',
+      basisSourceUse:
+        'The metric "{cpu}" (CPU) and "{memory}" (memory); all replicas together is every Pod added up; percentiles of {window}, {how}',
+      basisSustainedHow: 'of the use sustained for {n} minutes',
+      basisRawHow: 'of the raw points',
+      basisRounding: 'Rounding',
+      basisRoundingRule:
+        'The replicas each resource asks for are rounded up (4.43 -> 5), the larger of CPU and memory is taken, at least 1, then held to the least and most replicas of the module',
+      basisMaxTitle: 'The one of CPU and memory that needs more',
+      basisMaxLabel: 'Recommended replicas',
+      basisPace:
+        'The recommended replicas are {needed}. The pace of the module limits how many replicas one action adds or removes, so the next action goes to {round} ({current} now) and each one after it takes another step until {needed}.',
+      basisOom:
+        'OOM protection: {n} OOM kills in the window, the memory recommendation is not below {f} (the working set at the kill x the OOM protection coefficient, or the Requests now if that is more){held}.',
+      basisOomHeld: '; a module with OOM kills loses no replicas',
+      basisOomConfig:
+        'OOM protection: {n} OOM kills in the window. The memory Requests is not below max(working set at the kill {ws} x OOM protection coefficient {up}, Requests now {req}) = {f}; {raised}.',
+      basisOomRaised: 'it is above what the use asks for, so the recommendation is this floor',
+      basisOomNotRaised: 'it is not above what the use asks for, so it changes nothing',
+      basisHowPercentiles:
+        'How the percentiles act: P90, P95 and P99 each give a Requests (sustained use / target share) and the largest counts; the smaller the share the larger the recommendation, and the P99 share may be above 100% (a short excess over the Requests is carried by the Limits). The duration is in the sustained use: only a high load that lasts longer than the window raises it.',
+      basisExceed:
+        '{r}: the use was above the recommended {level} for {share} of the time, in {events} stretches, the longest {longest} minutes; above the Requests now for {now}.',
+      basisLimitRatio:
+        '{r}: the Limits is a multiple of the Requests, {now} times now and {rec} times recommended (recommended Limits = max(recommended Requests, P99 x (1 + Limits margin)), so never below the recommended Requests).',
+      replicasRowResource: '{r} (Requests of a Pod now)',
+      repThisRound: 'Reached by one action',
+      repThisRoundNote: 'at most {step} at once, {rounds} actions',
+      schemeByReplicasNote: 'Caliber: one Pod, its spec unchanged ({spec}); only the replicas change',
+      oomProtection: 'OOM protection floor',
+      oomProtectionHelp:
+        'The memory Requests is not below max(working set at the kill x OOM protection coefficient, Requests now), and no replica is taken away. It changes the recommended memory and replicas; the OOM score does not.',
+      oomProtectionSub: '{n} OOM kills, working set {ws}, x {up}, {raised}',
+      oomProtectionRaised: 'it raised the recommendation',
+      oomProtectionKept: 'not above what the use asks for',
+      oomScoreHelp:
+        '100 x (1 - kills x {weight}), at least 0. It is the memory score of a forecasting algorithm: a kill takes from the score of an algorithm and so changes which algorithm the platform follows; it does not change the recommended Requests or replicas of this page. What changes them is the OOM protection floor card.',
       caliberLabel: 'Caliber',
       caliberAll: 'Together (the largest)',
       caliberAllColumn: 'Together',
@@ -694,8 +742,6 @@ const local = {
       oomTimesSub: '{n} moments, the latest {shown}: {list}',
       oomTimesNone: 'No OOM kill in the window',
       oomScore: 'OOM score',
-      oomScoreHelp:
-        '100 x (1 - kills x {weight}), at least 0: the more kills the lower the score. It is the result of the OOM weight of module management; the coefficients are not shown.',
       oomScoreSub: 'Each kill takes {weight} away',
       oomScoreOff: 'The module does not count OOM kills into the score',
       replicasDesired: 'Desired replicas',
@@ -936,7 +982,6 @@ const local = {
       colRecShort: 'Recommended',
       schemeCpuReq: 'CPU Requests (one Pod)',
       schemeMemReq: 'Memory Requests (one Pod)',
-      schemeByReplicasNote: 'The Requests of each Pod stays, only the replicas change',
       repKept: 'replicas stay',
       podKept: 'Pod configuration stays',
       basisTitle: 'How the recommended replicas are worked out',
@@ -1617,6 +1662,12 @@ const local = {
         part_scope: 'Where it applies',
         sample: 'Sample',
         n: {
+          sustained: 'Sustained use',
+          sustainedUse: 'Sustained use',
+          mean: 'mean',
+          lastMinutes: 'the use of the last N minutes',
+          longRun: 'a use that lasts the whole window',
+          cores: 'cores',
           recommended: 'Recommended',
           recommendedValue: 'Recommended',
           peak: 'Predicted peak',
@@ -1715,6 +1766,12 @@ const local = {
           role: 'Recommended memory Limits = max(recommended memory Requests, memory P99 use x (1 + memory Limits headroom)).',
           scope:
             'Only the recommended memory Limits (resource dashboard). CPU Limits have a headroom of their own; the Limits admission derives from the Requests with the memory limit ratio do not use it.'
+        },
+        sustain: {
+          def: 'The P90, P95 and P99 the recommended Requests and replicas are made of are not taken of the raw points but of the sustained use: every point is the mean of the use over this many minutes before it. 0 follows the system setting (System settings > Resource analysis and recommendation).',
+          role: 'A peak shorter than the window is spread over it and does not raise a long-term recommendation; a high load that lasts for the whole window counts in full. For example 5 minutes at 4 cores inside a use of 2 cores is about 2.3 cores over 30 minutes; 4 cores for an hour is still 4. The Limits is not affected: it stays sized for the raw peak.',
+          scope:
+            'The recommended Requests (CPU, memory) of the resource dashboard, the replicas worked out from them and the verdict on the share of the Requests the use takes. Data whose step is coarser than the window is not held.'
         },
         limitGuard: {
           def: 'The most of the sum of the Limits of all the Pods their P99 use together may take at the recommended replicas, 0.3 to 1; 0 follows the system setting (System settings > Resource analysis and recommendation).',
@@ -1846,6 +1903,7 @@ const local = {
         descPeriodsStrategy:
           'Give the replicas (fixed, at least, at most) and the CPU and memory a value by period and time of day. Add as many as needed: a weekly window, or a one-off absolute time; when several are in force the priority decides.',
         sectionPeriodsStrategy: 'Time period strategy',
+        coeffSustain: 'Sustain window (minutes)',
         groupBase: 'Basics',
         groupBaseDesc:
           'Who the module is, what data it reads and which metrics it uses: its details, data and forecast period, monitoring.',
