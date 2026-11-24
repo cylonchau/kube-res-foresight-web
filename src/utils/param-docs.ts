@@ -28,8 +28,8 @@ export type ParamId =
   | 'p99'
   | 'cpuRequestHeadroom'
   | 'memoryRequestHeadroom'
-  | 'cpuLimitHeadroom'
-  | 'memoryLimitHeadroom'
+  | 'cpuLimitFactor'
+  | 'memoryLimitFactor'
   | 'limitGuard'
   | 'sustain'
   | 'oomUplift'
@@ -52,8 +52,8 @@ export interface DocForm {
   rec_sustain_minutes: number;
   rec_cpu_request_headroom: number;
   rec_memory_request_headroom: number;
-  rec_cpu_limit_headroom: number;
-  rec_memory_limit_headroom: number;
+  rec_cpu_limit_factor: number;
+  rec_memory_limit_factor: number;
   oom_memory_uplift: number;
   oom_calc_working_set_ratio: number;
   oom_calc_limit_ratio: number;
@@ -70,7 +70,7 @@ export interface DocForm {
 export interface DocContext {
   t: (key: string, named?: Record<string, unknown>) => string;
   /** the system's share the percentile takes (0.8 = 80%) and the system's Limits margin and guard, for a parameter the module leaves at 0 */
-  system: { p90: number; p95: number; p99: number; limitHeadroom: number; limitGuard: number; sustain: number };
+  system: { p90: number; p95: number; p99: number; limitFactor: number; limitGuard: number; sustain: number };
 }
 
 const fx = (value: number, digits = 4) => formatDecimal(value, digits);
@@ -237,10 +237,10 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
         ]
       };
     }
-    case 'cpuLimitHeadroom':
-    case 'memoryLimitHeadroom': {
-      const own = id === 'cpuLimitHeadroom' ? f.rec_cpu_limit_headroom : f.rec_memory_limit_headroom;
-      const h = own > 0 ? own : ctx.system.limitHeadroom;
+    case 'cpuLimitFactor':
+    case 'memoryLimitFactor': {
+      const own = id === 'cpuLimitFactor' ? f.rec_cpu_limit_factor : f.rec_memory_limit_factor;
+      const h = own > 0 ? own : ctx.system.limitFactor;
       return {
         ...base,
         formula: [
@@ -254,11 +254,7 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
             op(','),
             name('P99'),
             times,
-            op('('),
-            num('1'),
-            op('+'),
-            name(n('limitHeadroom')),
-            op(')'),
+            name(n('limitFactor')),
             op(')')
           )
         ],
@@ -271,14 +267,10 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
             op(','),
             sample(SAMPLE.use),
             times,
-            op('('),
-            num('1'),
-            op('+'),
-            used(own, ctx.system.limitHeadroom, n('systemValue')),
-            op(')'),
+            used(own, ctx.system.limitFactor, n('systemValue')),
             op(')'),
             eq,
-            res(fx(Math.max(SAMPLE.peak, SAMPLE.use * (1 + h))))
+            res(fx(Math.max(SAMPLE.peak, SAMPLE.use * h)))
           )
         ]
       };

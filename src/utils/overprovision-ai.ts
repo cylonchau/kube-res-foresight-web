@@ -174,8 +174,8 @@ function coefficientWords(detail: Api.Overprovision.Detail, zh: boolean): string
   if (p)
     parts.push(
       zh
-        ? `Requests 目标占比 P90 ${share(p.p90.target)}、P95 ${share(p.p95.target)}、P99 ${share(p.p99.target)}；Requests 余量 CPU ${formatDecimal(p.cpu_request_headroom ?? 0, 4)}、内存 ${formatDecimal(p.memory_request_headroom ?? 0, 4)}；Limits 余量 CPU ${formatDecimal(p.cpu_limit_headroom || p.limit_headroom, 4)}、内存 ${formatDecimal(p.memory_limit_headroom || p.limit_headroom, 4)}；Limits 峰值占比上限 ${share(p.peak_near_limit)}`
-        : `Requests target share P90 ${share(p.p90.target)}, P95 ${share(p.p95.target)}, P99 ${share(p.p99.target)}; Requests margin CPU ${formatDecimal(p.cpu_request_headroom ?? 0, 4)}, memory ${formatDecimal(p.memory_request_headroom ?? 0, 4)}; Limits margin CPU ${formatDecimal(p.cpu_limit_headroom || p.limit_headroom, 4)}, memory ${formatDecimal(p.memory_limit_headroom || p.limit_headroom, 4)}; Limits peak share ${share(p.peak_near_limit)}`
+        ? `Requests 目标占比 P90 ${share(p.p90.target)}、P95 ${share(p.p95.target)}、P99 ${share(p.p99.target)}；Requests 余量 CPU ${formatDecimal(p.cpu_request_headroom ?? 0, 4)}、内存 ${formatDecimal(p.memory_request_headroom ?? 0, 4)}；Limits 系数（P99 的倍数）CPU ${formatDecimal(p.cpu_limit_factor || p.limit_factor, 4)}、内存 ${formatDecimal(p.memory_limit_factor || p.limit_factor, 4)}；Limits 峰值占比上限 ${share(p.peak_near_limit)}`
+        : `Requests target share P90 ${share(p.p90.target)}, P95 ${share(p.p95.target)}, P99 ${share(p.p99.target)}; Requests margin CPU ${formatDecimal(p.cpu_request_headroom ?? 0, 4)}, memory ${formatDecimal(p.memory_request_headroom ?? 0, 4)}; Limits coefficient (multiple of P99) CPU ${formatDecimal(p.cpu_limit_factor || p.limit_factor, 4)}, memory ${formatDecimal(p.memory_limit_factor || p.limit_factor, 4)}; Limits peak share ${share(p.peak_near_limit)}`
     );
   return (zh ? '模块的计算系数：' : 'coefficients of the module: ') + (parts.join(zh ? '；' : '; ') || '-');
 }

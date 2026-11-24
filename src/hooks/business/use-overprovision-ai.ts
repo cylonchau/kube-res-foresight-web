@@ -8,35 +8,12 @@ import {
 
 /**
  * The one-click AI analysis of a module: the question (see utils/overprovision-ai) goes to the assistant as a background task of the user, so it uses
- * the language model of the platform, the permissions of the user and the audit like any question; the answer is read while it is written and kept,
- * for the module it was made for, in this browser.
+ * the language model of the platform, the permissions of the user and the audit like any question. It starts only when the user presses "analyse": the answer is
+ * read while it is written and is shown on the page that asked for it; a page that is opened again starts with no answer, as no analysis has been asked yet.
  */
-export interface StoredAnalysis {
-  text: string;
-  at: string;
-  window: string;
-}
-
-const KEY = 'kube-res-foresight:overprovision-ai';
 const MAX_WAIT_MS = 10 * 60 * 1000;
 const POLL_MS = 500;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-function readAll(): Record<string, StoredAnalysis> {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || '{}') as Record<string, StoredAnalysis>;
-  } catch {
-    return {};
-  }
-}
-
-function writeAll(all: Record<string, StoredAnalysis>) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(all));
-  } catch {
-    // the browser may not store: the analysis is still shown
-  }
-}
 
 function reasonText(error: unknown): string {
   const response = (error as any)?.response;
@@ -67,14 +44,15 @@ export function useOverprovisionAi() {
     state.problem = data?.problem ?? '';
   }
 
-  /** shows what was kept for the module, or nothing */
+  /** the page is about this module: an answer made for another module is not shown, and nothing is asked */
   function show(moduleId: number) {
+    if (state.moduleId !== moduleId) {
+      state.text = '';
+      state.at = '';
+      state.window = '';
+    }
     state.moduleId = moduleId;
     state.error = '';
-    const stored = readAll()[String(moduleId)];
-    state.text = stored?.text ?? '';
-    state.at = stored?.at ?? '';
-    state.window = stored?.window ?? '';
   }
 
   async function run(
@@ -111,10 +89,11 @@ export function useOverprovisionAi() {
           failures = 0;
           if (state.moduleId === moduleId) state.live = task.partial ?? '';
           if (task.status === 'succeeded' && task.result) {
-            const all = readAll();
-            all[String(moduleId)] = { text: task.result.content, at: new Date().toISOString(), window };
-            writeAll(all);
-            if (state.moduleId === moduleId) show(moduleId);
+            if (state.moduleId === moduleId) {
+              state.text = task.result.content;
+              state.at = new Date().toISOString();
+              state.window = window;
+            }
             return;
           }
           if (task.status === 'failed') {

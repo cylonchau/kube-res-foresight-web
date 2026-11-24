@@ -963,7 +963,7 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                     <th>{{ p('colSchemeItem') }}</th>
                     <th>{{ p('colCurrent') }}</th>
                     <th v-for="c in COLUMNS" :key="c" :class="{ sel: caliber === c }">
-                      {{ c === 'all' ? p('caliberAllColumn') : c }}
+                      {{ c === 'all' ? p('caliberAllColumn') : p('colByPercentile', { c }) }}
                     </th>
                     <th>{{ p('colAdjust') }}</th>
                   </tr>

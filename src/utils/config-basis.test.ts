@@ -13,7 +13,7 @@ const words = {
   floorThrottle: 'Throttle floor',
   coefSource: 'module or system',
   requestHeadroom: 'Requests margin',
-  limitHeadroom: 'Limits margin',
+  limitFactor: 'Limits coefficient',
   current: 'Requests now'
 };
 const result = {
@@ -31,7 +31,7 @@ const result = {
     { name: 'P99', use: 3.5, target: 1.1, needed: 3.1818, suggested: 3.2, suggested_limit: 4.2, decides: false }
   ]
 } as unknown as Api.Overprovision.Result;
-const params = { limit_headroom: 0.2, oom_uplift: 1.2 } as unknown as Api.Overprovision.Params;
+const params = { limit_factor: 1.2, oom_uplift: 1.2 } as unknown as Api.Overprovision.Params;
 const plain = (tokens: Array<{ text: string }>) => tokens.map(t => t.text).join(' ');
 
 test('the three percentiles are lines of their own and the largest decides', () => {
@@ -53,10 +53,7 @@ test('a caliber lists its own percentile only, with its own rounded request and 
   );
   assert.equal(plain(lines[0].tokens), 'use of a Pod 3.5 cores ÷ 110% = 3.18 cores');
   assert.ok(plain(lines[1].tokens).endsWith('= 3.2 cores'));
-  assert.ok(
-    plain(lines[2].tokens).includes('P99 3.5 cores × ( 1 + 20% )'),
-    'the figure the margin is added to is written'
-  );
+  assert.ok(plain(lines[2].tokens).includes('P99 3.5 cores × 120%'), 'the figure the margin is added to is written');
 });
 
 test('the floors of an OOM kill and of throttling are lines, and the margin of the Requests is a coefficient', () => {

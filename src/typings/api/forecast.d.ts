@@ -313,8 +313,8 @@ declare namespace Api {
       rec_sustain_minutes: number;
       rec_cpu_request_headroom: number;
       rec_memory_request_headroom: number;
-      rec_cpu_limit_headroom: number;
-      rec_memory_limit_headroom: number;
+      rec_cpu_limit_factor: number;
+      rec_memory_limit_factor: number;
       oom_calc_working_set_ratio: number;
       oom_calc_limit_ratio: number;
       oom_calc_history_ratio: number;
