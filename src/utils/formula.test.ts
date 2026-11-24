@@ -11,6 +11,7 @@ const words = {
   floorThrottle: 'Throttle floor',
   coefSource: 'coefficient of the module',
   headroom: 'margin',
+  requestHeadroom: 'Requests margin',
   use: 'use'
 };
 
@@ -71,7 +72,11 @@ const form = {
   rec_p90_target: 0,
   rec_p95_target: 0.9,
   rec_p99_target: 0,
-  rec_limit_headroom: 0,
+  rec_limit_guard: 0,
+  rec_cpu_request_headroom: 0,
+  rec_memory_request_headroom: 0,
+  rec_cpu_limit_headroom: 0,
+  rec_memory_limit_headroom: 0,
   oom_memory_uplift: 1.5,
   oom_calc_working_set_ratio: 1,
   oom_calc_limit_ratio: 0.5,
@@ -92,6 +97,13 @@ const previewWords = {
   floor: 'floor coefficient',
   statedRequest: 'stated request',
   board: 'dashboard',
+  boardLimits: 'dashboard limits',
+  cpuRequests: 'CPU Requests',
+  memoryRequests: 'Memory Requests',
+  cpuLimits: 'CPU Limits',
+  memoryLimits: 'Memory Limits',
+  requestHeadroom: 'Requests margin',
+  limitHeadroom: 'Limits margin',
   system: 'system',
   keepsNeed: ''
 };
@@ -108,8 +120,15 @@ test('the formulas of module management are written with the coefficients the fo
   // the floor coefficient is off at 0: there is no line for it
   assert.ok(!lines.some(line => line.label === 'floor coefficient'));
   assert.ok(
-    plain(lines.at(-1)!.tokens).includes('P90 ÷ system , P95 ÷ 0.9 , P99 ÷ system'),
+    plain(lines.find(line => line.label === 'CPU Requests')!.tokens).includes(
+      'P90 ÷ system , P95 ÷ 0.9 , P99 ÷ system'
+    ),
     'a share the module leaves at 0 follows the system'
+  );
+  assert.deepEqual(
+    lines.filter(line => /Requests|Limits/.test(line.label)).map(line => line.label),
+    ['CPU Requests', 'Memory Requests', 'CPU Limits', 'Memory Limits'],
+    'each resource has its own Requests and Limits line'
   );
   // typing another value changes the line
   const changed = moduleFormulaLines({ ...form, target_utilization: 0.7, floor_ratio: 0.5 }, previewWords);
@@ -119,5 +138,27 @@ test('the formulas of module management are written with the coefficients the fo
   assert.equal(
     plain(moduleFormulaLines({ ...form, target_utilization: 0 }, previewWords)[0].tokens),
     'CPU = peak × 1.2 ÷ 1'
+  );
+});
+
+test('the Requests margin and the Limits margin are each resource own', () => {
+  const margins = { ...form, rec_cpu_request_headroom: 0.1, rec_memory_limit_headroom: 0.3 };
+  const lines = moduleFormulaLines(margins, previewWords);
+  const line = (label: string) => plain(lines.find(item => item.label === label)!.tokens);
+  assert.ok(line('CPU Requests').endsWith('× ( 1 + 0.1 )'), 'the CPU has its margin');
+  assert.ok(!line('Memory Requests').includes('×'), 'the memory has none');
+  assert.ok(line('CPU Limits').includes('( 1 + system )'), 'no margin of its own: the system one');
+  assert.ok(line('Memory Limits').includes('( 1 + 0.3 )'));
+
+  const withMargin = recommendationLines(
+    result(),
+    { ...params, cpu_request_headroom: 0.1, memory_limit_headroom: 0.5 } as unknown as Api.Overprovision.Params,
+    words
+  );
+  assert.ok(plain(withMargin[0].tokens).endsWith('× ( 1 + 10% )'));
+  assert.ok(plain(withMargin[1].tokens).endsWith('= 3.76 cores × ( 1 + 10% ) = 4.14 cores'));
+  assert.ok(
+    plain(withMargin[2].tokens).startsWith('Limits = max ( Recommended , P99 × ( 1 + 20% ) )'),
+    'the CPU keeps the margin of the system'
   );
 });

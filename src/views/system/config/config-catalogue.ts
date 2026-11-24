@@ -62,6 +62,11 @@ const NOTES: Record<string, ConfigNote> = {
     name: '推荐：Limits 余量（百分比）',
     purpose: '推荐的 Limits = P99 使用量加上这个余量，并且不低于推荐的 Requests（0-300）。'
   },
+  'analysis.rec_limit_guard_percent': {
+    name: '推荐：Limits 峰值占比上限（百分比）',
+    purpose:
+      '推荐的副本数下，所有 Pod 的 P99 使用量总和不得超过它们 Limits 总和的这个比例（30-100），防止副本被减得太少、峰值顶到 Limits；它也是结果风险判断里“峰值接近 Limits”的界线。模块可以在模块管理的计算系数里设自己的值。'
+  },
   'analysis.baseline_window_days': {
     name: '推荐分析周期（天）',
     purpose:

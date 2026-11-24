@@ -316,7 +316,10 @@ test('the AI is asked to typeset formulas and is given the coefficients of the m
     p90: { target: 0.8, low: 0.7, high: 0.85 },
     p95: { target: 0.85, low: 0.8, high: 0.9 },
     p99: { target: 1.1, low: 0.8, high: 1.2 },
-    limit_headroom: 0.2
+    limit_headroom: 0.2,
+    cpu_request_headroom: 0.1,
+    memory_limit_headroom: 0.3,
+    peak_near_limit: 0.9
   };
   const zh = buildAnalysisQuestion(d, '7d', 'zh-CN');
   assert.ok(
@@ -325,7 +328,12 @@ test('the AI is asked to typeset formulas and is given the coefficients of the m
   );
   assert.ok(zh.includes('除以系数'), 'a recommendation is divided by the coefficient');
   assert.ok(zh.includes('模块的计算系数：容量保留系数 0.8、推荐值系数 1.2、OOM 保护系数 1.5'));
-  assert.ok(zh.includes('Requests 目标占比 P90 0.8、P95 0.85、P99 1.1，Limits 余量 0.2'));
+  assert.ok(
+    zh.includes(
+      'Requests 目标占比 P90 0.8、P95 0.85、P99 1.1；Requests 余量 CPU 0.1、内存 0；Limits 余量 CPU 0.2、内存 0.3；Limits 峰值占比上限 0.9'
+    )
+  );
+  // the margins are of each resource: the CPU one the module left unset is the system's, the memory one is the module's
   assert.ok(zh.length <= 3900);
   const en = buildAnalysisQuestion(d, '7d', 'en-US');
   assert.ok(en.includes('capacity reserve coefficient 0.8'));

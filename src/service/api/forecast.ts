@@ -170,6 +170,26 @@ export function fetchDeletePeriod(moduleId: number, id: number) {
   return request({ url: `${base}/modules/${moduleId}/overrides/${id}`, method: 'delete' });
 }
 
+export function fetchGetTriggers(moduleId: number) {
+  return request<Api.Forecast.Trigger[]>({ url: `${base}/modules/${moduleId}/triggers`, method: 'get' });
+}
+
+export function fetchCreateTrigger(moduleId: number, data: Api.Forecast.TriggerPayload) {
+  return request<Api.Forecast.Trigger>({ url: `${base}/modules/${moduleId}/triggers`, method: 'post', data });
+}
+
+export function fetchUpdateTrigger(moduleId: number, id: number, data: Api.Forecast.TriggerPayload) {
+  return request<Api.Forecast.Trigger>({ url: `${base}/modules/${moduleId}/triggers/${id}`, method: 'put', data });
+}
+
+export function fetchDeleteTrigger(moduleId: number, id: number) {
+  return request({ url: `${base}/modules/${moduleId}/triggers/${id}`, method: 'delete' });
+}
+
+export function fetchGetModuleCapacity(moduleId: number) {
+  return request<Api.Forecast.CapacityReport>({ url: `${base}/modules/${moduleId}/capacity`, method: 'get' });
+}
+
 export function fetchGetModuleHistory(
   moduleId: number,
   params: { metric: string; from?: string; to?: string; max_points?: number }

@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { NButton, NCollapse, NCollapseItem, NSkeleton, NSpin, NTable, NTag } from 'naive-ui';
+import { computed, ref } from 'vue';
+import { NButton, NCheckbox, NCollapse, NCollapseItem, NSkeleton, NSpin, NTable, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import OverprovisionCardWall, { type WallCard } from '@/components/business/overprovision-card-wall.vue';
 import OverprovisionLineChart, { type ChartSpec } from '@/components/business/overprovision-line-chart.vue';
 import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
+import ReplicaBasisModal from '@/components/business/replica-basis-modal.vue';
 import HelpLabel from '@/components/common/help-label.vue';
 import FormulaView from '@/components/common/formula-view.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { allText, amountText, podsOf, totalText } from '@/utils/amount';
+import { CHART_GROUPS, chartGroups, resetChartGroups } from '@/utils/chart-groups';
 import { formatDateTime } from '@/utils/date';
 import { type FormulaLine, recommendationLines } from '@/utils/formula';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
@@ -88,7 +90,7 @@ const oomSource = computed(() => props.detail?.queries.find(query => query.kind 
 const oomKills = computed(() => {
   const memory = win.value?.memory;
   if (!oomSource.value || oomSource.value.error || !memory) return null;
-  return memory.oom_kills;
+  return props.detail?.oom?.configured ? props.detail.oom.kills : memory.oom_kills;
 });
 /** the working set at the time of the kill, when the module has that metric and a kill happened */
 const oomWorkingSet = computed(() => {
@@ -152,6 +154,32 @@ const wall = computed<WallCard[]>(() => {
     sub: oomKills.value === null ? oomSource.value?.error || p('oomNoSource') : undefined,
     level: oomKills.value === null ? 'neutral' : oomKills.value > 0 ? 'danger' : 'good'
   });
+  const oom = d.oom;
+  if (oom?.configured && oomKills.value !== null) {
+    const moments = oom.events.map(event => formatDateTime(event.ts * 1000));
+    cards.push({
+      key: 'oomTimes',
+      label: p('oomTimes'),
+      help: p('oomTimesHelp'),
+      value: moments[0] ?? '-',
+      sub: moments.length
+        ? p('oomTimesSub', {
+            n: oom.moments,
+            shown: Math.min(5, moments.length),
+            list: moments.slice(0, 5).join(' · ')
+          })
+        : p('oomTimesNone'),
+      level: moments.length ? 'danger' : 'good'
+    });
+    cards.push({
+      key: 'oomScore',
+      label: p('oomScore'),
+      help: p('oomScoreHelp', { weight: formatPercent(oom.weight, 0) }),
+      value: oom.score_on ? formatDecimal(oom.score, 0) : '-',
+      sub: oom.score_on ? p('oomScoreSub', { weight: formatPercent(oom.weight, 0) }) : p('oomScoreOff'),
+      level: !oom.score_on ? 'neutral' : oom.score < 60 ? 'danger' : oom.score < 90 ? 'warn' : 'good'
+    });
+  }
   if (oomKills.value !== null && oomKills.value > 0) {
     cards.push({
       key: 'oomWs',
@@ -176,12 +204,22 @@ const wall = computed<WallCard[]>(() => {
     subLines.push(p('replicasRange', { min: view.min, max: view.max }));
   cards.push({
     key: 'replicas',
-    label: p('configReplicas'),
+    label: view?.from === 'kubernetes' ? p('replicasDesired') : p('configReplicas'),
     help: p('replicasHelp'),
     value: d.replicas ? String(d.replicas) : '-',
     sub: subLines.join(' · '),
     level: !d.replicas ? 'neutral' : view?.from === 'stored' ? 'warn' : 'neutral'
   });
+  // what the workload is set to and what runs are told apart: a Pod that is starting or failing is not ready, and no history of Prometheus is counted into either
+  if (view?.from === 'kubernetes' && view.ready >= 0)
+    cards.push({
+      key: 'replicasReady',
+      label: p('replicasReady'),
+      help: p('replicasReadyHelp'),
+      value: String(view.ready),
+      sub: view.ready < d.replicas ? p('replicasNotReady', { n: d.replicas - view.ready }) : undefined,
+      level: view.ready < d.replicas ? 'warn' : 'good'
+    });
   // the capacity reserve coefficient of the module, as module management has it (it is not written here): a recommendation is the need divided by it
   if (coefficients)
     cards.push({
@@ -365,6 +403,7 @@ function formulaOf(result: Api.Overprovision.Result | null | undefined): Formula
     floorThrottle: w('formulaFloorThrottle'),
     coefSource: w('formulaCoefSource'),
     headroom: w('formulaHeadroom'),
+    requestHeadroom: w('formulaRequestHeadroom'),
     use: ''
   });
 }
@@ -402,6 +441,7 @@ function adjustHelp(row: RecRow): string[] {
 /** the table of the two ways: for each way its three items, one row each, so the table is as wide as the page and no wider */
 interface SchemeCell {
   key: string;
+  rowKey: string;
   label: string;
   now: string;
   rec: string;
@@ -414,58 +454,26 @@ const scheme = computed(() =>
   schemeGroups(props.detail).map(group => ({
     key: group.key,
     first: group.first,
-    cells: group.items.map<SchemeCell>(item => {
-      const key = `${group.key}-${item.item}`;
-      const base = { key, label: schemeLabel(item.item), now: item.now, rec: item.rec };
-      if (item.item === 'replicas')
-        return group.key === 'replicas'
-          ? { ...base, adjust: replicaAdjust.value.text, level: replicaAdjust.value.level }
-          : { ...base, adjust: p('repKept'), level: 'ok' };
-      if (group.key === 'replicas') return { ...base, adjust: p('podKept'), level: 'ok' };
-      const row = recRows.value.find(x => x.key === `${item.item}-req`);
-      const cell = row ? cellAdjust(row) : null;
-      return { ...base, adjust: cell?.text ?? '-', level: item.level };
-    })
+    // a way lists only what it changes: the replicas for the first, the Requests of a Pod for the second; what it keeps is one line of text
+    cells: group.items
+      .filter(item => (group.key === 'replicas' ? item.item === 'replicas' : item.item !== 'replicas'))
+      .map<SchemeCell>(item => {
+        const key = `${group.key}-${item.item}`;
+        const base = { key, label: schemeLabel(item.item), now: item.now, rec: item.rec, rowKey: `${item.item}-req` };
+        if (item.item === 'replicas')
+          return { ...base, adjust: replicaAdjust.value.text, level: replicaAdjust.value.level };
+        const row = recRows.value.find(x => x.key === `${item.item}-req`);
+        const cell = row ? cellAdjust(row) : null;
+        return { ...base, adjust: cell?.text ?? '-', level: item.level };
+      })
   }))
 );
-
-/** how the number of replicas is worked out: for each resource what each percentile of the use of all the replicas asks of, and what the guard of the Limits asks */
-const basis = computed(() => {
-  const plan = (props.detail?.recommend ?? props.detail?.windows[0])?.replica_plan;
-  if (!plan) return [];
-  return plan.resources.map(need => {
-    const resource = need.resource === 'memory' ? 'memory' : 'cpu';
-    return {
-      key: need.resource,
-      name: resName(need.resource),
-      request: amountText(resource, need.request),
-      parts: need.parts.map(part => ({
-        name: part.name,
-        use: fmt(need.resource, part.total),
-        share: formatPercent(part.target, 0),
-        needed: formatDecimal(part.needed, 2)
-      })),
-      limit: need.limit > 0 ? amountText(resource, need.limit) : '',
-      limitNeeded: need.limit_needed > 0 ? formatDecimal(need.limit_needed, 2) : '',
-      needed: need.needed,
-      binding: plan.binding === need.resource
-    };
-  });
-});
-const planLimits = computed(() => {
-  const l = repView.value?.limits;
-  const parts: string[] = [];
-  if (l?.min) parts.push(p('limMin', { n: l.min }));
-  if (l?.max) parts.push(p('limMax', { n: l.max }));
-  if (l?.scale_up_step) parts.push(p('limUp', { n: l.scale_up_step }));
-  if (l?.scale_down_step) parts.push(p('limDown', { n: l.scale_down_step }));
-  return parts.length ? parts.join('，') : p('limNone');
-});
-const bindingName = computed(() => {
-  const binding = repView.value?.binding;
-  return binding ? resName(binding) : '';
-});
-const schemeReasons = computed(() => (repView.value?.reasons ?? []).map(code => p(`reason_${code}`)));
+/** the row of the Requests a cell of the second way stands for: its "?" is the one of the table of the Requests and Limits */
+const rowOf = (key: string) => recRows.value.find(row => row.key === key);
+/** the window of the calculation of the replicas: the basis of the recommended count, one step to a line */
+const basisVisible = ref(false);
+const replicaPlan = computed(() => (props.detail?.recommend ?? props.detail?.windows[0])?.replica_plan ?? null);
+const basisAvailable = computed(() => Boolean(replicaPlan.value?.resources?.length));
 
 // ---- the quantiles, with the samples they are made of
 
@@ -520,6 +528,7 @@ const COLORS = {
   usage: '#2080f0',
   request: '#d03050',
   suggested: '#18a058',
+  suggestedLimit: '#7fc99a',
   limit: '#f0a020',
   p90: '#8e44ad',
   p95: '#00a3a3',
@@ -540,15 +549,29 @@ function usageChart(chart: Api.Overprovision.Chart, mode: 'pod' | 'total'): Char
   const figure = (value: number) => (resource === 'memory' ? formatBytes(value, 2) : formatCores(value, 2));
   const limit = (win.value?.[resource]?.limit ?? 0) * pods;
   const q = total ? totalQuantiles(resource) : podQuantiles(resource);
-  const refs = [
-    { name: 'Requests', value: chart.request * pods, color: COLORS.request },
-    { name: p('chartSuggested'), value: chart.suggested * pods, color: COLORS.suggested },
-    { name: 'Limits', value: limit, color: COLORS.limit },
+  const suggestedLimit = (rec.value?.[resource]?.suggested_limit ?? 0) * pods;
+  const refs: ChartSpec['refs'] = [
+    { name: 'Requests', value: chart.request * pods, color: COLORS.request, style: 'dashed', group: 'config' },
+    { name: 'Limits', value: limit, color: COLORS.limit, style: 'dashdot', group: 'config' },
+    {
+      name: p('chartSuggested'),
+      value: chart.suggested * pods,
+      color: COLORS.suggested,
+      style: 'solid',
+      group: 'recommend'
+    },
+    {
+      name: p('chartSuggestedLimit'),
+      value: suggestedLimit,
+      color: COLORS.suggestedLimit,
+      style: 'dashdot',
+      group: 'recommend'
+    },
     ...(q
       ? [
-          { name: 'P90', value: q.p90, color: COLORS.p90, style: 'dotted' as const },
-          { name: 'P95', value: q.p95, color: COLORS.p95, style: 'dotted' as const },
-          { name: 'P99', value: q.p99, color: COLORS.p99, style: 'dotted' as const }
+          { name: 'P90', value: q.p90, color: COLORS.p90, style: 'dotted' as const, group: 'percentile' as const },
+          { name: 'P95', value: q.p95, color: COLORS.p95, style: 'dotted' as const, group: 'percentile' as const },
+          { name: 'P99', value: q.p99, color: COLORS.p99, style: 'dotted' as const, group: 'percentile' as const }
         ]
       : [])
   ];
@@ -556,7 +579,11 @@ function usageChart(chart: Api.Overprovision.Chart, mode: 'pod' | 'total'): Char
   if (chart.request > 0) figures.push(`Requests ${figure(chart.request * pods)}`);
   if (chart.suggested > 0) figures.push(`${p('chartSuggested')} ${figure(chart.suggested * pods)}`);
   if (limit > 0) figures.push(`Limits ${figure(limit)}`);
+  if (suggestedLimit > 0) figures.push(`${p('chartSuggestedLimit')} ${figure(suggestedLimit)}`);
   if (q) figures.push(`P90 ${figure(q.p90)} · P95 ${figure(q.p95)} · P99 ${figure(q.p99)}`);
+  // two lines that sit on one value hide each other: the figures say so
+  if (chart.request > 0 && Math.abs(chart.request - chart.suggested) <= chart.request * 0.01)
+    figures.push(p('chartOverlap'));
   return {
     key: `${mode}:${resource}`,
     title: `${resName(resource)} · ${total ? p('totalUsage') : p('podUsage')}`,
@@ -566,7 +593,8 @@ function usageChart(chart: Api.Overprovision.Chart, mode: 'pod' | 'total'): Char
         name: total ? p('chartTotalUsage') : p('chartUsage'),
         ts: total ? (chart.total_ts ?? []) : chart.ts,
         value: total ? (chart.total ?? []) : chart.value,
-        color: COLORS.usage
+        color: COLORS.usage,
+        group: 'actual'
       }
     ],
     refs,
@@ -598,7 +626,7 @@ const metricChartSpecs = computed<ChartSpec[]>(() => {
       spec = { key: `metric:${family.key}`, title: family.title, unit: unitOfMetric(m), lines: [], refs: [] };
       families.set(family.key, spec);
     }
-    spec.lines.push({ name: m.name, ts: m.ts, value: m.value ?? [] });
+    spec.lines.push({ name: m.name, ts: m.ts, value: m.value ?? [], group: 'actual' });
   }
   return [...families.values()];
 });
@@ -631,7 +659,37 @@ function metricValue(m: Api.Overprovision.MetricStat, value: number) {
       return formatDecimal(value, 3);
   }
 }
+/** the JVM pressure: the heap share of the window against the threshold of the module, and the score it comes to (their own cards: the OOM kills are not part of it) */
+const jvmCards = computed<WallCard[]>(() => {
+  const jvm = props.detail?.jvm;
+  if (!jvm?.expected) return [];
+  const level = !jvm.scored ? 'neutral' : jvm.score <= 0 ? 'danger' : jvm.score < 30 ? 'warn' : 'good';
+  return [
+    {
+      key: 'jvmRatio',
+      label: p('jvmRatio'),
+      help: p('jvmRatioHelp'),
+      value: jvm.ratio ? formatPercent(jvm.ratio, 0) : '-',
+      sub: jvm.threshold > 0 ? p('jvmThreshold', { value: formatPercent(jvm.threshold, 0) }) : p('jvmRuleOff'),
+      level: !jvm.ratio ? 'neutral' : jvm.threshold > 0 && jvm.ratio >= jvm.threshold ? 'danger' : 'info'
+    },
+    {
+      key: 'jvmScore',
+      label: p('jvmScore'),
+      help: p('jvmScoreHelp'),
+      value: jvm.scored ? formatDecimal(jvm.score, 0) : '-',
+      sub: jvm.scored ? undefined : jvm.threshold > 0 ? p('jvmNoHeap') : p('jvmRuleOff'),
+      level
+    }
+  ];
+});
+
 function metricCards(items: Api.Overprovision.MetricStat[], group: string): WallCard[] {
+  const extra = group === 'jvm' ? jvmCards.value : [];
+  return [...extra, ...metricCardsOf(items, group)];
+}
+
+function metricCardsOf(items: Api.Overprovision.MetricStat[], group: string): WallCard[] {
   return items.map(m => ({
     key: m.key,
     label: m.display ? `${m.name} · ${p('displayOnly')}` : m.name,
@@ -710,106 +768,89 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 
       <div v-if="!results.length" class="text-13px opacity-70">{{ p('noData') }}</div>
 
-      <!-- the replicas now and recommended, and the two ways to the recommendation: the replicas change (the Pod stays) or the Pod changes (the replicas stay) -->
-      <div v-if="scheme.length" class="flex-col gap-4px">
+      <!-- the two ways to the recommendation, each in a block of its own: the replicas change (the Pod stays) or the Pod changes (the replicas stay) -->
+      <div v-if="scheme.length" class="flex-col gap-6px">
         <HelpLabel :label="p('schemeTitle')" :help="p('schemeHelp')" class="text-13px font-medium" />
-        <NTable size="small" :bordered="true" :single-line="false" class="rec scheme text-12px">
-          <colgroup>
-            <col style="width: 22%" />
-            <col style="width: 20%" />
-            <col style="width: 15%" />
-            <col style="width: 15%" />
-            <col style="width: 28%" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>{{ p('colScheme') }}</th>
-              <th>{{ p('colSchemeItem') }}</th>
-              <th>{{ p('colCurrent') }}</th>
-              <th class="key">{{ p('colRecShort') }}</th>
-              <th>{{ p('colAdjust') }}</th>
-            </tr>
-          </thead>
-          <tbody v-for="group in scheme" :key="group.key">
-            <tr v-for="(cell, index) in group.cells" :key="cell.key">
-              <td v-if="index === 0" :rowspan="group.cells.length" class="scheme-name">
-                <div class="font-medium">
-                  {{ group.key === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}
+        <div class="plan-grid">
+          <div v-for="group in scheme" :key="group.key" class="plan-card">
+            <div class="plan-head">
+              <span class="font-medium">
+                {{ group.key === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}
+              </span>
+              <NTag v-if="group.first" size="tiny" :bordered="false" type="primary">{{ p('schemeFirst') }}</NTag>
+              <IconTooltip placement="top">
+                <div class="help-pop">
+                  <div>{{ group.key === 'replicas' ? p('schemeDetailReplicas') : p('schemeDetailConfig') }}</div>
+                  <div class="opacity-70">{{ p('schemeLegend') }}</div>
                 </div>
-                <div class="opacity-70">
-                  {{ group.key === 'replicas' ? p('schemeByReplicasNote') : p('schemeByConfigNote') }}
-                </div>
-                <NTag v-if="group.first" size="tiny" :bordered="false" type="primary" class="mt-4px">
-                  {{ p('schemeFirst') }}
-                </NTag>
-              </td>
-              <td>{{ cell.label }}</td>
-              <td>{{ cell.now }}</td>
-              <td class="key">{{ cell.rec }}</td>
-              <td>
-                <NTag size="small" :bordered="false" :type="LEVEL_TAG[cell.level]">{{ cell.adjust }}</NTag>
-              </td>
-            </tr>
-          </tbody>
-        </NTable>
-        <div v-if="repView?.primary === 'config'" class="text-12px opacity-75">{{ p('schemeConfigFirst') }}</div>
-        <div v-if="basis.length" class="mt-4px flex-col gap-4px">
-          <div class="text-12px font-medium">{{ p('basisTitle') }}</div>
-          <NTable size="small" :bordered="true" :single-line="false" class="rec basis text-12px">
-            <colgroup>
-              <col style="width: 12%" />
-              <col style="width: 13%" />
-              <col style="width: 17%" />
-              <col style="width: 17%" />
-              <col style="width: 17%" />
-              <col style="width: 14%" />
-              <col style="width: 10%" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>{{ p('basisRes') }}</th>
-                <th>{{ p('basisRequest') }}</th>
-                <th>P90</th>
-                <th>P95</th>
-                <th>P99</th>
-                <th>{{ p('basisLimit') }}</th>
-                <th class="key">{{ p('basisNeed') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in basis" :key="row.key">
-                <td class="font-medium">{{ row.name }}</td>
-                <td>{{ row.request }}</td>
-                <td v-for="part in row.parts" :key="part.name">
-                  {{ p('basisPart', { use: part.use, share: part.share }) }}
-                  <br />
-                  <b>{{ part.needed }}</b>
-                </td>
-                <td>
-                  <template v-if="row.limit">
-                    {{ p('basisLimitUse', { limit: row.limit }) }}
-                    <br />
-                    <b>{{ row.limitNeeded }}</b>
-                  </template>
-                  <span v-else class="opacity-60">-</span>
-                </td>
-                <td class="key">
-                  {{ row.needed }}
-                  <NTag v-if="row.binding" size="tiny" :bordered="false" type="info">{{ p('basisDecides') }}</NTag>
-                </td>
-              </tr>
-            </tbody>
-          </NTable>
-          <div class="text-12px opacity-75">
-            {{ p('basisLine', { resource: bindingName, n: repView?.raw ?? 0 }) }}
+              </IconTooltip>
+              <NButton
+                v-if="group.key === 'replicas' && basisAvailable"
+                size="tiny"
+                quaternary
+                type="primary"
+                class="ml-auto"
+                @click="basisVisible = true"
+              >
+                {{ p('basisOpen') }}
+              </NButton>
+            </div>
+            <div class="plan-note">
+              {{ group.key === 'replicas' ? p('schemeByReplicasNote') : p('schemeByConfigNote') }}
+              <template v-if="group.key === 'config' && repView?.primary === 'config'">
+                · {{ p('schemeConfigFirst') }}
+              </template>
+            </div>
+            <NTable size="small" :bordered="true" :single-line="false" class="rec plan text-12px">
+              <colgroup>
+                <col style="width: 24%" />
+                <col style="width: 22%" />
+                <col style="width: 22%" />
+                <col style="width: 32%" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>{{ p('colSchemeItem') }}</th>
+                  <th>{{ p('colCurrent') }}</th>
+                  <th class="key">{{ p('colRecShort') }}</th>
+                  <th>{{ p('colAdjust') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="cell in group.cells" :key="cell.key">
+                  <td>{{ cell.label }}</td>
+                  <td>{{ cell.now }}</td>
+                  <td class="key">{{ cell.rec }}</td>
+                  <td>
+                    <span class="inline-flex items-center gap-4px">
+                      <NTag size="small" :bordered="false" :type="LEVEL_TAG[cell.level]">{{ cell.adjust }}</NTag>
+                      <IconTooltip v-if="group.key === 'config' && rowOf(cell.rowKey)" placement="top">
+                        <div class="help-pop">
+                          <div class="font-medium">{{ p('adjHelpTitle') }}</div>
+                          <div v-for="(line, index) in adjustHelp(rowOf(cell.rowKey)!)" :key="index">{{ line }}</div>
+                          <FormulaView
+                            v-if="formulaOf(rec?.[rowOf(cell.rowKey)!.resource]).length"
+                            :lines="formulaOf(rec?.[rowOf(cell.rowKey)!.resource])"
+                          />
+                        </div>
+                      </IconTooltip>
+                      <NButton
+                        v-else-if="group.key === 'replicas' && basisAvailable"
+                        size="tiny"
+                        quaternary
+                        type="primary"
+                        @click="basisVisible = true"
+                      >
+                        {{ p('basisShort') }}
+                      </NButton>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </NTable>
           </div>
-          <div class="text-12px opacity-75">{{ p('schemeLimits', { text: planLimits }) }}</div>
-          <div v-if="repView && repView.max > 0" class="text-12px opacity-75">
-            {{ p('schemeRange', { min: repView.min, max: repView.max, now: repView.current }) }}
-          </div>
-          <div v-for="reason in schemeReasons" :key="reason" class="text-12px opacity-75">{{ reason }}</div>
         </div>
-        <div class="text-12px opacity-60">{{ p('schemeLegend') }}</div>
+        <ReplicaBasisModal v-model:show="basisVisible" :detail="detail" />
       </div>
 
       <!-- Requests and Limits: now, and what the use supports for one Pod and for all the replicas -->
@@ -924,6 +965,14 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
       </div>
 
       <!-- one chart for each thing the module has set up, two to a row; a row that has one chart takes the whole width -->
+      <div v-if="chartSpecs.length" class="chart-filter">
+        <span class="text-12px font-medium">{{ p('chartShow') }}</span>
+        <NCheckbox v-for="group in CHART_GROUPS" :key="group" v-model:checked="chartGroups[group]" size="small">
+          {{ p(`chartGroup_${group}`) }}
+        </NCheckbox>
+        <NButton size="tiny" quaternary @click="resetChartGroups">{{ p('chartReset') }}</NButton>
+        <span class="text-12px opacity-60">{{ p('chartShowHint') }}</span>
+      </div>
       <div v-if="chartSpecs.length" class="chart-grid">
         <div v-for="spec in chartSpecs" :key="spec.key" class="chart-cell">
           <OverprovisionLineChart :spec="spec" />
@@ -979,6 +1028,41 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 </template>
 
 <style scoped>
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 12px;
+}
+
+.plan-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+}
+
+.plan-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.plan-note {
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0.75;
+}
+
+.chart-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: center;
+}
+
 /* the charts are two to a row: the one that is left alone in its row takes the whole of it, so there is no empty place */
 .chart-grid {
   display: grid;

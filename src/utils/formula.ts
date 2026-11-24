@@ -44,6 +44,7 @@ export interface FormulaWords {
   floorThrottle: string;
   coefSource: string;
   headroom: string;
+  requestHeadroom: string;
   use: string;
 }
 
@@ -67,6 +68,23 @@ export function recommendationLines(
   if (!rows.length || !(r.usage.points > 0)) return [];
   const needs = rows.map(row => row.use / row.target);
   const top = Math.max(...needs);
+  // each resource has its own margins: the Requests margin is the module's, the Limits margin the module's or else the system's
+  const requestMargin = (resource === 'memory' ? params.memory_request_headroom : params.cpu_request_headroom) || 0;
+  const limitMargin =
+    (resource === 'memory' ? params.memory_limit_headroom : params.cpu_limit_headroom) || params.limit_headroom;
+  const withMargin = requestMargin > 0 ? top * (1 + requestMargin) : top;
+  const marginTokens = (figure: boolean): Token[] =>
+    requestMargin > 0
+      ? [
+          op('×'),
+          op('('),
+          num('1'),
+          op('+'),
+          coef(formatPercent(requestMargin, 0), words.requestHeadroom),
+          op(')'),
+          ...(figure ? [op('='), res(show(withMargin))] : [])
+        ]
+      : [];
   const lines: FormulaLine[] = [
     {
       label: words.requests,
@@ -79,7 +97,8 @@ export function recommendationLines(
           rows.map(row => [name(row.name), op('÷'), coef(pct(row.target), words.coefSource)]),
           op(',')
         ),
-        op(')')
+        op(')'),
+        ...marginTokens(false)
       ]
     },
     {
@@ -99,8 +118,8 @@ export function recommendationLines(
           op(',')
         ),
         op(')'),
-        op('='),
-        res(show(top))
+        ...(requestMargin > 0 ? [op('='), num(show(top))] : []),
+        ...(requestMargin > 0 ? marginTokens(true) : [op('='), res(show(top))])
       ]
     }
   ];
@@ -123,7 +142,7 @@ export function recommendationLines(
   if (r.reasons.includes('throttled'))
     lines.push({ label: words.floorThrottle, tokens: [name(words.recommended), op('≥'), num(show(r.request))] });
   if (r.suggested > 0) {
-    const peak = r.usage.p99 * (1 + params.limit_headroom);
+    const peak = r.usage.p99 * (1 + limitMargin);
     lines.push({
       label: words.limits,
       tokens: [
@@ -138,7 +157,7 @@ export function recommendationLines(
         op('('),
         num('1'),
         op('+'),
-        coef(formatPercent(params.limit_headroom, 0), words.headroom),
+        coef(formatPercent(limitMargin, 0), words.headroom),
         op(')'),
         op(')'),
         op('='),
@@ -162,7 +181,11 @@ export interface CoefficientForm {
   rec_p90_target: number;
   rec_p95_target: number;
   rec_p99_target: number;
-  rec_limit_headroom: number;
+  rec_limit_guard: number;
+  rec_cpu_request_headroom: number;
+  rec_memory_request_headroom: number;
+  rec_cpu_limit_headroom: number;
+  rec_memory_limit_headroom: number;
   oom_memory_uplift: number;
   oom_calc_working_set_ratio: number;
   oom_calc_limit_ratio: number;
@@ -184,6 +207,13 @@ export interface PreviewWords {
   floor: string;
   statedRequest: string;
   board: string;
+  boardLimits: string;
+  cpuRequests: string;
+  memoryRequests: string;
+  cpuLimits: string;
+  memoryLimits: string;
+  requestHeadroom: string;
+  limitHeadroom: string;
   system: string;
   keepsNeed: string;
 }
@@ -237,10 +267,10 @@ export function moduleFormulaLines(f: CoefficientForm, w: PreviewWords): Formula
       ]
     });
   const target = (v: number) => coef(v > 0 ? formatDecimal(v, 4) : w.system, v > 0 ? w.reserve : w.system);
-  lines.push({
-    label: w.board,
+  const requests = (label: string, margin: number): FormulaLine => ({
+    label,
     tokens: [
-      name('Requests'),
+      name(label),
       op('='),
       name('max'),
       op('('),
@@ -255,8 +285,34 @@ export function moduleFormulaLines(f: CoefficientForm, w: PreviewWords): Formula
       name('P99'),
       op('÷'),
       target(f.rec_p99_target),
+      op(')'),
+      ...(margin > 0
+        ? [op('×'), op('('), num('1'), op('+'), coef(formatDecimal(margin, 4), w.requestHeadroom), op(')')]
+        : [])
+    ]
+  });
+  const limits = (label: string, requestsLabel: string, margin: number): FormulaLine => ({
+    label,
+    tokens: [
+      name(label),
+      op('='),
+      name('max'),
+      op('('),
+      name(requestsLabel),
+      op(','),
+      name('P99'),
+      op('×'),
+      op('('),
+      num('1'),
+      op('+'),
+      coef(margin > 0 ? formatDecimal(margin, 4) : w.system, margin > 0 ? w.limitHeadroom : w.system),
+      op(')'),
       op(')')
     ]
   });
+  lines.push(requests(w.cpuRequests, f.rec_cpu_request_headroom));
+  lines.push(requests(w.memoryRequests, f.rec_memory_request_headroom));
+  lines.push(limits(w.cpuLimits, w.cpuRequests, f.rec_cpu_limit_headroom));
+  lines.push(limits(w.memoryLimits, w.memoryRequests, f.rec_memory_limit_headroom));
   return lines;
 }

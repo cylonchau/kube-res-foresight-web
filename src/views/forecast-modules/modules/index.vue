@@ -22,6 +22,9 @@ import ListSearchCard from '@/components/business/list-search-card.vue';
 import PromqlTester from '@/components/business/promql-tester.vue';
 import ModuleDisplayMetrics from '@/components/business/module-display-metrics.vue';
 import FormulaView from '@/components/common/formula-view.vue';
+import ParamLabel from '@/components/common/param-label.vue';
+import CapacityCard, { type CapacityCardData } from '@/components/business/capacity-card.vue';
+import TriggerEditor from '@/components/business/trigger-editor.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
 import ModuleNeedModal from '@/components/business/module-need-modal.vue';
 import type { QueryConfig } from '@/components/business/query-test-result.vue';
@@ -37,9 +40,13 @@ import {
   fetchCreatePeriod,
   fetchDeleteForecastModule,
   fetchGetAlgorithms,
+  fetchCreateTrigger,
+  fetchGetConfig,
   fetchGetForecastModules,
+  fetchGetModuleCapacity,
   fetchGetModuleSources,
   fetchGetPeriods,
+  fetchGetTriggers,
   fetchResumeModule,
   fetchUpdateForecastModule
 } from '@/service/api';
@@ -48,7 +55,17 @@ import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { copyCell } from '@/utils/copy-cell';
 import { formatResource } from '@/utils/format';
-import { type CoefficientForm, moduleFormulaLines } from '@/utils/formula';
+import {
+  type CoefficientForm,
+  type FormulaLine,
+  moduleFormulaLines,
+  coef as coefToken,
+  name as nameToken,
+  num as numToken,
+  op as opToken,
+  res as resToken
+} from '@/utils/formula';
+import { type DocForm, type ParamId, paramDoc } from '@/utils/param-docs';
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
 
@@ -182,7 +199,11 @@ function emptyForm() {
     rec_p90_target: 0,
     rec_p95_target: 0,
     rec_p99_target: 0,
-    rec_limit_headroom: 0,
+    rec_limit_guard: 0,
+    rec_cpu_request_headroom: 0,
+    rec_memory_request_headroom: 0,
+    rec_cpu_limit_headroom: 0,
+    rec_memory_limit_headroom: 0,
     oom_calc_working_set_ratio: 1,
     oom_calc_limit_ratio: 1,
     oom_calc_history_ratio: 1,
@@ -227,6 +248,8 @@ const form = reactive(emptyForm());
 /** The module a clone is taken from; its metric sources and fixed periods are copied once the clone exists. Algorithms are platform-wide and apply to the clone by themselves. */
 const cloneSource = ref<Api.Forecast.Module>();
 const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
+const triggerEditor = ref<InstanceType<typeof TriggerEditor>>();
+const jvmMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const oomMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const boardMetricsEditor = ref<InstanceType<typeof ModuleDisplayMetrics>>();
@@ -250,41 +273,211 @@ const coefficientLines = computed(() => {
     floor: m('coeffFloor'),
     statedRequest: m('formulaStatedRequest'),
     board: m('formulaBoard'),
+    boardLimits: m('formulaBoardLimits'),
+    cpuRequests: m('formulaCpuRequests'),
+    memoryRequests: m('formulaMemoryRequests'),
+    cpuLimits: m('formulaCpuLimits'),
+    memoryLimits: m('formulaMemoryLimits'),
+    requestHeadroom: m('coeffCpuRequestHeadroom'),
+    limitHeadroom: m('coeffCpuLimitHeadroom'),
     system: m('formulaSystem'),
     keepsNeed: ''
   });
 });
 
+/** what the system settings say where a module leaves a share at 0: read once, shown in the examples of the "?" (0 = not read) */
+const system = reactive({ p90: 0, p95: 0, p99: 0, limitHeadroom: 0, limitGuard: 0 });
+async function loadSystemDefaults() {
+  const keys = {
+    p90: 'analysis.rec_p90_target_percent',
+    p95: 'analysis.rec_p95_target_percent',
+    p99: 'analysis.rec_p99_target_percent',
+    limitHeadroom: 'analysis.rec_limit_headroom_percent',
+    limitGuard: 'analysis.rec_limit_guard_percent'
+  } as const;
+  await Promise.all(
+    (Object.keys(keys) as Array<keyof typeof keys>).map(async name => {
+      const { data } = await fetchGetConfig(keys[name]);
+      const value = Number(data?.config_value);
+      if (Number.isFinite(value) && value > 0) system[name] = value / 100;
+    })
+  );
+}
+
+/** the "?" of a parameter: its definition, what it does, its formula, an example with the figures of the form and where it applies */
+const docOf = (id: ParamId) =>
+  paramDoc(id, form as unknown as DocForm, { t: (key, named) => t(key, named ?? {}), system });
+
 const formatNumber = (v: number) => String(Number(v.toFixed(2)));
 
-/** what the capacity settings come to, worked out from the form and shown beside it: the utilization of a Pod's request, the safe load of a Pod in requests per second, and what the least and the most replicas can carry */
-const capacityCards = computed(() => {
+/** a state of the report as the card says it: a missing source and a missing history are both "no history" */
+const STATE_OF: Record<Api.Forecast.CapacityState, CapacityCardData['state']> = {
+  ready: 'ready',
+  not_set: 'not_set',
+  no_source: 'no_history',
+  no_history: 'no_history',
+  insufficient: 'insufficient',
+  error: 'error'
+};
+
+/** the capacity of one Pod as the platform reads it (the entered figure and what the history says), for the module being edited; none for a module that is not saved */
+const capacityReport = ref<Api.Forecast.CapacityReport | null>(null);
+async function loadCapacity(id?: number) {
+  capacityReport.value = null;
+  if (!id) return;
+  const { data } = await fetchGetModuleCapacity(id);
+  capacityReport.value = data ?? null;
+}
+
+/**
+ * What the capacity settings come to, worked out from the form and shown beside it: the utilization of a Pod's request, the safe load of a Pod in requests per second, and
+ * what the least and the most replicas can carry. A card with no figure behind it says why (not set, no history, not enough data, calculation failed); it never shows a
+ * number that has no source, and a module that is not saved has no history to read.
+ */
+const capacityCards = computed<CapacityCardData[]>(() => {
   const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
-  const rps = form.pod_capacity_rps;
-  const reserve = form.target_utilization > 0 && form.target_utilization <= 1 ? form.target_utilization : 1;
-  const total = (replicas: number) => (rps > 0 && replicas > 0 ? `${formatNumber(rps * replicas)} RPS` : '-');
+  const fx = (v: number) => formatNumber(v);
+  const fmtPct = (v: number) => `${formatNumber(v * 100)}%`;
+  const line = (label: string, ...tokens: FormulaLine['tokens']): FormulaLine[] => [{ label, tokens }];
+  const report = capacityReport.value;
+  const saved = Boolean(editing.value?.id);
+  const reserveSet = form.target_utilization > 0 && form.target_utilization <= 1;
+  const estimate = form.replica_mode === 'dynamic' && form.capacity_mode === 'estimate';
+
+  // the safe load of one Pod: the entered figure, or what the history gives
+  let pod: Pick<CapacityCardData, 'state' | 'value' | 'sub'> & { number: number };
+  if (estimate) {
+    if (!saved || !report || report.mode !== 'estimate')
+      pod = { state: 'unsaved', value: '', sub: saved ? m('capUnsavedEstimate') : m('capNew'), number: 0 };
+    else if (report.state === 'ready')
+      pod = {
+        state: 'ready',
+        value: `${fx(report.value)} RPS`,
+        sub: m('capPodEstimateSub', { used: report.used, samples: report.samples, days: report.lookback_days }),
+        number: report.value
+      };
+    else if (report.state === 'insufficient')
+      pod = {
+        state: 'insufficient',
+        value: '',
+        sub: m('capPodInsufficientSub', { used: report.used, min: report.min_samples }),
+        number: 0
+      };
+    else pod = { state: STATE_OF[report.state], value: '', sub: report.estimate_note || report.note || '', number: 0 };
+  } else if (form.pod_capacity_rps > 0) {
+    pod = {
+      state: 'ready',
+      value: `${fx(form.pod_capacity_rps)} RPS`,
+      sub: m('capPodManualSub'),
+      number: form.pod_capacity_rps
+    };
+  } else {
+    pod = { state: 'not_set', value: '', sub: m('capPodNotSet'), number: 0 };
+  }
+
+  const total = (replicas: number, what: string, hard?: number): Pick<CapacityCardData, 'state' | 'value' | 'sub'> => {
+    if (!(replicas > 0)) return { state: 'not_set', value: '', sub: m('capTotalNoReplicas', { what }) };
+    if (pod.state !== 'ready') return { state: pod.state, value: '', sub: m('capTotalNoPod') };
+    const extra = hard && hard > replicas ? ` · ${m('capTotalHard', { hard, total: fx(pod.number * hard) })}` : '';
+    return {
+      state: 'ready',
+      value: `${fx(pod.number * replicas)} RPS`,
+      sub: `${m('capTotalSub', { replicas, rps: fx(pod.number) })}${extra}`
+    };
+  };
+  const minTotal = total(form.min_replicas, m('capReplicasMin'));
+  const maxTotal = total(
+    form.max_replicas,
+    m('capReplicasMax'),
+    form.max_replicas_mode === 'dynamic' ? form.hard_max_replicas : 0
+  );
+  const days = report?.lookback_days ?? 7;
+  const busy = fmtPct(report?.busy_share ?? 0.7);
   return [
     {
       key: 'util',
-      label: m('capUtilization'),
-      value: `${formatNumber(reserve * 100)}%`,
-      sub: m('capUtilizationSub')
+      label: m('capCardUtil'),
+      state: reserveSet ? 'ready' : 'not_set',
+      value: fmtPct(form.target_utilization),
+      sub: reserveSet ? m('capUtilSub', { value: fx(form.target_utilization) }) : m('capUtilNotSet'),
+      meaning: m('capMeaningUtil'),
+      source: m('capSourceUtil'),
+      formula: line(m('capFormulaUtil'), nameToken(m('capFormulaUtil')), opToken('='), coefToken(m('coeffReserve'))),
+      period: m('capPeriodUtil')
     },
-    { key: 'pod', label: m('capPodRps'), value: rps > 0 ? `${formatNumber(rps)} RPS` : '-', sub: m('capPodRpsSub') },
+    {
+      key: 'pod',
+      label: m('capCardPod'),
+      ...pod,
+      meaning: m('capMeaningPod'),
+      source: estimate ? m('capSourcePodEstimate') : m('capSourcePodManual'),
+      formula: estimate
+        ? line(
+            m('capFormulaPodEstimate'),
+            nameToken(m('capFormulaPodEstimate')),
+            opToken('='),
+            numToken(m('capRuleEstimate'))
+          )
+        : line(m('capFormulaPodManual'), nameToken(m('capFormulaPodManual')), opToken('='), resToken(m('podCapacity'))),
+      period: estimate
+        ? m('capPeriodPodEstimate', { days, busy, min: report?.min_samples ?? 30 })
+        : m('capPeriodPodManual')
+    },
     {
       key: 'min',
-      label: m('capMinTotal'),
-      value: total(form.min_replicas),
-      sub: m('capTotalSub', { replicas: form.min_replicas || '-' })
+      label: m('capCardMin'),
+      ...minTotal,
+      meaning: m('capMeaningTotal'),
+      source: m('capSourceTotal'),
+      formula: line(
+        m('capFormulaMin'),
+        nameToken(m('capFormulaMin')),
+        opToken('='),
+        nameToken(m('capReplicasMin')),
+        opToken('×'),
+        nameToken(m('capCardPod'))
+      ),
+      period: m('capPeriodTotal')
     },
     {
       key: 'max',
-      label: m('capMaxTotal'),
-      value: total(form.max_replicas),
-      sub: m('capTotalSub', { replicas: form.max_replicas || '-' })
+      label: m('capCardMax'),
+      ...maxTotal,
+      meaning: m('capMeaningTotal'),
+      source: m('capSourceTotal'),
+      formula: line(
+        m('capFormulaMax'),
+        nameToken(m('capFormulaMax')),
+        opToken('='),
+        nameToken(m('capReplicasMax')),
+        opToken('×'),
+        nameToken(m('capCardPod'))
+      ),
+      period: m('capPeriodTotal')
     }
   ];
 });
+
+/** the replica bounds in one sentence with the figures of the form: what the ceiling is now and what the hard maximum and the expansion speed do (or that they do nothing) */
+const boundsNote = computed(() => {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  const { min_replicas: min, max_replicas: max } = form;
+  if (!(max > 0)) return m('boundsMissing', { what: m('boundsMissingMax'), side: m('boundsSideMax') });
+  if (form.max_replicas_mode === 'dynamic') {
+    const step = Math.max(1, Math.ceil(max * form.expand_step_ratio));
+    return m('boundsDynamic', {
+      max,
+      step,
+      ratio: `${formatNumber(form.expand_step_ratio * 100)}%`,
+      hard: form.hard_max_replicas || '-'
+    });
+  }
+  if (!(min > 0)) return `${m('boundsFixed', { min: 0, max })}`;
+  return m('boundsFixed', { min, max });
+});
+
+/** the bounds that have a "?" of the full kind (definition, formula, example, scope) */
+const boundDocs: Record<string, ParamId | undefined> = { min_cpu_milli: 'minCpu', min_memory_mib: 'minMemory' };
 
 const paceFields = ['scaleUpMaxStep', 'scaleDownMaxStep', 'scaleUpCooldown', 'scaleDownCooldown'] as const;
 const paceModel = {
@@ -382,10 +575,13 @@ function open(row?: Api.Forecast.Module) {
     });
   }
   visible.value = true;
+  loadCapacity(row?.id);
   nextTick(() => {
     periodEditor.value?.load(row?.id);
+    triggerEditor.value?.load(row?.id);
     metricsEditor.value?.load(row?.id);
     oomMetricsEditor.value?.load(row?.id);
+    jvmMetricsEditor.value?.load(row?.id);
     boardMetricsEditor.value?.load(row?.id);
   });
 }
@@ -421,7 +617,11 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     rec_p90_target: form.rec_p90_target,
     rec_p95_target: form.rec_p95_target,
     rec_p99_target: form.rec_p99_target,
-    rec_limit_headroom: form.rec_limit_headroom,
+    rec_limit_guard: form.rec_limit_guard,
+    rec_cpu_request_headroom: form.rec_cpu_request_headroom,
+    rec_memory_request_headroom: form.rec_memory_request_headroom,
+    rec_cpu_limit_headroom: form.rec_cpu_limit_headroom,
+    rec_memory_limit_headroom: form.rec_memory_limit_headroom,
     oom_calc_working_set_ratio: form.oom_calc_working_set_ratio,
     oom_calc_limit_ratio: form.oom_calc_limit_ratio,
     oom_calc_history_ratio: form.oom_calc_history_ratio,
@@ -471,14 +671,20 @@ function clone(row: Api.Forecast.Module) {
   // the periods and metrics are copied from the source once the clone exists, so the editors start empty
   nextTick(() => {
     periodEditor.value?.load();
+    triggerEditor.value?.load();
     metricsEditor.value?.load();
     oomMetricsEditor.value?.load();
+    jvmMetricsEditor.value?.load();
     boardMetricsEditor.value?.load();
   });
 }
 
 async function copyConfiguration(sourceId: number, targetId: number) {
-  const [sourceList, periodList] = await Promise.all([fetchGetModuleSources(sourceId), fetchGetPeriods(sourceId)]);
+  const [sourceList, periodList, triggerList] = await Promise.all([
+    fetchGetModuleSources(sourceId),
+    fetchGetPeriods(sourceId),
+    fetchGetTriggers(sourceId)
+  ]);
   // creating the sources in their original order gives them the same series keys
   for (const source of [...(sourceList.data || [])].sort((a, b) => a.id - b.id)) {
     await fetchCreateModuleSource(targetId, {
@@ -500,6 +706,10 @@ async function copyConfiguration(sourceId: number, targetId: number) {
     const { id: _id, module_id: _moduleId, ...rest } = p;
     await fetchCreatePeriod(targetId, rest);
   }
+  for (const trigger of triggerList.data || []) {
+    const { id: _id, module_id: _moduleId, ...rest } = trigger;
+    await fetchCreateTrigger(targetId, rest);
+  }
 }
 
 async function save() {
@@ -514,8 +724,10 @@ async function save() {
   const editorProblem =
     metricsEditor.value?.problem(form.step_seconds) ||
     oomMetricsEditor.value?.problem(form.step_seconds) ||
+    jvmMetricsEditor.value?.problem(form.step_seconds) ||
     boardMetricsEditor.value?.problem(form.step_seconds) ||
-    periodEditor.value?.problem();
+    periodEditor.value?.problem() ||
+    triggerEditor.value?.problem();
   if (editorProblem) {
     message.warning(editorProblem);
     return;
@@ -539,8 +751,14 @@ async function save() {
       }
       const metricsSaved = !savedId || (await metricsEditor.value?.save(savedId)) !== false;
       const oomSaved = !savedId || (await oomMetricsEditor.value?.save(savedId)) !== false;
+      const jvmSaved = !savedId || (await jvmMetricsEditor.value?.save(savedId)) !== false;
       const boardSaved = !savedId || (await boardMetricsEditor.value?.save(savedId)) !== false;
-      if (!metricsSaved || !oomSaved || !boardSaved) {
+      // a trigger reads a metric of the module, so the triggers are written after the metrics
+      if (savedId && (await triggerEditor.value?.save(savedId)) === false) {
+        complete = false;
+        message.warning(t('page.forecast.triggers.saveFailed'));
+      }
+      if (!metricsSaved || !oomSaved || !jvmSaved || !boardSaved) {
         complete = false;
         message.warning(t('page.forecast.moduleMetrics.saveFailed'));
       }
@@ -553,9 +771,12 @@ async function save() {
         if (!id && data) editing.value = data;
         await Promise.all([
           periodEditor.value?.load(savedId),
+          triggerEditor.value?.load(savedId),
           metricsEditor.value?.load(savedId),
           oomMetricsEditor.value?.load(savedId),
-          boardMetricsEditor.value?.load(savedId)
+          jvmMetricsEditor.value?.load(savedId),
+          boardMetricsEditor.value?.load(savedId),
+          loadCapacity(savedId)
         ]);
       }
       await load();
@@ -884,6 +1105,7 @@ const modalTitle = computed(() =>
 onMounted(() => {
   cfg.initColumnConfig();
   loadAlgorithms();
+  loadSystemDefaults();
   load();
 });
 </script>
@@ -947,6 +1169,10 @@ onMounted(() => {
     <!-- create / edit -->
     <NModal v-model:show="visible" preset="card" :title="modalTitle" class="edit-modal-wide">
       <div class="max-h-70vh overflow-y-auto pr-8px">
+        <div class="mod-group">
+          <div class="mod-group-title">{{ t('page.forecast.modules.groupBase') }}</div>
+          <div class="mod-group-desc">{{ t('page.forecast.modules.groupBaseDesc') }}</div>
+        </div>
         <section class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionBasic') }}</span>
@@ -962,41 +1188,6 @@ onMounted(() => {
             <NFormItem :label="t('page.forecast.modules.mode')">
               <NSelect v-model:value="form.mode" :options="modeOptions" />
             </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.predictEnabled') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictEnabledHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <StatusSelect v-model:value="form.predict_enabled" />
-            </NFormItem>
-            <template v-if="form.predict_enabled">
-              <NFormItem>
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.predictMode') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictModeHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NSelect v-model:value="form.predict_mode" :options="predictModeOptions" />
-              </NFormItem>
-              <NFormItem v-if="form.predict_mode === 'fixed'">
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.predictAlgorithm') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictAlgorithmHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NSelect v-model:value="form.predict_algorithm" filterable :options="algorithmOptions" />
-              </NFormItem>
-            </template>
             <NFormItem :label="t('page.forecast.modules.namespace')">
               <NInput
                 v-model:value="form.namespace"
@@ -1216,22 +1407,10 @@ onMounted(() => {
           />
         </section>
 
-        <section class="mod-sec">
-          <div class="mod-sec-title">
-            <span>{{ t('page.forecast.periods.title') }}</span>
-            <IconTooltip icon="mdi-help-circle" placement="top">
-              <div class="max-w-420px leading-22px">{{ t('page.forecast.periods.rules') }}</div>
-            </IconTooltip>
-          </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.descPeriods') }}</div>
-          <NForm :model="form" label-placement="top">
-            <NFormItem :label="t('page.forecast.modules.timezone')">
-              <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
-            </NFormItem>
-          </NForm>
-          <PeriodEditor ref="periodEditor" />
-        </section>
-
+        <div class="mod-group">
+          <div class="mod-group-title">{{ t('page.forecast.modules.groupCalc') }}</div>
+          <div class="mod-group-desc">{{ t('page.forecast.modules.groupCalcDesc') }}</div>
+        </div>
         <section class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionCapacity') }}</span>
@@ -1284,390 +1463,130 @@ onMounted(() => {
             </template>
           </NForm>
 
+          <div v-if="!editing && !cloneSource" class="cap-note">{{ t('page.forecast.modules.capNew') }}</div>
           <div class="cap-cards">
-            <div v-for="card in capacityCards" :key="card.key" class="cap-card">
-              <div class="cap-card-label">{{ card.label }}</div>
-              <div class="cap-card-value">{{ card.value }}</div>
-              <div class="cap-card-sub">{{ card.sub }}</div>
-            </div>
+            <CapacityCard v-for="card in capacityCards" :key="card.key" :card="card" />
           </div>
-        </section>
-
-        <section class="mod-sec">
-          <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.sectionApply') }}</span>
-          </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.descApply') }}</div>
-          <NForm :model="form" label-placement="top">
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.ttlSeconds') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.ttlHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.ttl_seconds" :min="30" :max="86400" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.minScore') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.minScoreHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.min_score" :min="0" :max="100" class="w-full" />
-            </NFormItem>
-          </NForm>
-        </section>
-
-        <section class="mod-sec">
-          <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.sectionFallback') }}</span>
-            <IconTooltip icon="mdi-help-circle" placement="top">
-              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.fallbackHint') }}</div>
-            </IconTooltip>
-          </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.descFallback') }}</div>
-          <NForm :model="form" label-placement="top">
-            <NFormItem :label="t('page.forecast.modules.fallbackCpu')">
-              <NInputNumber v-model:value="form.fallback_cpu_milli" :min="0" class="w-full" />
-            </NFormItem>
-            <NFormItem :label="t('page.forecast.modules.fallbackMemory')">
-              <NInputNumber v-model:value="form.fallback_memory_mib" :min="0" class="w-full" />
-            </NFormItem>
-            <NFormItem :label="t('page.forecast.modules.fallbackGpu')">
-              <NInputNumber v-model:value="form.fallback_gpu" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.fallbackReplicas') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fallbackReplicasHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.fallback_replicas" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.fixedReplicas') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fixedReplicasHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.fixed_replicas" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.recoverCycles') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.recoverCyclesHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
-            </NFormItem>
-            <div class="sub-title">{{ t('page.forecast.modules.replicaBounds') }}</div>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.minReplicas') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.minReplicasHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.min_replicas" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.maxReplicas') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.max_replicas" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.maxReplicasMode') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasModeHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NSelect v-model:value="form.max_replicas_mode" :options="maxModeOptions" />
-            </NFormItem>
-            <template v-if="form.max_replicas_mode === 'dynamic'">
-              <NFormItem :label="t('page.forecast.modules.hardMaxReplicas')">
-                <NInputNumber v-model:value="form.hard_max_replicas" :min="0" :precision="0" class="w-full" />
-              </NFormItem>
-              <NFormItem :label="t('page.forecast.modules.expandStepRatio')">
-                <NInputNumber v-model:value="form.expand_step_ratio" :min="0.01" :max="5" :step="0.05" class="w-full" />
-              </NFormItem>
-            </template>
-          </NForm>
-        </section>
-
-        <section class="mod-sec">
-          <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.sectionPace') }}</span>
-            <IconTooltip icon="mdi-help-circle" placement="top">
-              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.paceHint') }}</div>
-            </IconTooltip>
-          </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.descPace') }}</div>
-          <NForm :model="form" label-placement="top">
-            <NFormItem v-for="key in paceFields" :key="key">
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t(`page.forecast.modules.${key}`) }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-320px leading-22px">{{ t(`page.forecast.modules.${key}Hint`) }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form[paceModel[key]]" :min="0" :precision="0" class="w-full" />
-            </NFormItem>
-          </NForm>
         </section>
 
         <section class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionCoeff') }}</span>
-            <IconTooltip icon="mdi-help-circle" placement="top">
-              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.coeffHint') }}</div>
-            </IconTooltip>
           </div>
           <div class="mod-sec-desc">{{ t('page.forecast.modules.descCoeff') }}</div>
           <NForm :model="form" label-placement="top">
+            <div class="sub-title">{{ t('page.forecast.modules.coeffGroupForecast') }}</div>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffReserve') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffReserveHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.coeffReserve')" :doc="docOf('reserve')" />
               </template>
               <NInputNumber v-model:value="form.target_utilization" :min="0" :max="1" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.headroom') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.headroomHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.headroom')" :doc="docOf('headroom')" />
               </template>
               <NInputNumber v-model:value="form.headroom_ratio" :min="1" :max="10" :step="0.05" class="w-full" />
             </NFormItem>
+            <div class="sub-title">{{ t('page.forecast.modules.coeffGroupRequests') }}</div>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffP90') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffBoardHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.coeffP90')" :doc="docOf('p90')" />
               </template>
               <NInputNumber v-model:value="form.rec_p90_target" :min="0" :max="3" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffP95') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffBoardHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.coeffP95')" :doc="docOf('p95')" />
               </template>
               <NInputNumber v-model:value="form.rec_p95_target" :min="0" :max="3" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffP99') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffBoardHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.coeffP99')" :doc="docOf('p99')" />
               </template>
               <NInputNumber v-model:value="form.rec_p99_target" :min="0" :max="3" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffLimitHeadroom') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffLimitHeadroomHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.rec_limit_headroom" :min="0" :max="3" :step="0.05" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.oomMemoryUplift') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomMemoryUpliftHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.oom_memory_uplift" :min="1" :max="3" :step="0.05" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffOomWorkingSet') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffOomCalcHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel
+                  :label="t('page.forecast.modules.coeffCpuRequestHeadroom')"
+                  :doc="docOf('cpuRequestHeadroom')"
+                />
               </template>
               <NInputNumber
-                v-model:value="form.oom_calc_working_set_ratio"
-                :min="0.1"
-                :max="5"
-                :step="0.1"
+                v-model:value="form.rec_cpu_request_headroom"
+                :min="0"
+                :max="3"
+                :step="0.05"
                 class="w-full"
               />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffOomLimit') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffOomCalcHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel
+                  :label="t('page.forecast.modules.coeffMemoryRequestHeadroom')"
+                  :doc="docOf('memoryRequestHeadroom')"
+                />
               </template>
-              <NInputNumber v-model:value="form.oom_calc_limit_ratio" :min="0.1" :max="5" :step="0.1" class="w-full" />
+              <NInputNumber
+                v-model:value="form.rec_memory_request_headroom"
+                :min="0"
+                :max="3"
+                :step="0.05"
+                class="w-full"
+              />
+            </NFormItem>
+            <div class="sub-title">{{ t('page.forecast.modules.coeffGroupLimits') }}</div>
+            <NFormItem>
+              <template #label>
+                <ParamLabel
+                  :label="t('page.forecast.modules.coeffCpuLimitHeadroom')"
+                  :doc="docOf('cpuLimitHeadroom')"
+                />
+              </template>
+              <NInputNumber v-model:value="form.rec_cpu_limit_headroom" :min="0" :max="3" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffOomHistory') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffOomCalcHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel
+                  :label="t('page.forecast.modules.coeffMemoryLimitHeadroom')"
+                  :doc="docOf('memoryLimitHeadroom')"
+                />
               </template>
               <NInputNumber
-                v-model:value="form.oom_calc_history_ratio"
-                :min="0.1"
-                :max="5"
-                :step="0.1"
+                v-model:value="form.rec_memory_limit_headroom"
+                :min="0"
+                :max="3"
+                :step="0.05"
                 class="w-full"
               />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffFloor') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffFloorHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.coeffLimitGuard')" :doc="docOf('limitGuard')" />
+              </template>
+              <NInputNumber v-model:value="form.rec_limit_guard" :min="0" :max="1" :step="0.05" class="w-full" />
+            </NFormItem>
+            <div class="sub-title">{{ t('page.forecast.modules.coeffGroupOther') }}</div>
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.coeffFloor')" :doc="docOf('floor')" />
               </template>
               <NInputNumber v-model:value="form.floor_ratio" :min="0" :max="1" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.coeffShortfall') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffShortfallHint') }}</div>
-                  </IconTooltip>
-                </span>
+                <ParamLabel :label="t('page.forecast.modules.coeffShortfall')" :doc="docOf('shortfall')" />
               </template>
               <NInputNumber v-model:value="form.max_shortfall" :min="0.05" :max="0.9" :step="0.05" class="w-full" />
             </NFormItem>
           </NForm>
+          <div class="live-note">{{ t('page.forecast.modules.coeffOomMoved') }}</div>
           <div class="coeff-preview">
             <div class="coeff-preview-title">{{ t('page.forecast.modules.coeffPreview') }}</div>
             <FormulaView :lines="coefficientLines" />
           </div>
-        </section>
-
-        <section class="mod-sec">
-          <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.sectionProtection') }}</span>
-            <IconTooltip icon="mdi-help-circle" placement="top">
-              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.protectionHint') }}</div>
-            </IconTooltip>
-          </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.descProtection') }}</div>
-          <NForm :model="form" label-placement="top">
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.oomLookbackDays') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.oomLookbackDaysHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.oom_lookback_days" :min="1" :max="180" :precision="0" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.jvmHeapPressure') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.jvmHeapPressureHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.jvm_heap_pressure" :min="0" :max="1" :step="0.05" class="w-full" />
-            </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.oomWeightEnabled') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomWeightEnabledHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <StatusSelect v-model:value="form.oom_weight_enabled" />
-            </NFormItem>
-            <NFormItem v-if="form.oom_weight_enabled">
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.oomWeight') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomWeightHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NInputNumber v-model:value="form.oom_weight" :min="0.01" :max="1" :step="0.05" class="w-full" />
-            </NFormItem>
-          </NForm>
-          <div class="mb-6px mt-8px flex items-center gap-6px text-13px opacity-80">
-            {{ t('page.forecast.modules.oomMetrics') }}
-            <IconTooltip icon="mdi-help-circle" placement="top">
-              <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomMetricsHint') }}</div>
-            </IconTooltip>
-          </div>
-          <ModuleMetrics
-            ref="oomMetricsEditor"
-            scope="oom"
-            @preview="source => showPreview(editing?.id ?? null, source)"
-          />
         </section>
 
         <section class="mod-sec">
@@ -1681,7 +1600,12 @@ onMounted(() => {
           <NForm :model="form" label-placement="top">
             <NFormItem v-for="bound in resourceBounds" :key="bound.model">
               <template #label>
-                <span class="inline-flex items-center gap-4px">
+                <ParamLabel
+                  v-if="boundDocs[bound.model]"
+                  :label="t(`page.forecast.modules.${bound.label}`)"
+                  :doc="docOf(boundDocs[bound.model] as ParamId)"
+                />
+                <span v-else class="inline-flex items-center gap-4px">
                   {{ t(`page.forecast.modules.${bound.label}`) }}
                   <IconTooltip icon="mdi-help-circle" placement="top">
                     <div class="max-w-320px leading-22px">{{ t(`page.forecast.modules.${bound.hint}`) }}</div>
@@ -1718,6 +1642,407 @@ onMounted(() => {
               <NInputNumber v-model:value="form.limit_memory_ratio" :min="0" :max="10" :step="0.1" class="w-full" />
             </NFormItem>
           </NForm>
+          <div class="live-note">{{ t('page.forecast.modules.floorValueNote') }}</div>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.orderBoundsTitle') }}</div>
+            <ol>
+              <li v-for="n in 5" :key="n">{{ t(`page.forecast.modules.orderBounds${n}`) }}</li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionOom') }}</span>
+            <IconTooltip icon="mdi-help-circle" placement="top">
+              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.protectionHint') }}</div>
+            </IconTooltip>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descOom') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.oomMemoryUplift')" :doc="docOf('oomUplift')" />
+              </template>
+              <NInputNumber v-model:value="form.oom_memory_uplift" :min="1" :max="3" :step="0.05" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.oomLookbackDays') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.oomLookbackDaysHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.oom_lookback_days" :min="1" :max="180" :precision="0" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.oomWeightEnabled') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomWeightEnabledHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <StatusSelect v-model:value="form.oom_weight_enabled" />
+            </NFormItem>
+            <NFormItem v-if="form.oom_weight_enabled">
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.oomWeight') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomWeightHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.oom_weight" :min="0.01" :max="1" :step="0.05" class="w-full" />
+            </NFormItem>
+            <div class="sub-title">{{ t('page.forecast.modules.oomCoefTitle') }}</div>
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.coeffOomWorkingSet')" :doc="docOf('oomWorkingSet')" />
+              </template>
+              <NInputNumber
+                v-model:value="form.oom_calc_working_set_ratio"
+                :min="0.1"
+                :max="5"
+                :step="0.1"
+                class="w-full"
+              />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.coeffOomLimit')" :doc="docOf('oomLimit')" />
+              </template>
+              <NInputNumber v-model:value="form.oom_calc_limit_ratio" :min="0.1" :max="5" :step="0.1" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.coeffOomHistory')" :doc="docOf('oomHistory')" />
+              </template>
+              <NInputNumber
+                v-model:value="form.oom_calc_history_ratio"
+                :min="0.1"
+                :max="5"
+                :step="0.1"
+                class="w-full"
+              />
+            </NFormItem>
+          </NForm>
+          <div class="live-note">{{ t('page.forecast.modules.oomCoefDesc') }}</div>
+          <div class="mb-6px mt-8px flex items-center gap-6px text-13px opacity-80">
+            {{ t('page.forecast.modules.oomMetricsTitle') }}
+            <IconTooltip icon="mdi-help-circle" placement="top">
+              <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.oomMetricsHint') }}</div>
+            </IconTooltip>
+          </div>
+          <ModuleMetrics
+            ref="oomMetricsEditor"
+            scope="oom"
+            @preview="source => showPreview(editing?.id ?? null, source)"
+          />
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionJvm') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descJvm') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.jvmHeapPressure') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.jvmHeapPressureHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.jvm_heap_pressure" :min="0" :max="1" :step="0.05" class="w-full" />
+            </NFormItem>
+          </NForm>
+          <div class="live-note">
+            {{
+              form.jvm_heap_pressure > 0
+                ? t('page.forecast.modules.jvmFormula')
+                : t('page.forecast.modules.jvmDisabled')
+            }}
+          </div>
+          <div class="mb-6px mt-8px flex items-center gap-6px text-13px opacity-80">
+            {{ t('page.forecast.modules.jvmMetricsTitle') }}
+          </div>
+          <ModuleMetrics
+            ref="jvmMetricsEditor"
+            scope="jvm"
+            @preview="source => showPreview(editing?.id ?? null, source)"
+          />
+        </section>
+        <div class="mod-group">
+          <div class="mod-group-title">{{ t('page.forecast.modules.groupSafety') }}</div>
+          <div class="mod-group-desc">{{ t('page.forecast.modules.groupSafetyDesc') }}</div>
+        </div>
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionBounds') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descBounds') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.minReplicas') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.minReplicasHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.min_replicas" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.maxReplicas') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.max_replicas" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.maxReplicasMode') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasModeHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NSelect v-model:value="form.max_replicas_mode" :options="maxModeOptions" />
+            </NFormItem>
+            <template v-if="form.max_replicas_mode === 'dynamic'">
+              <NFormItem>
+                <template #label>
+                  <span class="inline-flex items-center gap-4px">
+                    {{ t('page.forecast.modules.hardMaxReplicas') }}
+                    <IconTooltip icon="mdi-help-circle" placement="top">
+                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.hardMaxReplicasHint') }}</div>
+                    </IconTooltip>
+                  </span>
+                </template>
+                <NInputNumber v-model:value="form.hard_max_replicas" :min="0" :precision="0" class="w-full" />
+              </NFormItem>
+              <NFormItem>
+                <template #label>
+                  <span class="inline-flex items-center gap-4px">
+                    {{ t('page.forecast.modules.expandStepRatio') }}
+                    <IconTooltip icon="mdi-help-circle" placement="top">
+                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.expandStepRatioHint') }}</div>
+                    </IconTooltip>
+                  </span>
+                </template>
+                <NInputNumber v-model:value="form.expand_step_ratio" :min="0.01" :max="5" :step="0.05" class="w-full" />
+              </NFormItem>
+            </template>
+          </NForm>
+          <div class="live-note">{{ boundsNote }}</div>
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionPace') }}</span>
+            <IconTooltip icon="mdi-help-circle" placement="top">
+              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.paceHint') }}</div>
+            </IconTooltip>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descPace') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem v-for="key in paceFields" :key="key">
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t(`page.forecast.modules.${key}`) }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-320px leading-22px">{{ t(`page.forecast.modules.${key}Hint`) }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form[paceModel[key]]" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+          </NForm>
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionFallback') }}</span>
+            <IconTooltip icon="mdi-help-circle" placement="top">
+              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.fallbackHint') }}</div>
+            </IconTooltip>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descFallbackNew') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem :label="t('page.forecast.modules.fallbackCpu')">
+              <NInputNumber v-model:value="form.fallback_cpu_milli" :min="0" class="w-full" />
+            </NFormItem>
+            <NFormItem :label="t('page.forecast.modules.fallbackMemory')">
+              <NInputNumber v-model:value="form.fallback_memory_mib" :min="0" class="w-full" />
+            </NFormItem>
+            <NFormItem :label="t('page.forecast.modules.fallbackGpu')">
+              <NInputNumber v-model:value="form.fallback_gpu" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.fallbackReplicas') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fallbackReplicasHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.fallback_replicas" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.recoverCycles') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.recoverCyclesHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
+            </NFormItem>
+          </NForm>
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionApply') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descApply') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.ttlSeconds') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.ttlHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.ttl_seconds" :min="30" :max="86400" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.minScore') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.minScoreHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.min_score" :min="0" :max="100" class="w-full" />
+            </NFormItem>
+          </NForm>
+        </section>
+
+        <div class="mod-group">
+          <div class="mod-group-title">{{ t('page.forecast.modules.groupStrategy') }}</div>
+          <div class="mod-group-desc">{{ t('page.forecast.modules.groupStrategyDesc') }}</div>
+        </div>
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionPredict') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descPredict') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.predictEnabled') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictEnabledHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <StatusSelect v-model:value="form.predict_enabled" />
+            </NFormItem>
+            <template v-if="form.predict_enabled">
+              <NFormItem>
+                <template #label>
+                  <span class="inline-flex items-center gap-4px">
+                    {{ t('page.forecast.modules.predictMode') }}
+                    <IconTooltip icon="mdi-help-circle" placement="top">
+                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictModeHint') }}</div>
+                    </IconTooltip>
+                  </span>
+                </template>
+                <NSelect v-model:value="form.predict_mode" :options="predictModeOptions" />
+              </NFormItem>
+              <NFormItem v-if="form.predict_mode === 'fixed'">
+                <template #label>
+                  <span class="inline-flex items-center gap-4px">
+                    {{ t('page.forecast.modules.predictAlgorithm') }}
+                    <IconTooltip icon="mdi-help-circle" placement="top">
+                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictAlgorithmHint') }}</div>
+                    </IconTooltip>
+                  </span>
+                </template>
+                <NSelect v-model:value="form.predict_algorithm" filterable :options="algorithmOptions" />
+              </NFormItem>
+            </template>
+          </NForm>
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionPeriodsStrategy') }}</span>
+            <IconTooltip icon="mdi-help-circle" placement="top">
+              <div class="max-w-420px leading-22px">{{ t('page.forecast.periods.rules') }}</div>
+            </IconTooltip>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descPeriodsStrategy') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem :label="t('page.forecast.modules.timezone')">
+              <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
+            </NFormItem>
+          </NForm>
+          <PeriodEditor ref="periodEditor" />
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionTriggers') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descTriggers') }}</div>
+          <TriggerEditor ref="triggerEditor" />
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionOrder') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descOrder') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.fixedReplicas') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fixedReplicasHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.fixed_replicas" :min="0" :precision="0" class="w-full" />
+            </NFormItem>
+          </NForm>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.orderTitle') }}</div>
+            <ol>
+              <li v-for="n in 5" :key="n">{{ t(`page.forecast.modules.order${n}`) }}</li>
+            </ol>
+          </div>
         </section>
       </div>
       <template #footer>
@@ -1828,35 +2153,57 @@ onMounted(() => {
 
 .cap-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 8px;
   margin: 2px 0 10px;
 }
 
-.cap-card {
-  padding: 8px 12px;
-  border-left: 4px solid #2080f0;
-  border-radius: 8px;
-  background: rgba(32, 128, 240, 0.1);
-}
-
-.cap-card-label {
+.cap-note,
+.live-note {
+  margin: 4px 0 8px;
   font-size: 12px;
   line-height: 18px;
+  opacity: 0.75;
+}
+
+.mod-group {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-left: 4px solid #2080f0;
+  border-radius: 4px;
+  background: rgba(32, 128, 240, 0.08);
+}
+
+.mod-group-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mod-group-desc {
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0.75;
+}
+
+.order-box {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.order-title {
+  margin-bottom: 2px;
+  font-weight: 600;
   opacity: 0.8;
 }
 
-.cap-card-value {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 26px;
-  color: #2080f0;
-}
-
-.cap-card-sub {
-  font-size: 11px;
-  line-height: 16px;
-  opacity: 0.7;
+.order-box ol {
+  margin: 0;
+  padding-left: 20px;
+  list-style: decimal;
 }
 
 .coeff-preview {

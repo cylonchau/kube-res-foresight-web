@@ -84,6 +84,24 @@ declare namespace Api {
       gc_pause?: Usage;
       working_set_p99: number;
       hints: string[];
+      /** the heap pressure of the module (0 = the rule is off), the P99 heap used over the heap maximum and the score they come to (100 x (1 - ratio / threshold)) */
+      threshold: number;
+      ratio?: number;
+      score: number;
+      scored: boolean;
+    }
+
+    /** what the OOM metric says over the window: the kills, the moments and the score */
+    interface OOM {
+      configured: boolean;
+      kills: number;
+      /** how many moments the kills were at; events lists the newest of them */
+      moments: number;
+      events: Array<{ ts: number; count: number }>;
+      lookback_days: number;
+      score_on: boolean;
+      weight: number;
+      score: number;
     }
 
     /** what is asked of one percentile against the request: the share it takes at the recommended request, and the range of shares that is reasonable */
@@ -107,6 +125,10 @@ declare namespace Api {
       p95: Band;
       p99: Band;
       limit_headroom: number;
+      cpu_limit_headroom: number;
+      memory_limit_headroom: number;
+      cpu_request_headroom: number;
+      memory_request_headroom: number;
       oom_uplift: number;
       throttle_limit: number;
       baseline_minutes: number;
@@ -197,6 +219,7 @@ declare namespace Api {
       recommend?: Window;
       params?: Params;
       jvm?: JVM;
+      oom?: OOM;
       charts?: Chart[];
       metrics: MetricStat[];
       /** where the figures were read: the Prometheus data source and the query of each metric with what came of it */
