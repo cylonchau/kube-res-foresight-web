@@ -27,6 +27,7 @@ import CapacityCard, { type CapacityCardData } from '@/components/business/capac
 import TriggerEditor from '@/components/business/trigger-editor.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
 import ModuleNeedModal from '@/components/business/module-need-modal.vue';
+import ModuleParamsModal from '@/components/business/module-params-modal.vue';
 import type { QueryConfig } from '@/components/business/query-test-result.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
@@ -68,6 +69,7 @@ import {
 import { type DocForm, type ParamId, paramDoc } from '@/utils/param-docs';
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
+import { EMPTY_SYSTEM, type SystemParams } from '@/utils/module-params';
 
 const PAGE_CODE = 'forecast_module_manage';
 const { t } = useI18n();
@@ -257,6 +259,8 @@ const boardMetricsEditor = ref<InstanceType<typeof ModuleDisplayMetrics>>();
 const bypassTarget = ref<Api.Forecast.Module>();
 /** the module whose need (replicas, CPU, memory) is being read, before it is configured to act */
 const needTarget = ref<Api.Forecast.Module>();
+const paramsTarget = ref<Api.Forecast.Module | null>(null);
+const paramsShow = ref(false);
 /** the formulas of the calculation with the coefficients the form holds right now: they change as a coefficient is typed */
 const coefficientLines = computed(() => {
   const m = (key: string) => t(`page.forecast.modules.${key}`);
@@ -306,6 +310,39 @@ async function loadSystemDefaults() {
     })
   );
 }
+
+/**
+ * The system settings the "Parameters" window shows next to the module's own figures: the ones a module follows (read above) and the ones only the system has (the reasonable bands
+ * of the percentiles, the throttle limit, the period, the grades). They are read once, when the window is first opened, so the list does not ask for them.
+ */
+const viewSystem = reactive<SystemParams>({ ...EMPTY_SYSTEM });
+let viewSystemRead = false;
+async function openParams(row: Api.Forecast.Module) {
+  paramsTarget.value = row;
+  paramsShow.value = true;
+  if (viewSystemRead) return;
+  viewSystemRead = true;
+  const keys = {
+    p90Low: 'analysis.rec_p90_low_percent',
+    p90High: 'analysis.rec_p90_high_percent',
+    p95Low: 'analysis.rec_p95_low_percent',
+    p95High: 'analysis.rec_p95_high_percent',
+    p99Low: 'analysis.rec_p99_low_percent',
+    p99High: 'analysis.rec_p99_high_percent',
+    throttle: 'analysis.throttle_percent',
+    baseline: 'analysis.baseline_window_days',
+    severe: 'analysis.grade_severe_percent',
+    moderate: 'analysis.grade_moderate_percent'
+  } as const;
+  await Promise.all(
+    (Object.keys(keys) as Array<keyof typeof keys>).map(async name => {
+      const { data } = await fetchGetConfig(keys[name]);
+      const value = Number(data?.config_value);
+      if (Number.isFinite(value) && value > 0) viewSystem[name] = name === 'baseline' ? value : value / 100;
+    })
+  );
+}
+const paramsSystem = computed<SystemParams>(() => ({ ...viewSystem, ...system }));
 
 /** the "?" of a parameter: its definition, what it does, its formula, an example with the figures of the form and where it applies */
 const docOf = (id: ParamId) =>
@@ -1057,6 +1094,7 @@ const columnMap: Record<string, any> = {
       t('common.delete'),
       t('page.forecast.modules.clone'),
       t('page.forecast.modules.need'),
+      t('page.forecast.modules.paramsView.button'),
       t('page.forecast.modules.resume')
     ]),
     fixed: 'right',
@@ -1074,6 +1112,9 @@ const columnMap: Record<string, any> = {
         ),
         h(NButton, { size: 'tiny', type: 'info', onClick: () => clone(row) }, () => t('page.forecast.modules.clone')),
         h(NButton, { size: 'tiny', onClick: () => (needTarget.value = row) }, () => t('page.forecast.modules.need')),
+        h(NButton, { size: 'tiny', onClick: () => openParams(row) }, () =>
+          t('page.forecast.modules.paramsView.button')
+        ),
         row.bypass
           ? h(NButton, { size: 'tiny', type: 'success', onClick: () => resume(row) }, () =>
               t('page.forecast.modules.resume')
@@ -2115,6 +2156,7 @@ onMounted(() => {
     </NModal>
 
     <!-- what the module needs, read before it is configured to act -->
+    <ModuleParamsModal v-model:show="paramsShow" :module="paramsTarget" :system="paramsSystem" />
     <ModuleNeedModal
       :module-id="needTarget?.id ?? null"
       :name="needTarget?.name"

@@ -41,6 +41,23 @@ export default defineConfig(configEnv => {
       port: 9725
     },
     build: {
+      rollupOptions: {
+        output: {
+          // the libraries change with an upgrade and the application with every release: apart, a release does not make the browser fetch the libraries again
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (
+              id.includes('/naive-ui/') ||
+              id.includes('/vueuc/') ||
+              id.includes('/vooks/') ||
+              id.includes('/seemly/')
+            )
+              return 'naive-ui';
+            if (/\/node_modules\/(vue|@vue|vue-router|pinia|vue-i18n|@intlify|@vueuse)\//.test(id)) return 'vue-vendor';
+            return undefined;
+          }
+        }
+      },
       reportCompressedSize: false,
       sourcemap: viteEnv.VITE_SOURCE_MAP === 'Y',
       commonjsOptions: {

@@ -9,6 +9,14 @@ test('what is more than the recommendation is over, what is less is under, with 
   assert.ok(Math.abs((under?.amount ?? 0) - 3.9375) < 1e-9);
   assert.deepEqual(adjustmentOf(4, 4), { direction: 'same', amount: 0, share: 0 });
   assert.equal(adjustmentOf(0, 4), null);
+  const gib = 1024 ** 3;
+  assert.equal(
+    adjustmentOf(6 * gib, 6 * gib + 64 * 1024 ** 2, 'memory')?.direction,
+    'same',
+    'one step of the rounding is the same number'
+  );
+  assert.equal(adjustmentOf(6 * gib, 6 * gib + 128 * 1024 ** 2, 'memory')?.direction, 'under');
+  assert.equal(adjustmentOf(4, 4.05, 'cpu')?.direction, 'same');
   assert.equal(adjustmentOf(4, 0), null);
 });
 

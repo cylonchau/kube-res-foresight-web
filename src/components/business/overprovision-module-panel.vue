@@ -14,6 +14,7 @@ import {
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import OverprovisionCardWall, { type WallCard } from '@/components/business/overprovision-card-wall.vue';
+import OverprovisionLoadProfile from '@/components/business/overprovision-load-profile.vue';
 import OverprovisionLineChart, { type ChartSpec } from '@/components/business/overprovision-line-chart.vue';
 import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
 import ReplicaBasisModal from '@/components/business/replica-basis-modal.vue';
@@ -379,7 +380,7 @@ interface AdjustCell {
   type: 'default' | 'success' | 'warning' | 'error' | 'info';
 }
 function cellAdjust(row: RecRow, value = row.recommended, byVerdict = true): AdjustCell {
-  const a = adjustmentOf(row.current, value);
+  const a = adjustmentOf(row.current, value, row.resource);
   if (!a) return { text: '-', type: 'default' };
   const amount = adjustmentText(row.resource, a);
   if (byVerdict && row.status === 'limited') return { text: p('adjLimited'), type: 'info' };
@@ -445,7 +446,7 @@ function formulaOf(result: Api.Overprovision.Result | null | undefined): Formula
  * figure is the one of the row, so "over-provisioned 300 mCPU" is explained by its own 4 cores, its 3.7 cores and the use that gave them.
  */
 function adjustHelp(row: RecRow): string[] {
-  const a = adjustmentOf(row.current, row.recommended);
+  const a = adjustmentOf(row.current, row.recommended, row.resource);
   const meaning =
     row.status === null
       ? 'limits'
@@ -488,6 +489,7 @@ function openBasis(scheme: 'replicas' | 'config') {
   basisScheme.value = scheme;
   basisVisible.value = true;
 }
+const loadProfile = computed(() => (props.detail?.recommend ?? props.detail?.windows[0])?.load_profile ?? null);
 const replicaPlan = computed(() => (props.detail?.recommend ?? props.detail?.windows[0])?.replica_plan ?? null);
 const basisAvailable = computed(() => Boolean(replicaPlan.value?.resources?.length));
 
@@ -1008,6 +1010,7 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
             </template>
           </div>
         </template>
+        <OverprovisionLoadProfile v-if="loadProfile" :profile="loadProfile" />
         <ReplicaBasisModal v-model:show="basisVisible" :detail="detail" :scheme="basisScheme" :caliber="caliber" />
       </div>
 

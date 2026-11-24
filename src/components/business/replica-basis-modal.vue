@@ -254,8 +254,8 @@ const configBlocks = computed(() =>
       const candidate = props.caliber === 'all' ? null : r.candidates?.find(c => c.name === props.caliber);
       const requests = candidate ? candidate.suggested : r.suggested;
       const limits = candidate ? candidate.suggested_limit : r.suggested_limit;
-      const gap = adjustmentOf(r.request, requests);
-      const limitGap = adjustmentOf(r.limit, limits);
+      const gap = adjustmentOf(r.request, requests, r.resource);
+      const limitGap = adjustmentOf(r.limit, limits, r.resource);
       const note = (g: ReturnType<typeof adjustmentOf>, label: string) =>
         g && g.direction !== 'same'
           ? p(g.direction === 'over' ? 'basisLower' : 'basisRaise', {
@@ -301,7 +301,8 @@ const sources = computed(() => {
         cpu: queryName('cpu'),
         memory: queryName('memory'),
         window: rec.value?.label ?? '',
-        how: sustainMinutes.value > 0 ? p('basisSustainedHow', { n: sustainMinutes.value }) : p('basisRawHow')
+        how: sustainMinutes.value > 0 ? p('basisSustainedHow', { n: sustainMinutes.value }) : p('basisRawHow'),
+        step: d.queries.find(q => q.kind === 'cpu')?.step || '-'
       })
     },
     { name: p('basisPodRequests'), unit: p('unitCoresBytes'), source: specFrom },
@@ -315,6 +316,32 @@ const sources = computed(() => {
   if (props.scheme === 'replicas')
     rows.push({ name: p('basisRounding'), unit: p('basisReplicasUnit'), source: p('basisRoundingRule') });
   return rows;
+});
+
+/**
+ * How much of the Requests a Pod uses at the replicas it has now, against the share the percentile is wanted to take: why a resource asks for as many replicas as it does
+ * (a memory that sits at the target needs every replica it has, however low the CPU is).
+ */
+const utilLines = computed(() => {
+  const current = plan.value?.current ?? 0;
+  if (!(current > 0)) return [];
+  return (plan.value?.resources ?? [])
+    .map(need => {
+      const counted = need.parts.filter(part => part.counted);
+      const top = counted.reduce<(typeof counted)[number] | null>((a, b) => (!a || b.needed > a.needed ? b : a), null);
+      if (!top || !(need.request > 0)) return '';
+      const share = top.total / (current * need.request);
+      const key = need.needed < current ? 'basisUtilBelow' : need.needed === current ? 'basisUtilAt' : 'basisUtilAbove';
+      return p(key, {
+        r: resName(need.resource),
+        n: current,
+        c: top.name,
+        share: formatPercent(share, 1),
+        target: formatPercent(top.target, 0),
+        needed: need.needed
+      });
+    })
+    .filter(Boolean);
 });
 
 /** the larger of what the CPU and the memory ask for: the rule that makes the recommendation, written with the figures */
@@ -516,6 +543,7 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
           <div class="basis-title">{{ p('basisMaxTitle') }}</div>
           <FormulaView :lines="maxLines" />
         </div>
+        <div v-for="line in utilLines" :key="line" class="basis-sub">{{ line }}</div>
         <div v-if="plan?.binding" class="basis-note">
           {{ p('basisDecidedBy', { r: resName(plan.binding), n: plan.raw }) }}
         </div>
@@ -572,6 +600,8 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
             <li v-for="line in item.why" :key="line">{{ line }}</li>
           </ul>
         </div>
+        <div class="basis-sub">{{ p('basisTargetNote') }}</div>
+        <div class="basis-sub">{{ p('basisLimitsNote') }}</div>
         <div v-for="line in limitRatio" :key="line" class="basis-sub">{{ line }}</div>
         <div v-for="line in exceedLines" :key="line" class="basis-sub">{{ line }}</div>
         <div v-if="oom" class="basis-note">

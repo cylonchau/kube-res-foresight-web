@@ -247,6 +247,29 @@ declare namespace Api {
       cpu: Result | null;
       memory: Result | null;
       replica_plan?: ReplicaPlan | null;
+      load_profile?: LoadProfile | null;
+    }
+
+    /** the replicas one hour of the day asks for (the hour is in the module's time zone) */
+    interface HourNeed {
+      hour: number;
+      need: number;
+      cpu: number;
+      memory: number;
+    }
+
+    /** which hours of the day are the busy ones: the replicas each hour asks for at the P95 of its own use, over every day of the period */
+    interface LoadProfile {
+      days: number;
+      target: number;
+      percentile: number;
+      normal: number;
+      peak: number;
+      hours: HourNeed[];
+      peak_hours: number[];
+      above: { level: number; share: number; events: number; longest_minutes: number } | null;
+      resource: string;
+      saved: number;
     }
 
     interface Detail {
