@@ -12,9 +12,9 @@ defineOptions({ name: 'OverprovisionAiAssistant' });
 
 /**
  * The AI analysis of the resource dashboard as a helper at the lower right, like a support chat: a round button, and over it a window that opens over the
- * page and closes again, without taking any room of the dashboard. The page shows it for one module only. Pressing the button opens the window large and the analysis
- * starts at once (there is no period to choose: it is the recommendation period of the platform, and the figures are the ones the page shows); an answer that was
- * kept for the module is shown instead of asking again, and "analyse again" asks again. Nothing is asked when the page opens. It runs in the background of the page: close the
+ * page and closes again, without taking any room of the dashboard. The page shows it for one module only. Pressing the button opens the window large and nothing is asked: the analysis starts only when the user presses "AI analysis" in it
+ * (there is no period to choose: it is the recommendation period of the platform, and the figures are the ones the page shows); an answer that was kept for the module is
+ * shown instead of asking again, and "analyse again" asks again. Nothing is asked when the page opens or when the window is opened. A click anywhere outside the window closes it. It runs in the background of the page: close the
  * window and the button tells when the answer is there (a dot), open it again and the answer is read. The answer can be mailed to the signed-in user. The answer is
  * HTML (tables), cleaned of everything but tables, lists, emphasis and the level colours before it is shown.
  */
@@ -95,36 +95,15 @@ const disabledReason = computed(() => {
   return '';
 });
 
-/** the analysis can be asked for now: the assistant is ready, the module is chosen and its figures are there */
-const canStart = computed(
-  () =>
-    !props.ai.running &&
-    !props.ai.text &&
-    !props.ai.error &&
-    !blocked.value &&
-    Boolean(props.moduleName) &&
-    props.canAnalyze
-);
-/** the button was pressed before the figures of the module were there: the analysis starts when they are */
-const startWhenReady = ref(false);
-watch(
-  () => props.canAnalyze,
-  ready => {
-    if (ready && startWhenReady.value && open.value) {
-      startWhenReady.value = false;
-      if (canStart.value) emit('analyze');
-    }
-  }
-);
-
-/** the button opens the window large and starts the analysis; pressed again it closes the window (the analysis goes on) */
+/** the button opens the window large (nothing is asked) and pressed again closes it; the analysis is asked only by the button of the window */
 function pressButton() {
   open.value = !open.value;
-  if (!open.value) return;
-  expanded.value = true;
-  if (canStart.value) emit('analyze');
-  else if (!props.ai.running && !props.ai.text && !props.ai.error && !blocked.value && props.moduleName)
-    startWhenReady.value = true;
+  if (open.value) expanded.value = true;
+}
+
+/** a click on the page outside the window folds it away: the analysis goes on and the button says when the answer is there */
+function closeOutside() {
+  open.value = false;
 }
 
 // ---- mailing the answer to the signed-in user
@@ -158,6 +137,7 @@ const lacksComparison = computed(
 <template>
   <Teleport to="body">
     <div v-if="pageActive" class="ai-fab-root">
+      <div v-if="open" class="ai-backdrop" @click="closeOutside"></div>
       <Transition name="ai-window">
         <section
           v-show="open"
@@ -260,6 +240,13 @@ const lacksComparison = computed(
 }
 .ai-fab-root > * {
   pointer-events: auto;
+}
+/* the page behind the window: a click on it is a click outside the window (it is under the window and the button, over the page) */
+.ai-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: transparent;
 }
 .ai-fab {
   position: relative;
@@ -366,6 +353,32 @@ const lacksComparison = computed(
   margin-bottom: 4px;
   font-weight: 600;
   text-align: left;
+}
+.ai-answer :deep(.fx) {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.07);
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.ai-answer :deep(.fx-n) {
+  font-weight: 500;
+}
+.ai-answer :deep(.fx-c) {
+  padding: 0 5px;
+  font-weight: 600;
+  color: #c77d0a;
+  background: rgba(240, 160, 32, 0.16);
+  border-radius: 4px;
+}
+.ai-answer :deep(.fx-r) {
+  padding: 0 5px;
+  font-weight: 700;
+  color: #18a058;
+  background: rgba(24, 160, 88, 0.14);
+  border-radius: 4px;
 }
 .ai-answer :deep(.lv-bad) {
   font-weight: 600;

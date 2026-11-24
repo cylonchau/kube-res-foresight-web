@@ -108,7 +108,7 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
 
 test('the same question in English', () => {
   const text = buildAnalysisQuestion(detail(), '7d', 'en-US');
-  assert.ok(text.includes('read-only'));
+  assert.ok(text.includes('Read-only'));
   assert.ok(text.includes('Current configuration vs AI recommended configuration'));
   assert.ok(!text.includes('只读'));
 });
@@ -307,4 +307,28 @@ test('the constraints of the module are given to the AI, and where the replicas 
   const zh = buildAnalysisQuestion(d, '7d', 'zh-CN');
   assert.ok(zh.includes('最少 3 个，最多 20 个，每次最多增加 4 个，每次最多减少 2 个'));
   assert.ok(zh.includes('当前副本数 4（Kubernetes 的 spec.replicas，operator 读取，其中就绪 3）'));
+});
+
+test('the AI is asked to typeset formulas and is given the coefficients of the module', () => {
+  const d = detail();
+  d.coefficients = { capacity_reserve: 0.8, capacity_reserve_set: true, headroom: 1.2, oom_uplift: 1.5 };
+  d.params = {
+    p90: { target: 0.8, low: 0.7, high: 0.85 },
+    p95: { target: 0.85, low: 0.8, high: 0.9 },
+    p99: { target: 1.1, low: 0.8, high: 1.2 },
+    limit_headroom: 0.2
+  };
+  const zh = buildAnalysisQuestion(d, '7d', 'zh-CN');
+  assert.ok(
+    zh.includes('<div class="fx">') && zh.includes('<span class="fx-c">'),
+    'a formula is a block of lines with its coefficient marked'
+  );
+  assert.ok(zh.includes('除以系数'), 'a recommendation is divided by the coefficient');
+  assert.ok(zh.includes('模块的计算系数：容量保留系数 0.8、推荐值系数 1.2、OOM 保护系数 1.5'));
+  assert.ok(zh.includes('Requests 目标占比 P90 0.8、P95 0.85、P99 1.1，Limits 余量 0.2'));
+  assert.ok(zh.length <= 3900);
+  const en = buildAnalysisQuestion(d, '7d', 'en-US');
+  assert.ok(en.includes('capacity reserve coefficient 0.8'));
+  d.coefficients = { capacity_reserve: 1, capacity_reserve_set: false, headroom: 1, oom_uplift: 1.2 };
+  assert.ok(buildAnalysisQuestion(d, '7d', 'zh-CN').includes('容量保留系数 未配置（按 1）'));
 });

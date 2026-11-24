@@ -811,6 +811,19 @@ const local = {
       reason_replicas_step: '按模块管理里配置的每次最多增减的副本数处理，这次只调到这里，下次分析再继续。',
       reason_replicas_limited: 'CPU 被限流或内存出过 OOM：使用量低估需求，不减副本。',
       reason_replicas_limit: 'Limits 的保护要求更多副本：减少副本后单 Pod 的 P99 会接近 Limits。',
+      formulaRequests: '推荐 Requests',
+      formulaLimits: '推荐 Limits',
+      formulaRecommended: '推荐 Requests',
+      formulaWithFigures: '代入实测数',
+      formulaFloorOom: 'OOM 地板',
+      formulaFloorThrottle: '限流地板',
+      formulaCoefSource: '系数：来自模块管理（模块没设就跟随系统设置）',
+      formulaHeadroom: 'Limits 余量系数',
+      coefReserveCard: '容量保留系数',
+      coefReserveCardHelp:
+        '模块管理里这个模块的容量保留系数（计算系数一节）：一个 Pod 的容量最多用到多少。预测推荐的 CPU、内存 = 计算结果 ÷ 它，动态副本里单 Pod 承载 = Pod 请求量 × 它。这里显示的就是模块管理里的值，改了那里这里同步变。',
+      coefReserveUnset: '未配置（按 1）',
+      coefReserveCardSub: '来自模块管理',
       adjHelpTitle: '这个数怎么来的',
       adjHelpMeaning_over: '超配：当前 Requests 比使用量需要的多，多出的部分可以回收。',
       adjHelpMeaning_under: '欠配：当前 Requests 比使用量需要的少，需要增加。',
@@ -1021,7 +1034,7 @@ const local = {
       aiExpand: '放大',
       aiCollapse: '收起',
       aiEmpty:
-        '点右下角的按钮：AI 用这些来自 Prometheus 的实测数据独立分析，写出它自己的推荐配置和推荐副本数，并说明和平台推荐的差异。不会改任何配置。',
+        '点下面的「AI 分析」才会开始：AI 用这些来自 Prometheus 的实测数据独立分析，写出它自己的推荐配置和推荐副本数，并说明和平台推荐的差异。打开页面或打开这个窗口都不会自动分析，也不会改任何配置。',
       aiNoComparison:
         '这次的答案里没有“当前配置与 AI 推荐配置”的对比表（副本数，以及 CPU/内存的 Requests 和 Limits），请点「重新分析」。',
       aiPickModule: '先选一个实例',
@@ -1032,7 +1045,7 @@ const local = {
       aiMailFailed: '发送失败：{reason}',
       aiAgain: '重新分析',
       clusterNoAnswer: '数据源没有给出这个数，原因在下面的查询里',
-      aiStart: '分析'
+      aiStart: 'AI 分析'
     },
     diagnostics: {
       title: '系统诊断',
@@ -1424,8 +1437,67 @@ const local = {
         fallbackMemory: '降级默认内存(MiB)',
         fallbackReplicas: '降级默认副本数',
         fixedReplicas: '固定副本数',
-        headroom: '余量系数',
+        headroom: '推荐值系数',
         more: '更多',
+        sectionCapacity: '容量与副本',
+        sectionReplicasHint:
+          '单个 Pod 能安全承载多少请求、副本数怎么求。容量保留系数在下面的「计算系数」里统一设置；最小、最大副本数在「降级默认值」里。',
+        descBasic: '这个模块管的是哪个工作负载，以及是否预测、以什么方式运行。',
+        descData: '读多久的历史、预测多远、按什么步长整理数据，以及数据质量的底线。',
+        descMetrics: '参与预测和推荐计算的指标（算法计算指标），可以添加多个并预览查询。',
+        descBoard: '只用来展示的监控指标（资源大盘上的图表和卡片），不参与算法。',
+        descPeriods: '统计用的时区和固定时间段：某些时段可以固定资源或副本数。',
+        descCapacity: '先选副本数的算法，再写一个 Pod 的安全容量。下面四张卡片是按你填的数算出来的，不用另外计算。',
+        descApply: '一条推荐有效多久，以及算法分数低到多少就不再采用。',
+        descFallback:
+          '预测不可用时用的默认值和恢复条件；最小、最大副本数及其扩展方式也在这里，它们是预测和默认值共同的护栏。',
+        descPace:
+          '一次最多增减几个副本、同方向动作至少间隔多久。这些限制作用于完整的运行周期，不分时间段，0 表示不限制。',
+        descCoeff:
+          '所有参与乘除运算的系数都在这里，按模块单独设置；计算读的是这里的值，不写死在代码里。下面的公式随填写的值实时变化。',
+        descProtection: '内存被 OOM 杀掉之后怎么抬高内存，以及 JVM 堆压力、评分权重；它读取的指标在下面添加。',
+        descSafety: '推荐值的上下限和 limit 倍数：保底和封顶是护栏，填 0 表示不限制。',
+        sectionCoeff: '计算系数',
+        coeffHint:
+          '公式里的每一个系数都能在这里改：容量保留系数、推荐值系数、看板目标占比、OOM 保护与计算系数、保底系数、预测偏差上限。留 0 的看板目标占比跟随系统设置（系统管理 > 系统设置 > 资源分析与推荐）。',
+        replicaBounds: '副本数边界（最小 / 最大）',
+        coeffReserve: '容量保留系数',
+        coeffReserveHint:
+          '一个 Pod 的容量（请求量）里最多用到多少，范围 0.1 到 1，留空或 0 按 1（不保留）。推荐值 = 计算结果 ÷ 容量保留系数：0.8 表示留 20% 的余量，CPU、内存推荐值是（预测峰值 × 推荐值系数）÷ 0.8；动态副本数里单 Pod 的承载 = Pod 请求量 × 该系数。0.8 只是例子，实际读的是这里的值。',
+        coeffP90: '看板 P90 目标占比',
+        coeffP95: '看板 P95 目标占比',
+        coeffP99: '看板 P99 目标占比',
+        coeffBoardHint:
+          '资源大盘推荐 Requests 时，该分位数的使用量除以这个占比（0.8 就是除以 0.8），三个分位数里最大的就是推荐值；0 跟随系统设置。P99 可以大于 1，表示尾部允许超出 Requests。',
+        coeffLimitHeadroom: '看板 Limits 余量',
+        coeffLimitHeadroomHint:
+          '推荐 Limits = max(推荐 Requests, P99 使用量 × (1 + 余量))；0.2 就是 20%，0 跟随系统设置。',
+        coeffOomCalc: 'OOM 计算系数',
+        coeffOomWorkingSet: 'OOM 计算系数 · 工作集',
+        coeffOomLimit: 'OOM 计算系数 · 内存上限',
+        coeffOomHistory: 'OOM 计算系数 · 内存历史',
+        coeffOomCalcHint:
+          '发生 OOM 后，内存地板值的底数有三种来源：被杀前的工作集、工作负载上的内存上限（折回 request）、没有前两者时被杀前的内存历史。每种先乘自己的系数，取最大的，再乘 OOM 保护系数。1 表示照原值，范围 0.1 到 5。',
+        coeffFloor: '保底系数',
+        coeffFloorHint:
+          '推荐的 CPU 和内存不低于「模块声明的 Pod 请求量 × 保底系数」（在动态副本里填的 Pod CPU/内存请求量），防止一次推荐把 Pod 压得太小；0 表示不启用，范围 0 到 1。',
+        coeffShortfall: '预测偏差上限',
+        coeffShortfallHint:
+          '算法实测的峰值偏低比例超过它就按它算，预测最多放大 偏差 ÷ (1 − 偏差) 倍：0.5 最多放大到 2 倍。范围 0.05 到 0.9；偏差越大，副本数越容易被推到上限，所以有这个封顶。',
+        coeffPreview: '公式（随上面填写的值变化）',
+        formulaCpu: '推荐 CPU',
+        formulaMemory: '推荐内存',
+        formulaPeak: '预测峰值',
+        formulaStatedRequest: '声明的 Pod 请求量',
+        formulaBoard: '大盘推荐 Requests',
+        formulaSystem: '系统',
+        capUtilization: '单 Pod 请求利用率',
+        capUtilizationSub: '容量保留系数：Pod 请求量里最多用到的比例',
+        capPodRps: '单 Pod 安全容量',
+        capPodRpsSub: 'RPS = Requests Per Second，每秒请求数',
+        capMinTotal: '最小安全总容量',
+        capMaxTotal: '最大安全总容量',
+        capTotalSub: '{replicas} 个副本 × 单 Pod 安全容量',
         sectionPace: '副本调整节奏',
         paceHint:
           'Operator 直接读取模块配置来调整工作负载副本。这里设置每个方向一次最多增减多少副本，以及距上一次同方向动作至少间隔多久；0 表示不限制。扩容通常不限或放宽，缩容建议限步长并留冷却，避免抖动。',
@@ -1448,9 +1520,10 @@ const local = {
         limitRatioHint:
           '模块只配置 request，limit 由它算出：limit = 最终 request × 这个比例（1～10），例如内存 request 10GiB、比例 1.2，则内存 limit 为 12GiB；0 表示不管 limit，沿用工作负载里写的。只在准入时（新建或更新工作负载产生的 Pod）计算和写入，扩缩容永远只改副本数，不改 request 和 limit。内存比例为 1 时 request 就是 OOM 线，通常取 1.2 以上。运行中的 Pod 要等工作负载滚动。',
         headroomHint:
-          '推荐值 = 预测峰值 × 余量系数。例如预测峰值 2 核、系数 1.2，推荐 2.4 核；内存、GPU 同理，副本数则是 预测峰值 × 系数 ÷ 单 Pod 容量。1 表示不留余量，最大 10。请按业务能容忍多大的预测误差来设置。',
-        podCapacity: '单 Pod 安全容量(RPS)',
-        podCapacityHint: '经压测或受控观测验证的单个就绪 Pod 可承载的 RPS。为 0 时不根据预测推荐副本数。',
+          '预测峰值要乘的倍数（不小于 1，最大 10）：CPU、内存推荐值 = 预测峰值 × 推荐值系数 ÷ 容量保留系数，副本数 = 预测峰值 × 推荐值系数 ÷ 单 Pod 安全容量。1 表示不额外留余量。没有实测的预测偏差时，这个倍数就是副本数用的安全余量。',
+        podCapacity: '单 Pod 安全容量（RPS）',
+        podCapacityHint:
+          'RPS 是 Requests Per Second，每秒请求数。这里填经压测或受控观测验证的、单个就绪 Pod 能安全承载的每秒请求数；副本数 = ⌈预测峰值 RPS × 推荐值系数 ÷ 这个值⌉。为 0 时不根据预测推荐副本数。',
         timezone: '周期时区',
         algorithm: '算法',
         priority: '优先级',
@@ -1545,7 +1618,7 @@ const local = {
         stateNoSnapshotHelp: '还没有产生过推荐：模块刚创建、历史数据不足，或预测任务还没有运行。',
         links: '关联摘要',
         linksText: '指标来源 {sources}/{total} 个启用 · 最新推荐 {version}',
-        sectionFallback: '降级默认值与恢复',
+        sectionFallback: '降级（Fallback）默认值、恢复与副本数边界',
         fallbackMinHistory: '历史覆盖率下限',
         fallbackMinHistoryHint: '最长连续可用历史占已观察区间的比例低于它时不预测，该指标走降级。默认 0.8。',
         maxMissingRatio: '允许缺样率',
@@ -1553,12 +1626,12 @@ const local = {
         recoverCycles: '恢复启用所需周期数',
         recoverCyclesHint:
           '降级后预测恢复正常，需要连续这么多个健康周期才回到算法结果，避免数据时断时续造成震荡。默认 2。',
-        sectionProtection: 'OOM 保护',
+        sectionProtection: 'OOM 保护与 JVM 压力',
         oomLookbackDays: 'OOM 回溯天数',
         oomLookbackDaysHint: '这段时间内发生过 OOM，内存推荐就不会低于地板值。默认 14。',
-        oomMemoryUplift: 'OOM 内存系数',
+        oomMemoryUplift: 'OOM 保护系数',
         oomMemoryUpliftHint:
-          '只用来抬高内存 request 的地板值：地板值 = max(OOM 前工作集, 当前 request) × 此系数；受模块内存上限约束并如实标注。当前 request 取工作负载上的 limit；模块设了内存上限比例时，取 limit ÷ 该比例，所以两个系数不会叠加。顺序：预测值 → 抬到 OOM 地板 → 受上下限约束 → 得到 request → limit = request × 内存上限比例（OOM 系数不再乘到 limit 上）。默认 1.2。',
+          '只用来抬高内存 request 的地板值：地板值 = 计算底数 × OOM 保护系数，底数取「工作集、内存上限、内存历史」各乘自己的计算系数后的最大者；受模块内存上限约束并如实标注。1 表示不抬高，范围 1 到 3。',
         jvmHeapPressure: 'OOM 保护压力（JVM 堆使用率）',
         jvmHeapPressureHint: '堆已用 / 堆上限超过它时，副本推荐按比例上调；填 0 关闭该规则。默认 0.85。',
         oomWeightEnabled: '启用 OOM 评分权重',

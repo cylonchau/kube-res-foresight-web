@@ -306,6 +306,15 @@ declare namespace Api {
       pod_cpu_request_milli: number;
       pod_memory_request_bytes: number;
       target_utilization: number;
+      rec_p90_target: number;
+      rec_p95_target: number;
+      rec_p99_target: number;
+      rec_limit_headroom: number;
+      oom_calc_working_set_ratio: number;
+      oom_calc_limit_ratio: number;
+      oom_calc_history_ratio: number;
+      floor_ratio: number;
+      max_shortfall: number;
       /** the lowest score an algorithm instance may have for its forecast to be used */
       min_score: number;
       max_replicas_mode: MaxReplicasMode;
