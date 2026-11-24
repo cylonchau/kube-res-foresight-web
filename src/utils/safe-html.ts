@@ -32,6 +32,8 @@ const TAGS = new Set([
 const DROPPED = /<(script|style|iframe|object|embed|template|noscript)\b[\s\S]*?(<\/\1\s*>|$)/gi;
 /** the classes an answer may use to grade a row or a figure */
 export const LEVEL_CLASSES = ['lv-bad', 'lv-warn', 'lv-ok', 'lv-info'] as const;
+/** the classes of a formula the answer writes: a block of lines (fx), a coefficient (fx-c), a name (fx-n) and a result (fx-r) */
+export const FORMULA_CLASSES = ['fx', 'fx-c', 'fx-n', 'fx-r'] as const;
 
 const escapeText = (text: string) =>
   text
@@ -50,7 +52,10 @@ function attributes(name: string, raw: string) {
   const cls = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(raw);
   const levels = (cls?.[1] ?? cls?.[2] ?? '')
     .split(/\s+/)
-    .filter(item => (LEVEL_CLASSES as readonly string[]).includes(item));
+    .filter(
+      item =>
+        (LEVEL_CLASSES as readonly string[]).includes(item) || (FORMULA_CLASSES as readonly string[]).includes(item)
+    );
   if (levels.length) out.push(`class="${levels.join(' ')}"`);
   return out.length ? ` ${out.join(' ')}` : '';
 }

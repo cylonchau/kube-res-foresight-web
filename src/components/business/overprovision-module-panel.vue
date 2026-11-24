@@ -6,9 +6,11 @@ import OverprovisionCardWall, { type WallCard } from '@/components/business/over
 import OverprovisionLineChart, { type ChartSpec } from '@/components/business/overprovision-line-chart.vue';
 import PromqlList, { type PromqlItem } from '@/components/business/promql-list.vue';
 import HelpLabel from '@/components/common/help-label.vue';
+import FormulaView from '@/components/common/formula-view.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { allText, amountText, podsOf, totalText } from '@/utils/amount';
 import { formatDateTime } from '@/utils/date';
+import { type FormulaLine, recommendationLines } from '@/utils/formula';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
 import {
   type Level,
@@ -140,6 +142,7 @@ const wall = computed<WallCard[]>(() => {
   const d = props.detail;
   if (!d) return [];
   const cards: WallCard[] = [];
+  const coefficients = d.coefficients;
   // OOM: how many times a container was killed for memory in the window, and what the working set was then
   cards.push({
     key: 'oom',
@@ -179,6 +182,18 @@ const wall = computed<WallCard[]>(() => {
     sub: subLines.join(' · '),
     level: !d.replicas ? 'neutral' : view?.from === 'stored' ? 'warn' : 'neutral'
   });
+  // the capacity reserve coefficient of the module, as module management has it (it is not written here): a recommendation is the need divided by it
+  if (coefficients)
+    cards.push({
+      key: 'capacityReserve',
+      label: p('coefReserveCard'),
+      help: p('coefReserveCardHelp'),
+      value: coefficients.capacity_reserve_set
+        ? formatDecimal(coefficients.capacity_reserve, 2)
+        : p('coefReserveUnset'),
+      sub: p('coefReserveCardSub'),
+      level: 'info'
+    });
   if (view && view.recommended > 0)
     cards.push({
       key: 'recReplicas',
@@ -336,12 +351,29 @@ const shareLines = computed(() => {
     });
 });
 
+/** the recommendation of a resource written as a calculation (the divisors are the coefficients of the module, or the system's where the module sets none) */
+function formulaOf(result: Api.Overprovision.Result | null | undefined): FormulaLine[] {
+  const params = props.detail?.params;
+  if (!result || !params) return [];
+  const w = (key: string) => p(key);
+  return recommendationLines(result, params, {
+    requests: w('formulaRequests'),
+    limits: w('formulaLimits'),
+    recommended: w('formulaRecommended'),
+    withFigures: w('formulaWithFigures'),
+    floorOom: w('formulaFloorOom'),
+    floorThrottle: w('formulaFloorThrottle'),
+    coefSource: w('formulaCoefSource'),
+    headroom: w('formulaHeadroom'),
+    use: ''
+  });
+}
+
 /**
  * The "?" beside an adjustment: what the word means, how the figure is worked out with the numbers put into it, the units and where the data comes from. The
  * figure is the one of the row, so "over-provisioned 300 mCPU" is explained by its own 4 cores, its 3.7 cores and the use that gave them.
  */
 function adjustHelp(row: RecRow): string[] {
-  const result = rec.value?.[row.resource] ?? null;
   const a = adjustmentOf(row.current, row.recommended);
   const meaning =
     row.status === null
@@ -363,7 +395,6 @@ function adjustHelp(row: RecRow): string[] {
     );
   const share = shareLines.value.find(line => line.key === row.resource);
   if (share) lines.push(share.text);
-  if (result?.formula) lines.push(p('adjHelpRecipe', { formula: result.formula }));
   lines.push(p('adjHelpUnits'), p('adjHelpSource', { period: recLabel.value }));
   return lines;
 }
@@ -827,6 +858,10 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                         <div class="help-pop">
                           <div class="font-medium">{{ p('adjHelpTitle') }}</div>
                           <div v-for="(line, index) in adjustHelp(row)" :key="index">{{ line }}</div>
+                          <FormulaView
+                            v-if="formulaOf(rec?.[row.resource]).length"
+                            :lines="formulaOf(rec?.[row.resource])"
+                          />
                         </div>
                       </IconTooltip>
                     </span>
@@ -919,7 +954,7 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                 <li v-for="reason in item.result.reasons" :key="reason">{{ p(`reason_${reason}`) }}</li>
                 <li v-if="!item.result.reasons.length">-</li>
               </ul>
-              <code v-if="item.result.formula" class="break-all opacity-80">{{ item.result.formula }}</code>
+              <FormulaView v-if="formulaOf(item.result).length" :lines="formulaOf(item.result)" />
             </div>
           </div>
         </NCollapseItem>

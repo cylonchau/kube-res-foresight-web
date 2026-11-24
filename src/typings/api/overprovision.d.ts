@@ -94,6 +94,14 @@ declare namespace Api {
     }
 
     /** the numbers of the verdict (shares are 0 to 1) */
+    interface ModuleCoefficients {
+      /** the capacity reserve coefficient in force (1 when the module sets none) and whether it is set */
+      capacity_reserve: number;
+      capacity_reserve_set: boolean;
+      headroom: number;
+      oom_uplift: number;
+    }
+
     interface Params {
       p90: Band;
       p95: Band;
@@ -174,6 +182,8 @@ declare namespace Api {
       workload: string;
       replicas: number;
       /** where the replicas now come from: what the workload is set to in Kubernetes (read by the operator), the replicas metric of Prometheus, or the newest sample stored of it; empty when there is none */
+      /** the coefficients of the module in module management (the card of the capacity reserve coefficient shows them) */
+      coefficients?: ModuleCoefficients;
       replicas_from?: 'kubernetes' | 'prometheus' | 'stored' | '';
       /** how many of them are ready (when they come from Kubernetes) */
       replicas_ready?: number;

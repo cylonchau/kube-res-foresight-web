@@ -159,6 +159,27 @@ function limitWords(view: ReplicaView | null, zh: boolean): string {
   return parts.join(zh ? '，' : ', ');
 }
 
+/** the coefficients of the module in module management, and the target shares the dashboard divides the use by (the module's own, else the system's) */
+function coefficientWords(detail: Api.Overprovision.Detail, zh: boolean): string {
+  const c = detail.coefficients;
+  const p = detail.params;
+  const share = (v?: number) => (v && v > 0 ? formatDecimal(v, 4) : '-');
+  const parts: string[] = [];
+  if (c)
+    parts.push(
+      zh
+        ? `容量保留系数 ${c.capacity_reserve_set ? formatDecimal(c.capacity_reserve, 4) : '未配置（按 1）'}、推荐值系数 ${formatDecimal(c.headroom, 4)}、OOM 保护系数 ${formatDecimal(c.oom_uplift, 4)}`
+        : `capacity reserve coefficient ${c.capacity_reserve_set ? formatDecimal(c.capacity_reserve, 4) : 'not set (1)'}, recommendation coefficient ${formatDecimal(c.headroom, 4)}, OOM protection coefficient ${formatDecimal(c.oom_uplift, 4)}`
+    );
+  if (p)
+    parts.push(
+      zh
+        ? `Requests 目标占比 P90 ${share(p.p90.target)}、P95 ${share(p.p95.target)}、P99 ${share(p.p99.target)}，Limits 余量 ${formatDecimal(p.limit_headroom, 4)}`
+        : `Requests target share P90 ${share(p.p90.target)}, P95 ${share(p.p95.target)}, P99 ${share(p.p99.target)}, Limits margin ${formatDecimal(p.limit_headroom, 4)}`
+    );
+  return (zh ? '模块的计算系数：' : 'coefficients of the module: ') + (parts.join(zh ? '；' : '; ') || '-');
+}
+
 /** what the question tells the model of the replicas the cluster has now */
 function replicaFacts(view: ReplicaView | null, zh: boolean): string {
   if (!view || view.current <= 0)
@@ -229,19 +250,21 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
         '5. 第一张表“当前配置与 AI 推荐配置对比”，五行，每个单元格只写一个数：“副本数（方案①）”写你推荐几个副本（Pod 配置不变）；“CPU Requests（方案②）”“CPU Limits（方案②）”“Memory Requests（方案②）”“Memory Limits（方案②）”写副本数不变时每个 Pod 的推荐值。七列：资源项、当前值（单 Pod）、当前值（全副本总和）、推荐值（单 Pod）、推荐值（全副本总和）、调整（超配、欠配或合理，副本数写增加或减少，带数量和比例）、依据（引用数据里的数字，每行从不同角度写：分位数、趋势或波动、约束、风险）。副本数行的当前值写当前副本数。没有当前值写“Prometheus 无数据”。表要窄，单元格写短句。',
         '6. 第二张表“AI 与平台推荐的差异”：行与第一张表一一对应，“项”写和第一张表同样的名称（带方案）；“平台推荐”写平台同一方案同一项的数（见最后一节），“AI 推荐”写第一张表同一行的推荐值，各只写一个数；不要写“主方案”“备选”，不要拿不同方案的数相比。一致写“一致”；不一致写明差异和原因。',
         '7. 其后用表格写“使用情况”和“判定”（状态、风险）；限流、OOM、JVM 只写有数据的项。状态单元格加 class：lv-bad（有风险或欠配）、lv-warn（超配或需要关注）、lv-ok（正常）、lv-info（仅信息），例如 <td class="lv-warn">超配</td>。',
-        '8. 直接写当前情况和数值，不写“下一步先核对”之类的引导语，不写“可能、大概、视情况”之类含糊的话，不写数据以外的内容。'
+        '8. 直接写当前情况和数值，不写“下一步先核对”之类的引导语，不写“可能、大概、视情况”之类含糊的话，不写数据以外的内容。',
+        '9. 公式和推导要排版，不要写成一段文字：每个公式放进 <div class="fx">，一步一行（每行一个 <div>），系数用 <span class="fx-c">0.8</span>、结果用 <span class="fx-r">3.76 cores</span> 标出，运算符两边留空格。推荐值是计算结果除以系数（÷ 0.8），不是乘。系数用下面“模块的计算系数”里的值，不要自己编。'
       ].join('\n')
     : [
-        `Analyse the resource use of the module ${who} over the last ${windowLabel} on your own and give your own recommended configuration and replicas (the last item in the brackets is the replicas now; the period is the recommendation period of the platform, it does not follow the chart window). All the data is measured by Prometheus.`,
+        `Analyse the resource use of the module ${who} over the last ${windowLabel} on your own and give your own recommended configuration and replicas (the last item in the brackets is the replicas now; the period is the recommendation period of the platform, not the chart window). All data is measured by Prometheus.`,
         'Rules:',
-        '1. Output HTML only: no Markdown, no code fence, no text before or after. This is a read-only analysis: change nothing.',
-        '2. Judge on your own: from the "measured data" (the quantiles of the use, peaks, OOM, throttling, JVM, the change of the replicas) reach your own conclusion and write the arithmetic. The "platform recommendation" is there to compare with: do not copy or re-write it; your figures may differ from it, but say why.',
-        `3. Give both ways: 1) the Pod stays, how many replicas are needed (the sum of the use of all the replicas / the Requests of a Pod / the target share); 2) the replicas stay, what the Requests and Limits of a Pod should be. Recommend changing the replicas first, and change the Pod only when the replicas cannot move, saying why.${bands ? ` The target share of the use of the Requests may be taken from ${bands} and changed on the data.` : ''}`,
-        '4. Safety, no unreasonable scale-in: the recommended replicas must stay within the constraints this module has in module management (below under "replica constraints": the least, the most, the most added or removed at a time); where it sets none use your own judgement and never go down to one; with OOM or CPU throttling remove no replica and lower no configuration; after a scale-in the P99 of one Pod must not come near its Limits; a peak that came once is no basis; be more careful with memory than with CPU.',
-        '5. The first table is "Current configuration vs AI recommended configuration" with five rows and one figure to a cell: "Replicas (way 1)" is how many replicas you recommend (the Pod stays); "CPU Requests (way 2)", "CPU Limits (way 2)", "Memory Requests (way 2)", "Memory Limits (way 2)" are the recommended figures of one Pod when the replicas stay. Seven columns: item, now (one Pod), now (all replicas), recommended (one Pod), recommended (all replicas), adjustment (over-provisioned, under-provisioned or reasonable; for the replicas add or remove, with the amount and the share), basis (quote the data, and write each row from another side: percentiles, trend or swing, constraints, risk). The Replicas row has the replicas now. Write "no data in Prometheus" where there is no current figure. Keep the table narrow: short phrases in the cells.',
-        '6. The second table is "AI vs platform recommendation": its rows are those of the first table one for one, the item named as there (with the way); "platform" is the platform figure of the same way and item (see the last section), "AI" is the recommended figure of the same row of the first table, one figure each; never write "main" or "alternative", never compare figures of different ways. Write "same" where they agree; where they differ the difference and the reason are required.',
-        '7. Then tables for "Use" and "Verdict" (status, risk); throttling, OOM and JVM only where there is data. Give the status cells a class: lv-bad (at risk or under-provisioned), lv-warn (over-provisioned or to watch), lv-ok (fine), lv-info (information only), for example <td class="lv-warn">over-provisioned</td>.',
-        '8. State the actual situation and the figures directly; no lead-ins such as "first check", no vague words (maybe, probably, depends), nothing beyond the data.'
+        '1. HTML only: no Markdown, code fence or text around it. Read-only: change nothing.',
+        '2. Judge on your own from the measured data (quantiles, peaks, OOM, throttling, JVM, replica changes) and show the arithmetic. The platform recommendation is only to compare with: do not copy it; differ from it where the data says so, and say why.',
+        `3. Give two ways: 1) the Pod stays, how many replicas (use of all replicas / Requests of a Pod / target share); 2) the replicas stay, the Requests and Limits of one Pod. Replicas first; change the Pod only when the replicas cannot move, and say why.${bands ? ` The target share of the use of the Requests may be taken from ${bands} and changed on the data.` : ''}`,
+        '4. No unreasonable scale-in: keep within the replica constraints below (the least, the most, the most per action; with none never go down to one); with OOM or throttling remove no replica and lower nothing; after a scale-in the P99 of a Pod must stay clear of its Limits; a peak that came once is no basis; be more careful with memory than CPU.',
+        '5. Table 1 "Current configuration vs AI recommended configuration", five rows, one figure to a cell: "Replicas (way 1)" = the replicas you recommend; "CPU Requests (way 2)", "CPU Limits (way 2)", "Memory Requests (way 2)", "Memory Limits (way 2)" = one Pod with the replicas kept. Seven columns: item, now (one Pod), now (all replicas), recommended (one Pod), recommended (all replicas), adjustment (over, under or reasonable; for replicas add or remove; amount and share), basis (quote the data; each row from another side). The Replicas row has the replicas now. No current figure: "no data in Prometheus". Short phrases.',
+        '6. Table 2 "AI vs platform recommendation": the rows of table 1, named alike; columns item, platform, AI, difference, reason; platform = the platform figure of the same way and item (last section), AI = the figure of the same row of table 1; never "main" or "alternative", never compare different ways. Agree: "same"; differ: the difference and the reason.',
+        '7. Then tables "Use" and "Verdict" (status, risk); throttling, OOM and JVM only with data. Status cells get a class lv-bad, lv-warn, lv-ok or lv-info, for example <td class="lv-warn">over-provisioned</td>.',
+        '8. State facts and figures directly; no lead-ins, no vague words, nothing beyond the data.',
+        '9. Typeset formulas: each in a <div class="fx">, one step to a <div>, a coefficient as <span class="fx-c">0.8</span>, a result as <span class="fx-r">3.76 cores</span>, spaces round the operators. A recommendation is the result divided by the coefficient (/ 0.8), never multiplied. Use only the coefficients under "coefficients of the module".'
       ].join('\n');
   const lines: string[] = [
     head,
@@ -249,24 +272,29 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
     replicaFacts(view, zh),
     zh
       ? `模块管理里这个模块的副本数约束：${limitWords(view, zh)}`
-      : `replica constraints of this module (module management): ${limitWords(view, zh)}`
+      : `replica constraints of this module (module management): ${limitWords(view, zh)}`,
+    coefficientWords(detail, zh)
   ];
   for (const r of [win?.cpu, win?.memory]) if (r) lines.push(...resourceLines(r, zh));
+  const extra: string[] = [];
   const metrics = detail.metrics ?? [];
   if (metrics.length) {
-    lines.push(zh ? '其他已配置的指标：' : 'Other metrics set up:');
+    extra.push(zh ? '其他已配置的指标：' : 'Other metrics set up:');
     for (const m of metrics) {
       const fmt = (v: number) => (m.unit === 'bytes' ? formatBytes(v, 2) : formatDecimal(v, 3));
-      lines.push(
+      extra.push(
         m.points
           ? `  ${m.name} (${m.group}): ${zh ? '最新' : 'latest'} ${fmt(m.latest)}, P90 ${fmt(m.p90)}, P95 ${fmt(m.p95)}, P99 ${fmt(m.p99)}, ${zh ? '最大' : 'max'} ${fmt(m.max)}`
           : `  ${m.name}: ${zh ? '已配置但窗口内没有数据' : 'set up but no data in the window'}`
       );
     }
   }
-  if (detail.jvm?.hints.length) lines.push(`${zh ? 'JVM 提示' : 'JVM hints'}: ${detail.jvm.hints.join(', ')}`);
+  if (detail.jvm?.hints.length) extra.push(`${zh ? 'JVM 提示' : 'JVM hints'}: ${detail.jvm.hints.join(', ')}`);
   // the platform's own figures go last and short: they are what the answer is compared with, and if the message is cut it is the comparison that is cut, not the data
-  lines.push(zh ? '平台推荐（仅供对照，不要照抄）：' : 'Platform recommendation (to compare with, do not copy):');
+  const platformHeader = zh
+    ? '平台推荐（仅供对照，不要照抄）：'
+    : 'Platform recommendation (to compare with, do not copy):';
+  lines.push(platformHeader);
   lines.push(
     zh
       ? `  方案①（Pod 配置不变）副本数：当前 ${view?.current || '-'}；平台推荐 ${view?.recommended || '-'}（${replicaWords(view, zh).text}）`
@@ -278,7 +306,14 @@ export function buildAnalysisQuestion(detail: Api.Overprovision.Detail, windowLa
         ? `  方案②（副本数不变）${row.label}：当前 单 Pod ${row.nowPod}；平台推荐 单 Pod ${row.pod}，全副本 ${row.total}；${row.adjust}`
         : `  Way 2 (the replicas stay) ${row.label}: now one Pod ${row.nowPod}; platform one Pod ${row.pod}, all replicas ${row.total}; ${row.adjust}`
     );
-  return lines.join('\n').slice(0, MAX_CHARS);
+  const withExtra = [
+    ...lines.slice(0, lines.indexOf(platformHeader)),
+    ...extra,
+    ...lines.slice(lines.indexOf(platformHeader))
+  ];
+  const full = withExtra.join('\n');
+  // too long: the other metrics go first (they are the least of it), the rules and the platform figures stay whole
+  return (full.length <= MAX_CHARS ? full : lines.join('\n')).slice(0, MAX_CHARS);
 }
 
 /** the rows the answer has to compare, current against recommended */
