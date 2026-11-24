@@ -3,9 +3,11 @@ import test from 'node:test';
 import {
   buildAnalysisQuestion,
   hasComparisonTable,
-  missingRecommendations,
-  recommendedFigures
+  mailTables,
+  recommendedFigures,
+  replicaWords
 } from './overprovision-ai.ts';
+import { replicaView } from './overprovision-replicas.ts';
 
 const GIB = 1024 ** 3;
 
@@ -90,7 +92,10 @@ test('the question carries the P90, the P95 and the P99 and says what the limit 
     text.includes('推荐值（单 Pod）') && text.includes('推荐值（全副本总和）') && text.includes('调整'),
     'the table has the recommendation of one Pod and of all the replicas'
   );
-  assert.ok(text.includes('平台推荐值'), 'the platform figures are given to be copied');
+  assert.ok(
+    text.includes('平台推荐（仅供对照，不要照抄）'),
+    'the platform figures are there to compare with, not to copy'
+  );
   assert.ok(text.includes('只读'), 'the question asks for an analysis and nothing else');
   assert.ok(
     text.includes('只输出 HTML') && text.includes('<td class="lv-warn">'),
@@ -127,16 +132,23 @@ test('a request or a limit Prometheus has no figure for is said so, not filled i
 });
 
 test('an answer without the four rows of the comparison is told from one with them', () => {
-  const rows = ['CPU Requests', 'CPU Limits', 'Memory Requests', 'Memory Limits']
+  const rows = ['Replicas', 'CPU Requests', 'CPU Limits', 'Memory Requests', 'Memory Limits']
     .map(name => `<tr><td>${name}</td></tr>`)
     .join('');
   assert.equal(hasComparisonTable(`<table>${rows}</table>`), true);
+  assert.equal(
+    hasComparisonTable('<td>CPU Requests</td><td>CPU Limits</td><td>Memory Requests</td><td>Memory Limits</td>'),
+    false,
+    'the replicas are part of the comparison'
+  );
   assert.equal(
     hasComparisonTable('<table><tr><td>CPU Requests</td></tr><tr><td>Memory Limits</td></tr></table>'),
     false
   );
   assert.equal(
-    hasComparisonTable('<td>cpu&nbsp;requests</td><td>CPU limits</td><td>Memory   Requests</td><td>memory limits</td>'),
+    hasComparisonTable(
+      '<td>副本数</td><td>cpu&nbsp;requests</td><td>CPU limits</td><td>Memory   Requests</td><td>memory limits</td>'
+    ),
     true
   );
 });
@@ -173,7 +185,7 @@ test('each row says how far the figure now is from the recommendation, with the 
   assert.equal(recommendedFigures(d, true)[0].adjust, '欠配 5 cores (125.0%)');
   assert.equal(recommendedFigures(d, false)[0].adjust, 'under-provisioned by 5 cores (125.0%)');
   const question = buildAnalysisQuestion(d, '7d', 'zh-CN');
-  assert.ok(question.includes('调整 欠配 5 cores (125.0%)'));
+  assert.ok(question.includes('；欠配 5 cores (125.0%)'));
 });
 
 test('the figures of the recommendation period are the ones that count, not those of the window of the page', () => {
@@ -185,11 +197,84 @@ test('the figures of the recommendation period are the ones that count, not thos
   assert.equal(recommendedFigures(d)[0].pod, '2 cores');
 });
 
-test('an answer that does not write the platform figures is told', () => {
+const plan = (over: Partial<Api.Overprovision.ReplicaPlan> = {}): Api.Overprovision.ReplicaPlan => ({
+  current: 4,
+  needed: 3,
+  raw: 3,
+  direction: 'in',
+  delta: -1,
+  share: 0.25,
+  binding: 'cpu',
+  resources: [],
+  primary: 'replicas',
+  reasons: [],
+  formula: 'cpu replicas = max(P95 3.3 / (4 x 85%) = 0.97)',
+  ...over
+});
+
+test('the AI is asked for its own conclusion on the measured data, and the platform recommendation is only there to compare with', () => {
   const d = detail();
-  const rows = recommendedFigures(d);
-  const good = rows.map(row => `<tr><td>${row.label}</td><td>${row.pod}</td><td>${row.total}</td></tr>`).join('');
-  assert.deepEqual(missingRecommendations(`<table>${good}</table>`, d), []);
-  const bad = `<table>${good.replace(rows[0].pod, '123456 foo')}</table>`;
-  assert.deepEqual(missingRecommendations(bad, d), ['CPU Requests']);
+  d.windows[0].replica_plan = plan();
+  d.replicas_from = 'prometheus';
+  d.replicas_min = 4;
+  d.replicas_max = 9;
+  const zh = buildAnalysisQuestion(d, '7d', 'zh-CN');
+  assert.ok(zh.includes('独立分析') && zh.includes('不得照抄'), 'the AI judges on its own');
+  assert.ok(zh.includes('优先推荐调整副本数'), 'the replicas come first');
+  assert.ok(
+    zh.includes('AI 与平台推荐的差异') && zh.includes('原因'),
+    'the differences from the platform are explained'
+  );
+  assert.ok(zh.includes('副本不低于 2') && zh.includes('不减副本'), 'no unreasonable scale-in');
+  assert.ok(
+    zh.includes('当前副本数 4（来自 Kubernetes 的实测，Prometheus），推荐周期内最少 4、最多 9'),
+    "the replicas now are the cluster's"
+  );
+  // the data comes before the platform figures, which come last and short
+  assert.ok(zh.indexOf('实测数据') < zh.indexOf('平台推荐（仅供对照'));
+  assert.ok(zh.includes('副本数：当前 4；平台推荐 3（减少 1 个副本（25.0%））'));
+  assert.ok(!zh.includes('逐字抄'), 'nothing says to copy the platform');
+  const en = buildAnalysisQuestion(d, '7d', 'en-US');
+  assert.ok(en.includes('on your own') && en.includes('do not copy'));
+  assert.ok(en.includes('AI vs platform recommendation'));
+});
+
+test('the replicas now are never stood in for by a forecast or a recommendation', () => {
+  const d = detail();
+  d.replicas = 0;
+  assert.ok(
+    buildAnalysisQuestion(d, '7d', 'zh-CN').includes('当前副本数：Prometheus 无数据（不要用预测或推荐值代替）')
+  );
+});
+
+test('the words and the colours of the replicas', () => {
+  const d = detail();
+  d.windows[0].replica_plan = plan();
+  assert.deepEqual(replicaWords(replicaView(d), true), { text: '减少 1 个副本（25.0%）', level: 'warn' });
+  d.windows[0].replica_plan = plan({ direction: 'out', delta: 2, needed: 6, share: 0.5 });
+  assert.deepEqual(replicaWords(replicaView(d), false), { text: 'add 2 replicas (50.0%)', level: 'bad' });
+  d.windows[0].replica_plan = plan({ direction: 'same', delta: 0, needed: 4, share: 0 });
+  assert.equal(replicaWords(replicaView(d), true).level, 'ok');
+  assert.equal(replicaWords(null, true).level, 'info');
+});
+
+test('the mail has the tables of the platform: the two ways and the current against the recommended configuration', () => {
+  const d = detail();
+  d.windows[0].replica_plan = plan();
+  const tables = mailTables(d, true);
+  assert.equal(tables.length, 2);
+  const [ways, configs] = tables;
+  assert.deepEqual(ways.columns.slice(0, 3), ['方案', '当前副本数', '推荐副本数']);
+  assert.equal(ways.rows.length, 2);
+  assert.equal(ways.rows[0][1].text, '4');
+  assert.equal(ways.rows[0][2].text, '3');
+  assert.equal(ways.rows[0][2].level, 'warn');
+  assert.ok(ways.rows[0][0].text.includes('优先'));
+  assert.equal(configs.rows.length, 4);
+  assert.deepEqual(
+    configs.rows.map(row => row[0].text),
+    ['CPU Requests', 'CPU Limits', 'Memory Requests', 'Memory Limits']
+  );
+  assert.equal(configs.rows[0][5].text, '超配 3 cores (75.0%)');
+  assert.equal(configs.rows[0][5].level, 'warn');
 });

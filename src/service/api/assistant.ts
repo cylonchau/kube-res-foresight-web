@@ -6,7 +6,12 @@ const base = '/api/v1/assistant';
 const silent = { 'X-Silent-Error': '1' };
 
 /** mails an answer of the assistant (the analysis of the resource dashboard) to the signed-in user: the address is the one of their account, never one sent with the request */
-export function fetchMailAssistantAnswer(body: { title: string; content: string }) {
+export function fetchMailAssistantAnswer(body: {
+  title: string;
+  content: string;
+  /** tables the page holds the figures of: the mail has them as tables, with their borders and colours, before the answer */
+  tables?: Array<{ caption: string; columns: string[]; rows: Array<Array<{ text: string; level?: string }>> }>;
+}) {
   return request<{ sent: number; to: string[]; failed?: string[] }>({
     url: `${base}/mail-me`,
     method: 'post',

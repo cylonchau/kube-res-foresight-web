@@ -62,6 +62,16 @@ const NOTES: Record<string, ConfigNote> = {
     name: '推荐：Limits 余量（百分比）',
     purpose: '推荐的 Limits = P99 使用量加上这个余量，并且不低于推荐的 Requests（0-300）。'
   },
+  'analysis.rec_min_replicas': {
+    name: '推荐：最少副本数',
+    purpose:
+      '推荐副本数不会低于这个数（1-100），所以缩容建议不会把应用缩到只剩一个 Pod。当前副本数比它还少的模块不会被提到这个数。'
+  },
+  'analysis.rec_max_scale_in_percent': {
+    name: '推荐：一次最多减少的副本比例（百分比）',
+    purpose:
+      '一次推荐最多拿掉现有副本的这个比例（5-100）：12 个副本、50% 时推荐最低 6 个，下一次分析再继续。CPU 被限流或内存出过 OOM 时不减副本。'
+  },
   'analysis.baseline_window_days': {
     name: '推荐分析周期（天）',
     purpose:
