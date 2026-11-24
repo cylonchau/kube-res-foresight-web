@@ -771,7 +771,7 @@ const local = {
       adjLimitsRaise: 'Needs raising by {amount}',
       schemeTitle: 'Replicas and the two ways to the recommendation',
       schemeHelp:
-        'The same use can be brought to its range in two ways, worked out and listed apart: 1. change the replicas, the Requests of a Pod stays: the sum of the use of all the replicas is divided by the Requests of a Pod (P90, P95 and P99 each by its own target share), the largest number is taken, and it is held by the least replicas, the share one step may take away, and no replica is taken away under OOM or throttling; 2. change the Pod, the replicas stay: the Requests and Limits of one Pod are recommended (the table "Requests / Limits: now and recommended" below). The replicas come first: they change no Pod configuration and the load is shared again by itself; the Pod configuration is what is recommended only when the replicas cannot move (they are at the least, the number needed is the one now, or OOM / throttling keeps them). The first way assumes the Pods share the load evenly and the use of a Pod goes the other way with the replicas; a part every Pod pays for (the heap of a JVM) does not, so read it with the JVM data.',
+        'The same use can be brought to its range in two ways, worked out and listed apart: 1. change the replicas, the Requests of a Pod stays: the sum of the use of all the replicas is divided by the Requests of a Pod (P90, P95 and P99 each by its own target share) and the largest number is taken; 2. change the Pod, the replicas stay: the Requests and Limits of one Pod are recommended (the table "Requests / Limits: now and recommended" below). The replicas way keeps to the constraints this module has in module management: its least and most replicas and the most replicas one scale-up or scale-down may add or remove (a module kept at a fixed number has no room), and no replica is taken away while the CPU is throttled or the memory was OOM-killed. The replicas come first: they change no Pod configuration and the load is shared again by itself; the Pod configuration is what is recommended only when the replicas cannot move (the module bounds them, the number needed is the one now, or OOM / throttling keeps them). The first way assumes the Pods share the load evenly and the use of a Pod goes the other way with the replicas; a part every Pod pays for (the heap of a JVM) does not, so read it with the JVM data.',
       colScheme: 'Way',
       colReplicasNow: 'Replicas now',
       colReplicasRec: 'Replicas recommended',
@@ -797,8 +797,10 @@ const local = {
       recReplicasHelp:
         'The replicas needed when every Pod keeps the Requests it has now, from the sum of the use of all the replicas over the recommendation period. It is worked out apart from the replicas now and never changes them.',
       replicasHelp:
-        'The replicas the cluster has now, from the replicas metric of the module (Prometheus reading what Kubernetes has), the newest sample. A forecast, a recommendation or an old result never stands in for it.',
-      replicasFromProm: 'measured by Prometheus · {time}',
+        'The replicas the workload has now: first the spec.replicas the operator read from Kubernetes a few minutes ago, else the replicas metric of the module (Prometheus, usually the ready replicas), else the newest measured sample the platform stored. A forecast, a recommendation or an old result never stands in for it.',
+      replicasFromK8s: 'Kubernetes (read by the operator) · {time} · ready {ready}',
+      replicasFromProm:
+        'measured by Prometheus · {time} (the ready replicas, which can be fewer than Kubernetes has set)',
       replicasRange: 'in the recommendation period: fewest {min}, most {max}',
       replicasStored: 'Prometheus gave no replicas; this is the newest measured sample the platform stored ({time})',
       replicasNone:
@@ -807,9 +809,10 @@ const local = {
         'The replicas now are not known: only the number needed is given, not whether it is more or fewer.',
       reason_replicas_no_total:
         'The use of all the replicas together is not known, so the replicas cannot be worked out.',
-      reason_replicas_floor: 'Held to the least replicas (a system parameter).',
+      reason_replicas_floor: 'Held to the least replicas set in module management.',
+      reason_replicas_ceiling: 'Held to the most replicas set in module management.',
       reason_replicas_step:
-        'One step takes away only a share of the replicas now (a system parameter): this goes that far, the next analysis goes on.',
+        'Held to the most replicas one action may add or remove, as module management sets: this goes that far, the next analysis goes on.',
       reason_replicas_limited:
         'The CPU was throttled or the memory was OOM-killed: the use understates the need, so no replica is taken away.',
       reason_replicas_limit:
