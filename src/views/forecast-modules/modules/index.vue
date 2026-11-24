@@ -200,6 +200,7 @@ function emptyForm() {
     rec_p95_target: 0,
     rec_p99_target: 0,
     rec_limit_guard: 0,
+    rec_sustain_minutes: 0,
     rec_cpu_request_headroom: 0,
     rec_memory_request_headroom: 0,
     rec_cpu_limit_headroom: 0,
@@ -286,20 +287,22 @@ const coefficientLines = computed(() => {
 });
 
 /** what the system settings say where a module leaves a share at 0: read once, shown in the examples of the "?" (0 = not read) */
-const system = reactive({ p90: 0, p95: 0, p99: 0, limitHeadroom: 0, limitGuard: 0 });
+const system = reactive({ p90: 0, p95: 0, p99: 0, limitHeadroom: 0, limitGuard: 0, sustain: 0 });
 async function loadSystemDefaults() {
   const keys = {
     p90: 'analysis.rec_p90_target_percent',
     p95: 'analysis.rec_p95_target_percent',
     p99: 'analysis.rec_p99_target_percent',
     limitHeadroom: 'analysis.rec_limit_headroom_percent',
-    limitGuard: 'analysis.rec_limit_guard_percent'
+    limitGuard: 'analysis.rec_limit_guard_percent',
+    sustain: 'analysis.rec_sustain_minutes'
   } as const;
   await Promise.all(
     (Object.keys(keys) as Array<keyof typeof keys>).map(async name => {
       const { data } = await fetchGetConfig(keys[name]);
       const value = Number(data?.config_value);
-      if (Number.isFinite(value) && value > 0) system[name] = value / 100;
+      // the percentages of the settings are shares; the sustain window is minutes
+      if (Number.isFinite(value) && value > 0) system[name] = name === 'sustain' ? value : value / 100;
     })
   );
 }
@@ -618,6 +621,7 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     rec_p95_target: form.rec_p95_target,
     rec_p99_target: form.rec_p99_target,
     rec_limit_guard: form.rec_limit_guard,
+    rec_sustain_minutes: form.rec_sustain_minutes,
     rec_cpu_request_headroom: form.rec_cpu_request_headroom,
     rec_memory_request_headroom: form.rec_memory_request_headroom,
     rec_cpu_limit_headroom: form.rec_cpu_limit_headroom,
@@ -1506,6 +1510,18 @@ onMounted(() => {
                 <ParamLabel :label="t('page.forecast.modules.coeffP99')" :doc="docOf('p99')" />
               </template>
               <NInputNumber v-model:value="form.rec_p99_target" :min="0" :max="3" :step="0.05" class="w-full" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.coeffSustain')" :doc="docOf('sustain')" />
+              </template>
+              <NInputNumber
+                v-model:value="form.rec_sustain_minutes"
+                :min="0"
+                :max="720"
+                :precision="0"
+                class="w-full"
+              />
             </NFormItem>
             <NFormItem>
               <template #label>

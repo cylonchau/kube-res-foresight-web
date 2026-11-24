@@ -31,6 +31,7 @@ export type ParamId =
   | 'cpuLimitHeadroom'
   | 'memoryLimitHeadroom'
   | 'limitGuard'
+  | 'sustain'
   | 'oomUplift'
   | 'oomWorkingSet'
   | 'oomLimit'
@@ -48,6 +49,7 @@ export interface DocForm {
   rec_p95_target: number;
   rec_p99_target: number;
   rec_limit_guard: number;
+  rec_sustain_minutes: number;
   rec_cpu_request_headroom: number;
   rec_memory_request_headroom: number;
   rec_cpu_limit_headroom: number;
@@ -68,7 +70,7 @@ export interface DocForm {
 export interface DocContext {
   t: (key: string, named?: Record<string, unknown>) => string;
   /** the system's share the percentile takes (0.8 = 80%) and the system's Limits margin and guard, for a parameter the module leaves at 0 */
-  system: { p90: number; p95: number; p99: number; limitHeadroom: number; limitGuard: number };
+  system: { p90: number; p95: number; p99: number; limitHeadroom: number; limitGuard: number; sustain: number };
 }
 
 const fx = (value: number, digits = 4) => formatDecimal(value, digits);
@@ -277,6 +279,46 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
             op(')'),
             eq,
             res(fx(Math.max(SAMPLE.peak, SAMPLE.use * (1 + h))))
+          )
+        ]
+      };
+    }
+    case 'sustain': {
+      const minutes = f.rec_sustain_minutes > 0 ? f.rec_sustain_minutes : ctx.system.sustain;
+      // a peak of one point of 5 minutes (4 cores) in a use of 2 cores, held for the window
+      const points = Math.max(Math.round(minutes / 5), 1);
+      const held = (4 + 2 * (points - 1)) / points;
+      return {
+        ...base,
+        formula: [
+          line(n('sustained'), name(n('sustainedUse')), eq, name(n('mean')), op('('), name(n('lastMinutes')), op(')'))
+        ],
+        example: [
+          line(
+            n('sampleNeed'),
+            op('('),
+            sample(4),
+            op('+'),
+            sample(2),
+            times,
+            num(String(points - 1)),
+            op(')'),
+            over,
+            num(String(points)),
+            eq,
+            res(`${fx(held)} ${t('page.forecast.params.n.cores')}`)
+          ),
+          line(
+            n('longRun'),
+            op('('),
+            sample(4),
+            times,
+            num(String(points)),
+            op(')'),
+            over,
+            num(String(points)),
+            eq,
+            res(`4 ${t('page.forecast.params.n.cores')}`)
           )
         ]
       };

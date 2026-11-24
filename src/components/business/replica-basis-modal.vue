@@ -8,6 +8,7 @@ import { type Caliber, configBasisLines } from '@/utils/config-basis';
 import { formatPercent } from '@/utils/format';
 import { type Level, directionLevel, replicaView } from '@/utils/overprovision-replicas';
 import { adjustmentOf, adjustmentText } from '@/utils/overprovision-verdict';
+import { name, num, op, res } from '@/utils/formula';
 import { replicaBasisLines } from '@/utils/replica-basis';
 
 defineOptions({ name: 'ReplicaBasisModal' });
@@ -78,40 +79,47 @@ const configWords = computed(() => ({
 
 // ---- the input: what was measured and what is configured, of one Pod and of all the replicas, with the unit written once in the head of each figure
 const replicas = computed(() => Math.max(props.detail?.replicas ?? 0, 0));
+interface InputRow {
+  key: string;
+  name: string;
+  scope: string;
+  p90: string;
+  p95: string;
+  p99: string;
+  /** the same percentiles of the raw points when the use is held for the sustain window (empty when it is not) */
+  raw: string[];
+  request: string;
+  limit: string;
+}
 const inputRows = computed(() => {
-  const rows: Array<{
-    key: string;
-    name: string;
-    scope: string;
-    p90: string;
-    p95: string;
-    p99: string;
-    request: string;
-    limit: string;
-  }> = [];
+  const rows: InputRow[] = [];
   for (const resource of ['cpu', 'memory'] as const) {
     const r = rec.value?.[resource];
     if (!r) continue;
     const unit = (v: number | undefined | null) => amountText(resource, v);
+    const held = r.sustained ?? r.usage;
     rows.push({
       key: `${resource}-pod`,
       name: resName(resource),
       scope: p('basisScopePod'),
-      p90: unit(r.usage.p90),
-      p95: unit(r.usage.p95),
-      p99: unit(r.usage.p99),
+      p90: unit(held.p90),
+      p95: unit(held.p95),
+      p99: unit(held.p99),
+      raw: r.sustained ? [unit(r.usage.p90), unit(r.usage.p95), unit(r.usage.p99)] : [],
       request: unit(r.request),
       limit: unit(r.limit)
     });
     if (r.total) {
       const pods = Math.max(podsOf(r.request, r.request_total, replicas.value), 1);
+      const heldAll = r.total_sustained ?? r.total;
       rows.push({
         key: `${resource}-all`,
         name: resName(resource),
         scope: p('basisScopeAll'),
-        p90: unit(r.total.p90),
-        p95: unit(r.total.p95),
-        p99: unit(r.total.p99),
+        p90: unit(heldAll.p90),
+        p95: unit(heldAll.p95),
+        p99: unit(heldAll.p99),
+        raw: r.total_sustained ? [unit(r.total.p90), unit(r.total.p95), unit(r.total.p99)] : [],
         request: unit(r.request_total > 0 ? r.request_total : r.request * pods),
         limit: unit(r.limit_total > 0 ? r.limit_total : r.limit * pods)
       });
@@ -271,6 +279,106 @@ const configBlocks = computed(() =>
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
 );
+/** the sustain window the percentiles are taken over (0 = the raw points) */
+const sustainMinutes = computed(() => rec.value?.cpu?.sustain_minutes || rec.value?.memory?.sustain_minutes || 0);
+
+/** what each symbol of the formulas is, with its unit and where it comes from: no figure of a formula is left without a source */
+const sources = computed(() => {
+  const d = props.detail;
+  if (!d) return [];
+  const queryName = (kind: string) => d.queries.find(q => q.kind === kind)?.name || p('basisSourceNone');
+  const specFrom =
+    d.pod_spec_from === 'kubernetes'
+      ? p('basisSpecKubernetes')
+      : d.pod_spec_from === 'estimated'
+        ? p('basisSpecEstimated')
+        : p('basisSourceNone');
+  const rows = [
+    {
+      name: p('basisTotalUse'),
+      unit: p('unitCoresBytes'),
+      source: p('basisSourceUse', {
+        cpu: queryName('cpu'),
+        memory: queryName('memory'),
+        window: rec.value?.label ?? '',
+        how: sustainMinutes.value > 0 ? p('basisSustainedHow', { n: sustainMinutes.value }) : p('basisRawHow')
+      })
+    },
+    { name: p('basisPodRequests'), unit: p('unitCoresBytes'), source: specFrom },
+    { name: p('basisPodLimits'), unit: p('unitCoresBytes'), source: specFrom },
+    {
+      name: p('basisReplicasRow'),
+      unit: p('basisReplicasUnit'),
+      source: p(`replicasFromName_${view.value?.from || 'none'}`)
+    }
+  ];
+  if (props.scheme === 'replicas')
+    rows.push({ name: p('basisRounding'), unit: p('basisReplicasUnit'), source: p('basisRoundingRule') });
+  return rows;
+});
+
+/** the larger of what the CPU and the memory ask for: the rule that makes the recommendation, written with the figures */
+const maxLines = computed(() => {
+  const needs = plan.value?.resources ?? [];
+  if (!needs.length) return [];
+  const parts = needs.flatMap((need, i) => [
+    ...(i ? [op(',')] : []),
+    name(resName(need.resource)),
+    num(`${need.needed} ${p('basisReplicasUnit')}`)
+  ]);
+  return [
+    {
+      label: p('basisMaxLabel'),
+      tokens: [
+        name(p('basisRecommended')),
+        op('='),
+        name('max'),
+        op('('),
+        ...parts,
+        op(')'),
+        op('='),
+        res(`${plan.value?.raw ?? 0} ${p('basisReplicasUnit')}`)
+      ]
+    }
+  ];
+});
+
+/** how long the use was above the recommended Requests and above the one it has now: what the recommendation still has to answer for */
+const exceedLines = computed(() =>
+  (['cpu', 'memory'] as const)
+    .map(resource => {
+      const r = rec.value?.[resource];
+      if (!r?.exceed_suggested) return '';
+      const e = r.exceed_suggested;
+      return p('basisExceed', {
+        r: resName(resource),
+        level: amountText(resource, e.level),
+        share: formatPercent(e.share, 1),
+        events: e.events,
+        longest: e.longest_minutes,
+        now: r.exceed_now ? formatPercent(r.exceed_now.share, 1) : '-'
+      });
+    })
+    .filter(Boolean)
+);
+const oom = computed(() => props.detail?.oom?.protection ?? null);
+/** Limits against Requests: the multiple now and the multiple recommended, so the two figures are never read apart */
+const limitRatio = computed(() =>
+  (['cpu', 'memory'] as const)
+    .map(resource => {
+      const r = rec.value?.[resource];
+      if (!r || !(r.request > 0) || !(r.limit > 0)) return '';
+      const pick = (field: 'suggested' | 'suggested_limit') =>
+        props.caliber === 'all' ? r[field] : (r.candidates?.find(c => c.name === props.caliber)?.[field] ?? 0);
+      if (!(pick('suggested') > 0)) return '';
+      return p('basisLimitRatio', {
+        r: resName(resource),
+        now: (r.limit / r.request).toFixed(2),
+        rec: (pick('suggested_limit') / pick('suggested')).toFixed(2)
+      });
+    })
+    .filter(Boolean)
+);
 const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleReplicas') : p('basisModalTitleConfig')));
 </script>
 
@@ -303,9 +411,18 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
             <tr v-for="row in inputRows" :key="row.key">
               <td class="font-medium">{{ row.name }}</td>
               <td>{{ row.scope }}</td>
-              <td>{{ row.p90 }}</td>
-              <td>{{ row.p95 }}</td>
-              <td>{{ row.p99 }}</td>
+              <td>
+                {{ row.p90 }}
+                <div v-if="row.raw.length" class="basis-raw">{{ p('basisRaw1', { v: row.raw[0] }) }}</div>
+              </td>
+              <td>
+                {{ row.p95 }}
+                <div v-if="row.raw.length" class="basis-raw">{{ p('basisRaw1', { v: row.raw[1] }) }}</div>
+              </td>
+              <td>
+                {{ row.p99 }}
+                <div v-if="row.raw.length" class="basis-raw">{{ p('basisRaw1', { v: row.raw[2] }) }}</div>
+              </td>
               <td>{{ row.request }}</td>
               <td>{{ row.limit }}</td>
             </tr>
@@ -325,6 +442,29 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
           </tbody>
         </NTable>
         <div class="basis-sub">{{ p('basisUnits') }}</div>
+        <div class="basis-sub">
+          {{ sustainMinutes > 0 ? p('basisSustained', { n: sustainMinutes }) : p('basisNotSustained') }}
+        </div>
+      </div>
+
+      <div class="basis-block">
+        <div class="basis-title">{{ p('basisSources') }}</div>
+        <NTable size="small" :bordered="true" :single-line="false" class="basis-table text-12px">
+          <thead>
+            <tr>
+              <th>{{ p('basisCoefName') }}</th>
+              <th>{{ p('basisCoefUnit') }}</th>
+              <th>{{ p('basisCoefSourceCol') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in sources" :key="row.name">
+              <td class="font-medium">{{ row.name }}</td>
+              <td>{{ row.unit }}</td>
+              <td>{{ row.source }}</td>
+            </tr>
+          </tbody>
+        </NTable>
       </div>
 
       <div class="basis-block">
@@ -372,8 +512,15 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
           <div class="basis-sub">{{ p('basisPodSpec', { request: item.request, limit: item.limit }) }}</div>
           <FormulaView :lines="item.lines" />
         </div>
+        <div v-if="maxLines.length" class="basis-block">
+          <div class="basis-title">{{ p('basisMaxTitle') }}</div>
+          <FormulaView :lines="maxLines" />
+        </div>
         <div v-if="plan?.binding" class="basis-note">
           {{ p('basisDecidedBy', { r: resName(plan.binding), n: plan.raw }) }}
+        </div>
+        <div v-if="plan && (plan.this_round ?? plan.needed) !== plan.needed" class="basis-note">
+          {{ p('basisPace', { needed: plan.needed, round: plan.this_round ?? plan.needed, current: plan.current }) }}
         </div>
 
         <div class="basis-block">
@@ -396,6 +543,15 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
           <div class="basis-sub">{{ p('basisFormulaNote') }}</div>
           <div class="basis-sub">{{ p('basisKeepsPod') }}</div>
         </div>
+        <div v-if="oom" class="basis-note">
+          {{
+            p('basisOom', {
+              f: amountText('memory', oom.floor),
+              n: oom.kills,
+              held: oom.replicas_held ? p('basisOomHeld') : ''
+            })
+          }}
+        </div>
       </template>
 
       <!-- the way where the Pod changes: the replicas stay -->
@@ -416,6 +572,21 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
             <li v-for="line in item.why" :key="line">{{ line }}</li>
           </ul>
         </div>
+        <div v-for="line in limitRatio" :key="line" class="basis-sub">{{ line }}</div>
+        <div v-for="line in exceedLines" :key="line" class="basis-sub">{{ line }}</div>
+        <div v-if="oom" class="basis-note">
+          {{
+            p('basisOomConfig', {
+              ws: amountText('memory', oom.working_set),
+              up: oom.uplift,
+              req: amountText('memory', oom.request),
+              f: amountText('memory', oom.floor),
+              n: oom.kills,
+              raised: oom.floor_raised ? p('basisOomRaised') : p('basisOomNotRaised')
+            })
+          }}
+        </div>
+        <div class="basis-sub">{{ p('basisHowPercentiles') }}</div>
         <div class="basis-sub">{{ p('basisKeepsReplicasNote') }}</div>
       </template>
     </div>
@@ -478,6 +649,11 @@ const title = computed(() => (props.scheme === 'replicas' ? p('basisModalTitleRe
 
 .basis-table {
   table-layout: auto;
+}
+
+.basis-raw {
+  font-size: 11px;
+  opacity: 0.6;
 }
 
 .basis-why {

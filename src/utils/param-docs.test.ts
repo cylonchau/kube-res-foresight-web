@@ -9,6 +9,7 @@ const form: DocForm = {
   rec_p95_target: 0.9,
   rec_p99_target: 0,
   rec_limit_guard: 0,
+  rec_sustain_minutes: 30,
   rec_cpu_request_headroom: 0.1,
   rec_memory_request_headroom: 0,
   rec_cpu_limit_headroom: 0,
@@ -25,7 +26,7 @@ const form: DocForm = {
 };
 const ctx = {
   t: (key: string) => key,
-  system: { p90: 0.8, p95: 0.85, p99: 1.1, limitHeadroom: 0.2, limitGuard: 0.9 }
+  system: { p90: 0.8, p95: 0.85, p99: 1.1, limitHeadroom: 0.2, limitGuard: 0.9, sustain: 30 }
 };
 const plain = (lines: Array<{ tokens: Array<{ text: string }> }>) =>
   lines.map(line => line.tokens.map(t => t.text).join(' '));
@@ -78,4 +79,19 @@ test('every document has all five parts', () => {
     assert.ok(doc.definition && doc.role && doc.scope, id);
     assert.ok(doc.formula.length > 0 && doc.example.length > 0, id);
   }
+});
+
+test('the sustain window holds a short peak and keeps a long one', () => {
+  const doc = paramDoc('sustain', form, ctx);
+  // 30 minutes of 5 minute points: one point of 4 cores among five of 2 cores is 14 / 6 = 2.3333, and six points of 4 cores stay 4
+  assert.match(plain(doc.example)[0], /= 2\.3333/);
+  assert.match(plain(doc.example)[1], /= 4/);
+  // not set on the module: the system's window
+  assert.match(
+    plain(
+      paramDoc('sustain', { ...form, rec_sustain_minutes: 0 }, { ...ctx, system: { ...ctx.system, sustain: 10 } })
+        .example
+    )[0],
+    /\( 4 \+ 2 × 1 \) ÷ 2 = 3/
+  );
 });

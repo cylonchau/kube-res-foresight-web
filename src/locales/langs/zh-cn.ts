@@ -550,6 +550,52 @@ const local = {
       openEffect: '效果报告'
     },
     overprovision: {
+      basisRaw1: '原始 {v}',
+      basisSustained:
+        '推荐用的是“持续使用量”：每个点是它之前 {n} 分钟使用量的平均值，小字是原始点的百分位。比 {n} 分钟短的峰值被摊开，持续超过 {n} 分钟的高负载照常算数；Limits 仍按原始峰值。',
+      basisNotSustained: '没有做持续处理（窗口为 0，或采样步长比窗口还粗）：百分位按原始点取。',
+      basisSources: '参数来源',
+      basisSourceNone: '没有读到',
+      basisSpecKubernetes:
+        'Kubernetes：operator 读到的 Pod 模板（各容器的 Requests、Limits 相加），不是 Prometheus 推算的',
+      basisSpecEstimated:
+        '由 Prometheus 的总和推算：最近 6 小时总和的中位数 ÷ 同期副本数的中位数。没有 operator 的上报，不是 Pod Spec，上报后以 Pod Spec 为准',
+      unitCoresBytes: 'CPU 核、内存 MiB／GiB',
+      basisSourceUse: '指标“{cpu}”（CPU）、“{memory}”（内存），全副本是所有 Pod 加起来；{window} 的百分位，{how}',
+      basisSustainedHow: '按 {n} 分钟的持续使用量',
+      basisRawHow: '按原始点',
+      basisRounding: '取整',
+      basisRoundingRule:
+        '每个资源算出的副本数向上取整（4.43 → 5），再取 CPU、内存里较大的一个；不少于 1 个，再经过模块的最小、最大副本数',
+      basisMaxTitle: '取 CPU、内存里需要更多的一个',
+      basisMaxLabel: '推荐副本数',
+      basisPace:
+        '推荐副本数是 {needed} 个。模块的“副本调整节奏”限制了一次动作最多增减的个数，所以下一次动作先到 {round} 个（现在 {current} 个），之后每次再动一步直到 {needed} 个。',
+      basisOom:
+        'OOM 保护：窗口内有 {n} 次 OOM，内存推荐不低于 {f}（被杀时的工作集 × OOM 保护系数，和现在的 Requests 取大）{held}。',
+      basisOomHeld: '；有 OOM 的模块不减副本',
+      basisOomConfig:
+        'OOM 保护：窗口内有 {n} 次 OOM。内存 Requests 不低于 max(被杀时的工作集 {ws} × OOM 保护系数 {up}, 现在的 Requests {req}) = {f}，{raised}。',
+      basisOomRaised: '它比按使用量算的需要高，推荐值就是这个下限',
+      basisOomNotRaised: '它没有超过按使用量算的需要，没有改变推荐值',
+      basisHowPercentiles:
+        '百分位怎么影响推荐：P90、P95、P99 各自用“持续使用量 ÷ 目标占比”算出一个 Requests，取最大的一个；占比越小推荐越大，P99 的占比可以大于 100%（短时超出 Requests 由 Limits 承担）。持续时间体现在持续使用量里：只有持续超过窗口的高负载才会抬高它。',
+      basisExceed:
+        '{r}：使用量超过推荐的 {level} 的时间占 {share}，分 {events} 段，最长连续 {longest} 分钟；超过现在的 Requests 的时间占 {now}。',
+      basisLimitRatio:
+        '{r}：Limits 是 Requests 的倍数，现在 {now} 倍，推荐 {rec} 倍（推荐 Limits = max(推荐 Requests, P99 × (1 + Limits 余量))，所以不会低于推荐 Requests）。',
+      replicasRowResource: '{r}（单 Pod 当前 Requests）',
+      repThisRound: '本次动作到',
+      repThisRoundNote: '单次最多 {step} 个，要 {rounds} 次到位',
+      schemeByReplicasNote: '口径：单 Pod 规格不变（{spec}），只调整副本数',
+      oomProtection: 'OOM 保护下限',
+      oomProtectionHelp:
+        '内存 Requests 不低于 max(被杀时的工作集 × OOM 保护系数, 现在的 Requests)，并且不减副本。它改变推荐的内存和副本数；OOM 评分不改。',
+      oomProtectionSub: '{n} 次 OOM，被杀时的工作集 {ws}，× {up}，{raised}',
+      oomProtectionRaised: '已抬高推荐值',
+      oomProtectionKept: '没有超过按使用量算的需要',
+      oomScoreHelp:
+        '100 × (1 − OOM 次数 × {weight})，最低 0。它是预测算法的内存评分：OOM 会扣算法的评分，影响平台跟随哪个算法，不改这个页面的推荐 Requests 和副本数。改推荐值的是“OOM 保护下限”卡片。',
       caliberLabel: '计算口径',
       caliberAll: '综合（取最大）',
       caliberAllColumn: '综合',
@@ -674,8 +720,6 @@ const local = {
       oomTimesSub: '共 {n} 个时间点，最近 {shown} 个：{list}',
       oomTimesNone: '窗口内没有发生 OOM',
       oomScore: 'OOM 评分',
-      oomScoreHelp:
-        '100 × (1 − OOM 次数 × {weight})，最低 0：OOM 越多评分越低。它是模块管理里“OOM 对评分的影响”的结果，不展示计算系数。',
       oomScoreSub: '每次 OOM 扣 {weight}',
       oomScoreOff: '模块没有启用“OOM 计入评分”',
       replicasDesired: '期望副本数',
@@ -900,7 +944,6 @@ const local = {
       colRecShort: '推荐值',
       schemeCpuReq: 'CPU Requests（单 Pod）',
       schemeMemReq: 'Memory Requests（单 Pod）',
-      schemeByReplicasNote: '每个 Pod 的 Requests 不变，只改副本数',
       repKept: '副本数不变',
       podKept: 'Pod 配置不变',
       basisTitle: '推荐副本数的依据',
@@ -1541,6 +1584,12 @@ const local = {
         part_scope: '适用范围',
         sample: '样例',
         n: {
+          sustained: '持续使用量',
+          sustainedUse: '持续使用量',
+          mean: '平均',
+          lastMinutes: '最近 N 分钟的使用量',
+          longRun: '持续一整个窗口',
+          cores: '核',
           recommended: '推荐值',
           recommendedValue: '推荐值',
           peak: '预测峰值',
@@ -1635,6 +1684,12 @@ const local = {
           role: '推荐内存 Limits = max(推荐内存 Requests, 内存的 P99 使用量 × (1 + 内存 Limits 余量))。',
           scope:
             '只作用于内存的推荐 Limits（资源大盘）。CPU Limits 用它自己的余量，两者分开算；准入时由“内存 limit 系数”从 Requests 推出的 Limits 不用它。'
+        },
+        sustain: {
+          def: '推荐 Requests 和副本数用的 P90、P95、P99，不是按原始点取，而是按“持续使用量”取：每个点是它之前这么多分钟使用量的平均值。0 跟随系统设置（系统管理 > 系统设置 > 资源分析与推荐）。',
+          role: '比窗口短的峰值被摊开，不会抬高长期配置；持续超过窗口的高负载仍然完整算数。例如 5 分钟的 4 核夹在 2 核的使用里，30 分钟窗口下约 2.3 核；4 核持续一小时，仍是 4 核。Limits 不受影响，仍按原始峰值。',
+          scope:
+            '资源大盘的推荐 Requests（CPU、内存）、按 Requests 折算的推荐副本数，以及使用量占 Requests 的比例的判定。采样步长比窗口还粗的数据不做持续处理。'
         },
         limitGuard: {
           def: '推荐副本数下，所有 Pod 的 P99 使用量总和最多可以占它们 Limits 总和的比例，范围 0.3 到 1；0 跟随系统设置（系统管理 > 系统设置 > 资源分析与推荐）。',
@@ -1756,6 +1811,7 @@ const local = {
         descPeriodsStrategy:
           '按周期和时间段给副本数（固定、至少、至多）和 CPU、内存设值，可以添加多个：每周重复的时段，或一次性的绝对时间；多个同时生效时按优先级处理。',
         sectionPeriodsStrategy: '时间周期策略',
+        coeffSustain: '持续时间窗口（分钟）',
         groupBase: '基础配置',
         groupBaseDesc: '模块是谁、读哪些数据、用哪些指标：模块信息、数据与预测周期、监控绑定。',
         groupCalc: '计算参数',

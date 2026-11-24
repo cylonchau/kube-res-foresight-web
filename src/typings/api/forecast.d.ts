@@ -310,6 +310,7 @@ declare namespace Api {
       rec_p95_target: number;
       rec_p99_target: number;
       rec_limit_guard: number;
+      rec_sustain_minutes: number;
       rec_cpu_request_headroom: number;
       rec_memory_request_headroom: number;
       rec_cpu_limit_headroom: number;
