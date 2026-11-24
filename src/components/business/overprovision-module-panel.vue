@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NButton, NCheckbox, NCollapse, NCollapseItem, NSkeleton, NSpin, NTable, NTag } from 'naive-ui';
+import {
+  NButton,
+  NCheckbox,
+  NCollapse,
+  NCollapseItem,
+  NRadioButton,
+  NRadioGroup,
+  NSkeleton,
+  NSpin,
+  NTable,
+  NTag
+} from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import OverprovisionCardWall, { type WallCard } from '@/components/business/overprovision-card-wall.vue';
 import OverprovisionLineChart, { type ChartSpec } from '@/components/business/overprovision-line-chart.vue';
@@ -11,16 +22,11 @@ import FormulaView from '@/components/common/formula-view.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { allText, amountText, podsOf, totalText } from '@/utils/amount';
 import { CHART_GROUPS, chartGroups, resetChartGroups } from '@/utils/chart-groups';
+import type { Caliber } from '@/utils/config-basis';
 import { formatDateTime } from '@/utils/date';
 import { type FormulaLine, recommendationLines } from '@/utils/formula';
 import { formatBytes, formatCores, formatDecimal, formatPercent } from '@/utils/format';
-import {
-  type Level,
-  directionLevel,
-  replicaDeltaParts,
-  replicaView,
-  schemeGroups
-} from '@/utils/overprovision-replicas';
+import { type Level, directionLevel, replicaDeltaParts, replicaView } from '@/utils/overprovision-replicas';
 import { adjustmentOf, adjustmentText, shareText } from '@/utils/overprovision-verdict';
 
 defineOptions({ name: 'OverprovisionModulePanel' });
@@ -196,10 +202,16 @@ const wall = computed<WallCard[]>(() => {
   const at = view?.at ? formatDateTime(view.at * 1000) : '';
   const subLines: string[] = [];
   if (d.replicas && view?.from === 'stored') subLines.push(p('replicasStored', { time: at }));
-  else if (d.replicas && view?.from === 'kubernetes')
+  else if (d.replicas && view?.from === 'kubernetes') {
     subLines.push(p('replicasFromK8s', { time: at, ready: view.ready }));
-  else if (d.replicas) subLines.push(p('replicasFromProm', { time: at }));
-  else subLines.push(p('replicasNone'));
+    if (d.replicas_updating) subLines.push(p('replicasRolling', { n: d.replicas_pods ?? 0 }));
+  } else if (d.replicas && view?.from === 'estimated') {
+    subLines.push(p('replicasEstimated', { latest: d.replicas_latest ?? 0 }));
+    if (d.replicas_why) subLines.push(p(`replicasWhy_${d.replicas_why}`));
+  } else if (d.replicas) {
+    subLines.push(p('replicasFromProm', { time: at }));
+    if (d.replicas_why) subLines.push(p(`replicasWhy_${d.replicas_why}`));
+  } else subLines.push(p('replicasNone'));
   if (d.replicas && view && view.max > 0 && view.min > 0)
     subLines.push(p('replicasRange', { min: view.min, max: view.max }));
   cards.push({
@@ -208,7 +220,7 @@ const wall = computed<WallCard[]>(() => {
     help: p('replicasHelp'),
     value: d.replicas ? String(d.replicas) : '-',
     sub: subLines.join(' · '),
-    level: !d.replicas ? 'neutral' : view?.from === 'stored' ? 'warn' : 'neutral'
+    level: !d.replicas ? 'neutral' : view?.from === 'stored' || view?.from === 'estimated' ? 'warn' : 'neutral'
   });
   // what the workload is set to and what runs are told apart: a Pod that is starting or failing is not ready, and no history of Prometheus is counted into either
   if (view?.from === 'kubernetes' && view.ready >= 0)
@@ -219,6 +231,14 @@ const wall = computed<WallCard[]>(() => {
       value: String(view.ready),
       sub: view.ready < d.replicas ? p('replicasNotReady', { n: d.replicas - view.ready }) : undefined,
       level: view.ready < d.replicas ? 'warn' : 'good'
+    });
+  if (view?.from === 'kubernetes')
+    cards.push({
+      key: 'replicasAbnormal',
+      label: p('replicasAbnormal'),
+      help: p('replicasAbnormalHelp'),
+      value: String(d.replicas_abnormal ?? 0),
+      level: (d.replicas_abnormal ?? 0) > 0 ? 'warn' : 'good'
     });
   // the capacity reserve coefficient of the module, as module management has it (it is not written here): a recommendation is the need divided by it
   if (coefficients)
@@ -333,30 +353,27 @@ const recRows = computed<RecRow[]>(() => {
   }
   return rows;
 });
-/** with no recommendation at all (too little data) the table is the figures now and their total, nothing more */
-const hasRecommendation = computed(() => recRows.value.some(row => row.recommended > 0));
 /** the figures are the ones of the spec and of the platform, as they are: the Requests of 4 cores is "4 cores", never "5" */
 const cellNow = (row: RecRow) => amountText(row.resource, row.current);
 const cellNowTotal = (row: RecRow) => allText(row.resource, row.current, row.currentTotal, replicas.value);
 const cellRec = (row: RecRow) => amountText(row.resource, row.recommended);
-const cellRecTotal = (row: RecRow) => totalText(row.resource, row.recommended, row.pods);
 
 /** how the figure now stands against the recommended one: how much of it is more (or less) than the use needs, and the share of the figure that is */
 interface AdjustCell {
   text: string;
   type: 'default' | 'success' | 'warning' | 'error' | 'info';
 }
-function cellAdjust(row: RecRow): AdjustCell {
-  const a = adjustmentOf(row.current, row.recommended);
+function cellAdjust(row: RecRow, value = row.recommended, byVerdict = true): AdjustCell {
+  const a = adjustmentOf(row.current, value);
   if (!a) return { text: '-', type: 'default' };
   const amount = adjustmentText(row.resource, a);
-  if (row.status === 'limited') return { text: p('adjLimited'), type: 'info' };
+  if (byVerdict && row.status === 'limited') return { text: p('adjLimited'), type: 'info' };
   if (a.direction === 'same') return { text: p('adjSame'), type: 'success' };
   if (row.status === null)
     return a.direction === 'over'
       ? { text: p('adjLimitsLower', { amount }), type: 'warning' }
       : { text: p('adjLimitsRaise', { amount }), type: 'error' };
-  if (row.status === 'ok')
+  if (byVerdict && row.status === 'ok')
     return a.direction === 'over'
       ? { text: p('adjOkCouldGive', { amount }), type: 'success' }
       : { text: p('adjOkAbove', { amount }), type: 'success' };
@@ -438,42 +455,120 @@ function adjustHelp(row: RecRow): string[] {
   return lines;
 }
 
-/** the table of the two ways: for each way its three items, one row each, so the table is as wide as the page and no wider */
-interface SchemeCell {
-  key: string;
-  rowKey: string;
-  label: string;
-  now: string;
-  rec: string;
-  adjust: string;
-  level: Level;
-}
-const schemeLabel = (item: 'replicas' | 'cpu' | 'memory') =>
-  item === 'replicas' ? p('configReplicas') : item === 'cpu' ? p('schemeCpuReq') : p('schemeMemReq');
-const scheme = computed(() =>
-  schemeGroups(props.detail).map(group => ({
-    key: group.key,
-    first: group.first,
-    // a way lists only what it changes: the replicas for the first, the Requests of a Pod for the second; what it keeps is one line of text
-    cells: group.items
-      .filter(item => (group.key === 'replicas' ? item.item === 'replicas' : item.item !== 'replicas'))
-      .map<SchemeCell>(item => {
-        const key = `${group.key}-${item.item}`;
-        const base = { key, label: schemeLabel(item.item), now: item.now, rec: item.rec, rowKey: `${item.item}-req` };
-        if (item.item === 'replicas')
-          return { ...base, adjust: replicaAdjust.value.text, level: replicaAdjust.value.level };
-        const row = recRows.value.find(x => x.key === `${item.item}-req`);
-        const cell = row ? cellAdjust(row) : null;
-        return { ...base, adjust: cell?.text ?? '-', level: item.level };
-      })
-  }))
-);
-/** the row of the Requests a cell of the second way stands for: its "?" is the one of the table of the Requests and Limits */
-const rowOf = (key: string) => recRows.value.find(row => row.key === key);
-/** the window of the calculation of the replicas: the basis of the recommended count, one step to a line */
+// ---- the two ways, each in a block of its own: for every item the figure now, what each percentile asks of it alone, the three together and the adjustment of the caliber chosen
+
+/** the caliber chosen: the three percentiles together (the largest need decides) or one of them alone */
+const caliber = ref<Caliber>('all');
+const CALIBERS = ['P90', 'P95', 'P99'] as const;
+const caliberOptions = computed(() => [
+  { label: p('caliberAll'), value: 'all' as Caliber },
+  ...CALIBERS.map(name => ({ label: name, value: name as Caliber }))
+]);
+const COLUMNS: Caliber[] = ['P90', 'P95', 'P99', 'all'];
+
+/** the window of the calculation: the basis of the way that was asked for */
 const basisVisible = ref(false);
+const basisScheme = ref<'replicas' | 'config'>('replicas');
+function openBasis(scheme: 'replicas' | 'config') {
+  basisScheme.value = scheme;
+  basisVisible.value = true;
+}
 const replicaPlan = computed(() => (props.detail?.recommend ?? props.detail?.windows[0])?.replica_plan ?? null);
 const basisAvailable = computed(() => Boolean(replicaPlan.value?.resources?.length));
+
+interface PlanRow {
+  key: string;
+  label: string;
+  now: string;
+  cells: Record<Caliber, string>;
+  /** the percentile whose figure decides the row (a Requests row) */
+  decides: string;
+  adjust: AdjustCell;
+  strong: boolean;
+  /** the Requests or Limits row the "?" of the adjustment explains */
+  row?: RecRow;
+}
+const cellsOf = (fn: (c: Caliber) => string): Record<Caliber, string> => ({
+  all: fn('all'),
+  P90: fn('P90'),
+  P95: fn('P95'),
+  P99: fn('P99')
+});
+
+/** the way where the replicas change: what each percentile asks of the replicas for the CPU and for the memory, and the count the three together and the bounds of the module give */
+const replicaRows = computed<PlanRow[]>(() => {
+  const plan = replicaPlan.value;
+  const view = repView.value;
+  if (!plan || !view) return [];
+  const planOf = (c: Caliber) => (c === 'all' ? plan : (plan.by_caliber?.[c] ?? null));
+  const count = (n?: number) => (n && n > 0 ? p('repCount', { n }) : '-');
+  const rows: PlanRow[] = [];
+  for (const resource of ['cpu', 'memory'] as Res[]) {
+    if (!plan.resources.some(need => need.resource === resource)) continue;
+    rows.push({
+      key: `need-${resource}`,
+      label: p('replicasNeedBy', { r: resName(resource) }),
+      now: '-',
+      cells: cellsOf(c => count(planOf(c)?.resources.find(need => need.resource === resource)?.needed)),
+      decides: plan.binding === resource ? 'all' : '',
+      adjust: { text: '-', type: 'default' },
+      strong: false
+    });
+  }
+  const chosen = planOf(caliber.value);
+  let adjust: AdjustCell = { text: p('repNoPlan'), type: 'info' };
+  if (chosen && chosen.needed > 0) {
+    if (view.current <= 0) adjust = { text: p('repUnknown'), type: 'info' };
+    else {
+      const delta = chosen.needed - view.current;
+      const parts = { n: Math.abs(delta), share: formatPercent(Math.abs(delta) / view.current, 1) };
+      const level = directionLevel(delta === 0 ? 'same' : delta > 0 ? 'out' : 'in');
+      adjust = {
+        text: delta === 0 ? p('repSame') : delta > 0 ? p('repOut', parts) : p('repIn', parts),
+        type: LEVEL_TAG[level]
+      };
+    }
+  }
+  rows.push({
+    key: 'final',
+    label: p('repRecommendedRow'),
+    now: view.current > 0 ? p('repCount', { n: view.current }) : '-',
+    cells: cellsOf(c => count(planOf(c)?.needed)),
+    decides: '',
+    adjust,
+    strong: true
+  });
+  return rows;
+});
+
+/** the way where the Pod changes: the Requests and the Limits of a Pod (or of all the replicas, as the page is set) that each percentile asks for alone, and the three together */
+const configRows = computed<PlanRow[]>(() => {
+  const total = props.basis === 'total';
+  return recRows.value
+    .filter(row => row.recommended > 0 || row.current > 0)
+    .map<PlanRow>(row => {
+      const r = rec.value?.[row.resource];
+      const isRequests = row.status !== null;
+      const field = isRequests ? 'suggested' : 'suggested_limit';
+      const valueOf = (c: Caliber) =>
+        c === 'all' ? row.recommended : (r?.candidates?.find(x => x.name === c)?.[field] ?? 0);
+      const show = (v: number) => (total ? totalText(row.resource, v, row.pods) : amountText(row.resource, v));
+      const chosen = valueOf(caliber.value);
+      return {
+        key: row.key,
+        label: row.label,
+        now: total ? cellNowTotal(row) : cellNow(row),
+        cells: cellsOf(c => (valueOf(c) > 0 ? show(valueOf(c)) : '-')),
+        decides: isRequests ? (r?.candidates?.find(x => x.decides)?.name ?? '') : '',
+        adjust: caliber.value === 'all' ? cellAdjust(row) : cellAdjust(row, chosen, false),
+        strong: false,
+        row
+      };
+    });
+});
+const hasPlans = computed(() => replicaRows.value.length > 0 || configRows.value.length > 0);
+/** what to change first: the replicas, or (when they cannot do it) the Pod */
+const firstScheme = computed(() => repView.value?.primary ?? 'none');
 
 // ---- the quantiles, with the samples they are made of
 
@@ -768,151 +863,101 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 
       <div v-if="!results.length" class="text-13px opacity-70">{{ p('noData') }}</div>
 
-      <!-- the two ways to the recommendation, each in a block of its own: the replicas change (the Pod stays) or the Pod changes (the replicas stay) -->
-      <div v-if="scheme.length" class="flex-col gap-6px">
-        <HelpLabel :label="p('schemeTitle')" :help="p('schemeHelp')" class="text-13px font-medium" />
-        <div class="plan-grid">
-          <div v-for="group in scheme" :key="group.key" class="plan-card">
+      <!-- the two ways to the recommendation, one above the other: the replicas change (the Pod stays), or the Pod changes (the replicas stay); the percentiles of each side by side -->
+      <div v-if="hasPlans" class="flex-col gap-8px">
+        <div class="flex flex-wrap items-center gap-10px">
+          <HelpLabel :label="p('schemeTitle')" :help="p('schemeHelp')" class="text-13px font-medium" />
+          <span class="text-12px opacity-70">{{ p('caliberLabel') }}</span>
+          <NRadioGroup v-model:value="caliber" size="small">
+            <NRadioButton v-for="option in caliberOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </NRadioButton>
+          </NRadioGroup>
+          <IconTooltip placement="top">
+            <div class="help-pop">{{ p('caliberHelp') }}</div>
+          </IconTooltip>
+        </div>
+
+        <template v-for="way in ['replicas', 'config'] as const" :key="way">
+          <div v-if="(way === 'replicas' ? replicaRows : configRows).length" class="plan-card">
             <div class="plan-head">
-              <span class="font-medium">
-                {{ group.key === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}
-              </span>
-              <NTag v-if="group.first" size="tiny" :bordered="false" type="primary">{{ p('schemeFirst') }}</NTag>
+              <span class="font-medium">{{ way === 'replicas' ? p('schemeByReplicas') : p('schemeByConfig') }}</span>
+              <NTag v-if="firstScheme === way" size="tiny" :bordered="false" type="primary">
+                {{ p('schemeFirst') }}
+              </NTag>
               <IconTooltip placement="top">
                 <div class="help-pop">
-                  <div>{{ group.key === 'replicas' ? p('schemeDetailReplicas') : p('schemeDetailConfig') }}</div>
+                  <div>{{ way === 'replicas' ? p('schemeDetailReplicas') : p('schemeDetailConfig') }}</div>
                   <div class="opacity-70">{{ p('schemeLegend') }}</div>
                 </div>
               </IconTooltip>
+              <span class="plan-note">
+                {{ way === 'replicas' ? p('schemeByReplicasNote') : p('schemeByConfigNote', { n: replicas || '-' }) }}
+              </span>
               <NButton
-                v-if="group.key === 'replicas' && basisAvailable"
+                v-if="way === 'config' || basisAvailable"
                 size="tiny"
                 quaternary
                 type="primary"
                 class="ml-auto"
-                @click="basisVisible = true"
+                @click="openBasis(way)"
               >
                 {{ p('basisOpen') }}
               </NButton>
             </div>
-            <div class="plan-note">
-              {{ group.key === 'replicas' ? p('schemeByReplicasNote') : p('schemeByConfigNote') }}
-              <template v-if="group.key === 'config' && repView?.primary === 'config'">
-                · {{ p('schemeConfigFirst') }}
-              </template>
-            </div>
-            <NTable size="small" :bordered="true" :single-line="false" class="rec plan text-12px">
-              <colgroup>
-                <col style="width: 24%" />
-                <col style="width: 22%" />
-                <col style="width: 22%" />
-                <col style="width: 32%" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>{{ p('colSchemeItem') }}</th>
-                  <th>{{ p('colCurrent') }}</th>
-                  <th class="key">{{ p('colRecShort') }}</th>
-                  <th>{{ p('colAdjust') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="cell in group.cells" :key="cell.key">
-                  <td>{{ cell.label }}</td>
-                  <td>{{ cell.now }}</td>
-                  <td class="key">{{ cell.rec }}</td>
-                  <td>
-                    <span class="inline-flex items-center gap-4px">
-                      <NTag size="small" :bordered="false" :type="LEVEL_TAG[cell.level]">{{ cell.adjust }}</NTag>
-                      <IconTooltip v-if="group.key === 'config' && rowOf(cell.rowKey)" placement="top">
-                        <div class="help-pop">
-                          <div class="font-medium">{{ p('adjHelpTitle') }}</div>
-                          <div v-for="(line, index) in adjustHelp(rowOf(cell.rowKey)!)" :key="index">{{ line }}</div>
-                          <FormulaView
-                            v-if="formulaOf(rec?.[rowOf(cell.rowKey)!.resource]).length"
-                            :lines="formulaOf(rec?.[rowOf(cell.rowKey)!.resource])"
-                          />
-                        </div>
-                      </IconTooltip>
-                      <NButton
-                        v-else-if="group.key === 'replicas' && basisAvailable"
+            <div class="table-scroll">
+              <NTable size="small" :bordered="true" :single-line="false" class="rec plan text-12px">
+                <thead>
+                  <tr>
+                    <th>{{ p('colSchemeItem') }}</th>
+                    <th>{{ p('colCurrent') }}</th>
+                    <th v-for="c in COLUMNS" :key="c" :class="{ sel: caliber === c }">
+                      {{ c === 'all' ? p('caliberAllColumn') : c }}
+                    </th>
+                    <th>{{ p('colAdjust') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in way === 'replicas' ? replicaRows : configRows" :key="item.key">
+                    <td :class="{ 'font-medium': item.strong }">{{ item.label }}</td>
+                    <td>{{ item.now }}</td>
+                    <td
+                      v-for="c in COLUMNS"
+                      :key="c"
+                      :class="{ sel: caliber === c, key: item.strong && caliber === c }"
+                    >
+                      {{ item.cells[c] }}
+                      <NTag
+                        v-if="item.decides && (item.decides === c || (item.decides === 'all' && c === 'all'))"
                         size="tiny"
-                        quaternary
-                        type="primary"
-                        @click="basisVisible = true"
+                        :bordered="false"
+                        type="info"
                       >
-                        {{ p('basisShort') }}
-                      </NButton>
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </NTable>
-          </div>
-        </div>
-        <ReplicaBasisModal v-model:show="basisVisible" :detail="detail" />
-      </div>
-
-      <!-- Requests and Limits: now, and what the use supports for one Pod and for all the replicas -->
-      <div v-if="recRows.length" class="flex-col gap-4px">
-        <HelpLabel :label="p('recTitle')" :help="p('recHelp')" class="text-13px font-medium" />
-        <div v-if="replicas > 0" class="text-12px opacity-60">{{ p('fixedReplicasNote', { n: replicas }) }}</div>
-        <div class="table-scroll">
-          <NTable size="small" :bordered="true" :single-line="false" class="rec text-12px">
-            <thead>
-              <tr>
-                <th>{{ p('colItem') }}</th>
-                <th>{{ p('colNowPod') }}</th>
-                <th>{{ p('colNowTotal') }}</th>
-                <template v-if="hasRecommendation">
-                  <th class="key">{{ p('colRecPod') }}</th>
-                  <th class="key">{{ p('colRecTotal') }}</th>
-                  <th><HelpLabel :label="p('colAdjust')" :help="p('colAdjustHelp')" /></th>
-                </template>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in recRows" :key="row.key">
-                <td class="font-medium">{{ row.label }}</td>
-                <td :title="row.current > 0 ? p('fromPrometheus') : row.whyNoCurrent">
-                  <span :class="{ 'opacity-60': row.current <= 0 }">{{ cellNow(row) }}</span>
-                </td>
-                <td :title="row.current > 0 && replicas <= 0 ? p('noReplicas') : row.whyNoCurrent">
-                  <span :class="{ 'opacity-60': cellNowTotal(row) === '-' }">{{ cellNowTotal(row) }}</span>
-                </td>
-                <template v-if="hasRecommendation">
-                  <td class="key" :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
-                    <span :class="{ 'opacity-60': cellRec(row) === '-' }">{{ cellRec(row) }}</span>
-                  </td>
-                  <td
-                    class="key"
-                    :title="row.recommended > 0 && replicas <= 0 ? p('noReplicas') : row.whyNoRecommended"
-                  >
-                    <span :class="{ 'opacity-60': cellRecTotal(row) === '-' }">{{ cellRecTotal(row) }}</span>
-                  </td>
-                  <td :title="row.recommended > 0 ? undefined : row.whyNoRecommended">
-                    <span class="inline-flex items-center gap-4px">
-                      <NTag size="small" :bordered="false" :type="cellAdjust(row).type">
-                        {{ cellAdjust(row).text }}
+                        {{ p('basisDecides') }}
                       </NTag>
-                      <IconTooltip placement="top">
-                        <div class="help-pop">
-                          <div class="font-medium">{{ p('adjHelpTitle') }}</div>
-                          <div v-for="(line, index) in adjustHelp(row)" :key="index">{{ line }}</div>
-                          <FormulaView
-                            v-if="formulaOf(rec?.[row.resource]).length"
-                            :lines="formulaOf(rec?.[row.resource])"
-                          />
-                        </div>
-                      </IconTooltip>
-                    </span>
-                  </td>
-                </template>
-              </tr>
-            </tbody>
-          </NTable>
-        </div>
-        <div v-for="line in shareLines" :key="line.key" class="text-12px opacity-75">{{ line.text }}</div>
+                    </td>
+                    <td>
+                      <span v-if="item.adjust.text !== '-'" class="inline-flex items-center gap-4px">
+                        <NTag size="small" :bordered="false" :type="item.adjust.type">{{ item.adjust.text }}</NTag>
+                        <IconTooltip v-if="item.row && caliber === 'all'" placement="top">
+                          <div class="help-pop">
+                            <div class="font-medium">{{ p('adjHelpTitle') }}</div>
+                            <div v-for="(line, index) in adjustHelp(item.row)" :key="index">{{ line }}</div>
+                          </div>
+                        </IconTooltip>
+                      </span>
+                      <span v-else class="opacity-60">-</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </NTable>
+            </div>
+            <template v-if="way === 'config'">
+              <div v-for="line in shareLines" :key="line.key" class="text-12px opacity-75">{{ line.text }}</div>
+            </template>
+          </div>
+        </template>
+        <ReplicaBasisModal v-model:show="basisVisible" :detail="detail" :scheme="basisScheme" :caliber="caliber" />
       </div>
 
       <OverprovisionCardWall v-if="wall.length" :cards="wall" />
@@ -1028,12 +1073,6 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 </template>
 
 <style scoped>
-.plan-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-  gap: 12px;
-}
-
 .plan-card {
   display: grid;
   align-content: start;
@@ -1046,7 +1085,8 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 
 .plan-head {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
 }
 
@@ -1054,6 +1094,11 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
   font-size: 12px;
   line-height: 18px;
   opacity: 0.75;
+}
+
+.rec :deep(th.sel),
+.rec :deep(td.sel) {
+  background: rgba(32, 128, 240, 0.08);
 }
 
 .chart-filter {

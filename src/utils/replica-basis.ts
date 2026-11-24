@@ -17,6 +17,10 @@ export interface ReplicaBasisWords {
   coefSource: string;
   guardSource: string;
   limitGuard: string;
+  /** "Requests of one Pod", "Limits of one Pod" and the unit of a count of Pods, so a figure of cores, a share and a number of replicas are never taken for each other */
+  podRequests: string;
+  podLimits: string;
+  replicasUnit: string;
 }
 
 export function replicaBasisLines(
@@ -24,22 +28,25 @@ export function replicaBasisLines(
   params: Api.Overprovision.Params,
   w: ReplicaBasisWords
 ): FormulaLine[] {
+  // a plan of one percentile alone counts that one only (the parts say it); the three together count all of them
   const resource = need.resource === 'memory' ? 'memory' : 'cpu';
   const show = (v: number) => amountText(resource, v);
   const fx = (v: number) => formatDecimal(v, 2);
-  const lines: FormulaLine[] = need.parts.map(part => ({
+  const counted = need.parts.filter(part => part.counted !== false);
+  const lines: FormulaLine[] = counted.map(part => ({
     label: part.name,
     tokens: [
       name(w.totalUse),
       num(show(part.total)),
       op('÷'),
       op('('),
+      name(w.podRequests),
       num(show(need.request)),
       op('×'),
       coef(formatPercent(part.target, 0), w.coefSource),
       op(')'),
       op('='),
-      res(fx(part.needed))
+      res(`${fx(part.needed)} ${w.replicasUnit}`)
     ]
   }));
   const guard = params.peak_near_limit;
@@ -52,16 +59,17 @@ export function replicaBasisLines(
         num(show(p99)),
         op('÷'),
         op('('),
+        name(w.podLimits),
         num(show(need.limit)),
         op('×'),
         coef(formatPercent(guard, 0), w.guardSource),
         op(')'),
         op('='),
-        res(fx(need.limit_needed))
+        res(`${fx(need.limit_needed)} ${w.replicasUnit}`)
       ]
     });
   }
-  const values = [...need.parts.map(part => part.needed), ...(need.limit_needed > 0 ? [need.limit_needed] : [])];
+  const values = [...counted.map(part => part.needed), ...(need.limit_needed > 0 ? [need.limit_needed] : [])];
   lines.push({
     label: w.result,
     tokens: [
@@ -74,7 +82,7 @@ export function replicaBasisLines(
       op(')'),
       op('⌉'),
       op('='),
-      res(String(need.needed))
+      res(`${need.needed} ${w.replicasUnit}`)
     ]
   });
   return lines;

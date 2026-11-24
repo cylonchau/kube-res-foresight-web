@@ -55,6 +55,28 @@ const LINE_COLORS = ['#2080f0', '#18a058', '#f0a020', '#8e44ad', '#00a3a3', '#d0
 const lines = computed(() => props.spec.lines.filter(line => line.ts.length > 0 && groupShown(line.group)));
 const refs = computed(() => props.spec.refs.filter(ref => ref.value > 0 && groupShown(ref.group)));
 /** a chart whose every curve is filtered away says so, instead of drawing nothing */
+/**
+ * Lines that sit on one value (a Requests that is also the recommended Requests) would hide each other: they are drawn as stripes, the first the widest and at the bottom,
+ * each next one narrower and above it, so every one of them shows at its edge.
+ */
+const stripes = computed(() => {
+  const list = refs.value;
+  const map = new Map<string, { width: number; z: number }>();
+  const used = new Set<number>();
+  list.forEach((a, i) => {
+    if (used.has(i)) return;
+    const group = [i];
+    for (let j = i + 1; j < list.length; j += 1) {
+      if (!used.has(j) && Math.abs(list[j].value - a.value) <= Math.max(a.value, list[j].value) * 0.01) group.push(j);
+    }
+    group.forEach(index => used.add(index));
+    if (group.length < 2) return;
+    group.forEach((index, rank) =>
+      map.set(list[index].name, { width: 2 + (group.length - 1 - rank) * 3.6, z: 2 + rank })
+    );
+  });
+  return map;
+});
 const hasCurves = computed(() => props.spec.lines.some(line => line.ts.length > 0));
 const hasData = computed(() => lines.value.length > 0 || refs.value.length > 0);
 
@@ -98,10 +120,10 @@ async function draw() {
       symbolSize: 7,
       silent: true,
       // the recommended line is drawn over the Requests: solid, thick and with markers, so two lines that sit on one value are both seen
-      z: solid ? 5 : 2,
+      z: stripes.value.get(ref.name)?.z ?? (solid ? 5 : 2),
       data: flat(ref.value),
       lineStyle: {
-        width: solid ? 2.6 : 1.4,
+        width: stripes.value.get(ref.name)?.width ?? (solid ? 2.6 : 1.4),
         type: ref.style === 'dashdot' ? [10, 4, 2, 4] : (ref.style ?? 'dashed'),
         color: ref.color
       },
