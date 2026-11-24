@@ -80,6 +80,32 @@ interface Detail {
     reason: string;
   };
   heap?: { ratio?: number; threshold: number; over: boolean; reason: string };
+  /** every metric trigger of the module with what it saw, and how the ones that fired were combined with the other strategies */
+  triggers?: Array<{
+    name: string;
+    enabled: boolean;
+    priority: number;
+    metric: string;
+    stat: string;
+    window_minutes: number;
+    operator: string;
+    threshold: number;
+    action: string;
+    unit: string;
+    amount: number;
+    active: boolean;
+    value: number;
+    samples: number;
+    fired: boolean;
+    reason: string;
+  }>;
+  trigger_outcome?: {
+    base: number;
+    current: number;
+    result: number;
+    rule: string;
+    steps: Array<{ name: string; action: string; priority: number; proposed: number; used: boolean; why?: string }>;
+  };
   /** how the Pod CPU and memory of the snapshot were decided apart from the replicas */
   resource_spec?: {
     version: number;
@@ -151,6 +177,53 @@ const fieldColumns = computed(() => [
   { title: t('page.forecast.explain.source'), key: 'source', width: 100 },
   { title: t('page.forecast.modules.algorithm'), key: 'algorithm', width: 130 },
   { title: t('page.forecast.explain.flags'), key: 'flags', width: 170, ellipsis: { tooltip: true } },
+  { title: t('page.forecast.evaluation.reason'), key: 'reason', minWidth: 260, ellipsis: { tooltip: true } }
+]);
+
+/** the metric triggers: what each one reads, the condition, the state it is in and why */
+const triggerColumns = computed(() => [
+  { title: t('page.forecast.triggers.col_name'), key: 'name', width: 140, ellipsis: { tooltip: true } },
+  {
+    title: t('page.forecast.triggers.col_condition'),
+    key: 'condition',
+    minWidth: 240,
+    ellipsis: { tooltip: true },
+    render: (row: NonNullable<Detail['triggers']>[number]) =>
+      t('page.forecast.triggers.condition', {
+        stat: t(`page.forecast.triggers.stat_${row.stat}`),
+        metric: row.metric,
+        minutes: row.window_minutes,
+        op: t(`page.forecast.triggers.op_${row.operator}`),
+        threshold: row.threshold,
+        action: t(`page.forecast.triggers.action_${row.action}`),
+        amount: row.amount,
+        unit: row.action === 'set' ? '' : t(`page.forecast.triggers.unit_${row.unit}`)
+      })
+  },
+  {
+    title: t('page.forecast.triggers.col_value'),
+    key: 'value',
+    width: 90,
+    render: (row: NonNullable<Detail['triggers']>[number]) => (row.samples > 0 ? Number(row.value.toFixed(4)) : '-')
+  },
+  {
+    title: t('page.forecast.triggers.col_state'),
+    key: 'fired',
+    width: 100,
+    render: (row: NonNullable<Detail['triggers']>[number]) =>
+      h(
+        NTag,
+        { size: 'small', bordered: false, type: row.fired ? 'warning' : 'default' },
+        {
+          default: () =>
+            row.fired
+              ? t('page.forecast.triggers.fired')
+              : row.active
+                ? t('page.forecast.triggers.notFired')
+                : t('page.forecast.triggers.inactive')
+        }
+      )
+  },
   { title: t('page.forecast.evaluation.reason'), key: 'reason', minWidth: 260, ellipsis: { tooltip: true } }
 ]);
 
@@ -432,6 +505,27 @@ const sourceColumns = computed(() => [
       :scroll-x="760"
     />
     <div class="text-12px leading-20px opacity-70">{{ t('page.forecast.explain.precedence') }}</div>
+
+    <div v-if="parsed.triggers?.length" class="flex flex-col gap-6px">
+      <div class="text-13px font-medium">{{ t('page.forecast.triggers.stateTitle') }}</div>
+      <NDataTable
+        size="small"
+        :columns="triggerColumns"
+        :data="parsed.triggers"
+        :row-key="(row: any) => row.name"
+        :scroll-x="760"
+      />
+      <div v-if="parsed.trigger_outcome" class="text-12px leading-20px opacity-80">
+        {{
+          t('page.forecast.triggers.outcome', {
+            base: parsed.trigger_outcome.base,
+            current: parsed.trigger_outcome.current,
+            result: parsed.trigger_outcome.result,
+            rule: parsed.trigger_outcome.rule
+          })
+        }}
+      </div>
+    </div>
 
     <div v-if="parsed.periods?.length">
       <div class="mb-4px text-13px font-medium">{{ t('page.forecast.periods.title') }}</div>

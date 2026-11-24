@@ -4,6 +4,7 @@ import { NEmpty } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 import { valueAxisFor } from '@/utils/chart-axis';
+import { type ChartGroup, chartGroups, groupShown } from '@/utils/chart-groups';
 import { axisTimeLabelFor, formatDateTime } from '@/utils/date';
 import { formatMetric } from '@/utils/format';
 
@@ -19,13 +20,16 @@ export interface ChartLine {
   ts: number[];
   value: number[];
   color?: string;
+  /** the group it is filtered with (see utils/chart-groups); none = always shown */
+  group?: ChartGroup;
 }
 export interface ChartRef {
   name: string;
   value: number;
   color: string;
-  /** dashed (a configuration) or dotted (a quantile) */
-  style?: 'dashed' | 'dotted';
+  /** dashed (a configuration), dash-dot (a Limits), solid and thick (a recommendation) or dotted (a quantile): two lines that meet differ in how they are drawn */
+  style?: 'dashed' | 'dotted' | 'dashdot' | 'solid';
+  group?: ChartGroup;
 }
 export interface ChartSpec {
   key: string;
@@ -48,8 +52,11 @@ const { t, locale } = useI18n();
 
 const LINE_COLORS = ['#2080f0', '#18a058', '#f0a020', '#8e44ad', '#00a3a3', '#d03050'];
 
-const lines = computed(() => props.spec.lines.filter(line => line.ts.length > 0));
-const hasData = computed(() => lines.value.length > 0);
+const lines = computed(() => props.spec.lines.filter(line => line.ts.length > 0 && groupShown(line.group)));
+const refs = computed(() => props.spec.refs.filter(ref => ref.value > 0 && groupShown(ref.group)));
+/** a chart whose every curve is filtered away says so, instead of drawing nothing */
+const hasCurves = computed(() => props.spec.lines.some(line => line.ts.length > 0));
+const hasData = computed(() => lines.value.length > 0 || refs.value.length > 0);
 
 const { domRef, updateOptions } = useEcharts(
   () => ({ animation: false, tooltip: { trigger: 'axis', confine: true }, series: [] }) as ECOption,
@@ -59,7 +66,8 @@ const { domRef, updateOptions } = useEcharts(
 async function draw() {
   if (!hasData.value || !domRef.value) return;
   const { spec } = props;
-  const all = lines.value.flatMap(line => line.ts);
+  // the time axis is that of the measured use, shown or not: the references are drawn across it
+  const all = props.spec.lines.flatMap(line => line.ts);
   const first = Math.min(...all) * 1000;
   const last = Math.max(...all) * 1000;
   const spanMs = Math.max(last - first, 1);
@@ -79,19 +87,28 @@ async function draw() {
       areaStyle: lines.value.length === 1 ? { opacity: 0.08, color } : undefined
     });
   });
-  for (const ref of spec.refs.filter(item => item.value > 0)) {
+  for (const ref of refs.value) {
+    const solid = ref.style === 'solid';
     series.push({
       id: `ref:${ref.name}`,
       name: ref.name,
       type: 'line',
-      showSymbol: false,
+      showSymbol: solid,
+      symbol: 'diamond',
+      symbolSize: 7,
       silent: true,
+      // the recommended line is drawn over the Requests: solid, thick and with markers, so two lines that sit on one value are both seen
+      z: solid ? 5 : 2,
       data: flat(ref.value),
-      lineStyle: { width: 1.2, type: ref.style ?? 'dashed', color: ref.color },
+      lineStyle: {
+        width: solid ? 2.6 : 1.4,
+        type: ref.style === 'dashdot' ? [10, 4, 2, 4] : (ref.style ?? 'dashed'),
+        color: ref.color
+      },
       itemStyle: { color: ref.color }
     });
   }
-  const values = [...lines.value.flatMap(line => line.value), ...spec.refs.map(ref => ref.value)].filter(
+  const values = [...lines.value.flatMap(line => line.value), ...refs.value.map(ref => ref.value)].filter(
     v => Number.isFinite(v) && v > 0
   );
   const axis = valueAxisFor(spec.unit, values);
@@ -173,13 +190,24 @@ async function draw() {
 }
 
 watch(() => [props.spec, props.plotHeight], draw, { flush: 'post', deep: false });
+watch(chartGroups, draw, { flush: 'post', deep: true });
 watch(locale, draw, { flush: 'post' });
 onMounted(draw);
 </script>
 
 <template>
   <div class="min-w-0">
-    <NEmpty v-if="!hasData" class="h-120px justify-center" :description="t('page.overprovision.noData')" />
+    <NEmpty v-if="!hasCurves" class="h-120px justify-center" :description="t('page.overprovision.noData')" />
+    <div v-else-if="!hasData" class="all-hidden">{{ spec.title }} · {{ t('page.overprovision.chartAllHidden') }}</div>
     <div v-show="hasData" ref="domRef" class="w-full" style="height: 320px"></div>
   </div>
 </template>
+
+<style scoped>
+.all-hidden {
+  padding: 24px 0;
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.6;
+}
+</style>

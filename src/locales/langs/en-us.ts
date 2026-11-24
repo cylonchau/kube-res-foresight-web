@@ -559,6 +559,80 @@ const local = {
       openEffect: 'Effect report'
     },
     overprovision: {
+      basisTotalUse: 'all-replica use',
+      basisGuard: 'Limits guard share',
+      basisResult: 'Replicas needed',
+      basisReplicas: 'replicas',
+      basisCoefSource: 'The target share of module management; the system setting where the module sets none',
+      basisGuardSource: 'The peak share of Limits of module management; the system setting where the module sets none',
+      basisLimitGuard: 'Limits guard',
+      basisModalTitle: 'Basis of the recommended replicas',
+      basisCurrent: 'Replicas now',
+      basisFromK8s: 'The replicas the workload is set to in Kubernetes, {ready} ready',
+      basisFromOther: 'The newest reading of Prometheus or of what the platform stored',
+      basisRecommended: 'Recommended replicas',
+      basisPodSpec: 'Each Pod: Requests {request}, Limits {limit}',
+      basisCoefficients: 'Coefficients used',
+      basisTarget: '{p} target share',
+      basisGuardName: 'Peak share of Limits',
+      basisCoefficientsWhere:
+        'Set under module management > Coefficients; where the module sets none, the system setting (System settings > Resource analysis and recommendation) is followed.',
+      basisBounds: 'Whether the safety bounds took effect',
+      basisRaw: 'The use asks for {raw} replicas; after the bounds below {final} are recommended.',
+      bound_min: 'Least replicas',
+      bound_max: 'Most replicas',
+      bound_up: 'Most added at once',
+      bound_down: 'Most removed at once',
+      boundNotSet: 'not set',
+      boundEffect_on: 'took effect',
+      boundEffect_off: 'not reached',
+      boundEffect_unset: 'no limit',
+      protect_limited: 'OOM / throttling protection (no replica is taken away)',
+      protect_limit: 'Limits guard (the tail stays off the Limits)',
+      basisFormulaNote:
+        '"took effect" means this one changed the recommended count; "not reached" means it is set but was not used this time.',
+      basisOpen: 'Basis',
+      basisShort: 'Basis',
+      schemeDetailReplicas:
+        'Change only the replicas: the Requests of a Pod stay; the use of all the replicas is divided by the Requests of a Pod and the target share to give the replicas needed. It changes no Pod spec, so it comes first. "Basis" shows each percentile, the coefficients, the formula and the safety bounds.',
+      schemeDetailConfig:
+        'Change only the Pod: the replicas stay and the Requests of a Pod are brought to what the use needs. It is the way when the replicas cannot move (at their least, held by a step limit, OOM protection). The "?" beside an adjustment shows the formula.',
+      chartShow: 'Curves',
+      chartGroup_actual: 'Actual use',
+      chartGroup_config: 'Configured (Requests, Limits)',
+      chartGroup_recommend: 'Recommended',
+      chartGroup_percentile: 'Percentiles (P90, P95, P99)',
+      chartReset: 'Reset',
+      chartShowHint:
+        'One choice holds for every chart (one Pod and all the replicas); the percentiles are off by default.',
+      chartSuggestedLimit: 'Recommended Limits',
+      chartOverlap:
+        'Requests and the recommended Requests are nearly the same and their lines meet (the recommended one is drawn solid with markers on top)',
+      chartAllHidden: 'every curve is hidden: tick a group above',
+      oomTimes: 'OOM moments',
+      oomTimesHelp:
+        'When containers were killed for memory in the window: the latest on the card, the latest few below.',
+      oomTimesSub: '{n} moments, the latest {shown}: {list}',
+      oomTimesNone: 'No OOM kill in the window',
+      oomScore: 'OOM score',
+      oomScoreHelp:
+        '100 x (1 - kills x {weight}), at least 0: the more kills the lower the score. It is the result of the OOM weight of module management; the coefficients are not shown.',
+      oomScoreSub: 'Each kill takes {weight} away',
+      oomScoreOff: 'The module does not count OOM kills into the score',
+      replicasDesired: 'Desired replicas',
+      replicasReady: 'Ready replicas',
+      replicasReadyHelp:
+        'Pods that run and are ready. It is not the desired replicas: while a Pod starts, is rebuilt or fails the ready count is below the desired one. The replicas now are only what the workload is set to in Kubernetes, never a count of the time series Prometheus holds.',
+      replicasNotReady: '{n} not ready yet',
+      jvmRatio: 'JVM heap share (P99)',
+      jvmRatioHelp:
+        'The P99 of the heap used over the heap maximum in the window. Calculated apart from OOM: above the heap pressure threshold of module management the replicas are raised.',
+      jvmThreshold: 'Pressure threshold {value}',
+      jvmRuleOff: 'JVM pressure is off for the module (threshold 0)',
+      jvmScore: 'JVM pressure score',
+      jvmScoreHelp:
+        '100 x (1 - heap share / pressure threshold), 0 when the share reaches the threshold; the higher the more room.',
+      jvmNoHeap: 'The heap used and the heap maximum were not read, so no score',
       listTitle: 'Modules',
       listHelp:
         'Pick a module to open its resource dashboard: the requests, the use, the OOM count and every metric are read from Prometheus as they are now. No forecast takes part and no money is counted. Choose the namespace and then the instance, or press "Analyse" here.',
@@ -850,6 +924,7 @@ const local = {
       formulaFloorThrottle: 'Throttle floor',
       formulaCoefSource: 'Coefficient: from module management (the system setting where the module sets none)',
       formulaHeadroom: 'Limits margin coefficient',
+      formulaRequestHeadroom: 'Requests margin',
       coefReserveCard: 'Capacity reserve coefficient',
       coefReserveCardHelp:
         'The capacity reserve coefficient of this module in module management (the calculation coefficients section): the most of the capacity of a Pod that is used. The CPU and memory recommended by the forecast = the result divided by it, and in the dynamic replicas the capacity of a Pod = its request x it. What is shown is the value in module management: change it there and this follows.',
@@ -1456,11 +1531,389 @@ const local = {
       }
     },
     forecast: {
+      params: {
+        part_definition: 'Definition',
+        part_role: 'What it does',
+        part_formula: 'Formula',
+        part_example: 'Example (the inputs are samples, the coefficients are the form values)',
+        part_scope: 'Where it applies',
+        sample: 'Sample',
+        n: {
+          recommended: 'Recommended',
+          recommendedValue: 'Recommended',
+          peak: 'Predicted peak',
+          headroom: 'Recommendation coefficient',
+          reserve: 'Capacity reserve coefficient',
+          podCapacity: 'Load of one Pod',
+          podLoad: 'Load of one Pod',
+          podRequest: 'Pod request',
+          beforeReserve: 'Times the recommendation coefficient',
+          afterReserve: 'Then divided by the capacity reserve coefficient',
+          requests: 'Recommended Requests',
+          requestsNeed: 'Largest need of the three percentiles',
+          target: 'Target share',
+          requestsRecommended: 'Recommended Requests',
+          requestHeadroom: 'Requests headroom',
+          sampleNeed: 'Sample',
+          limits: 'Recommended Limits',
+          limitsRecommended: 'Recommended Limits',
+          limitHeadroom: 'Limits headroom',
+          systemValue: 'Not set on the module: the system setting',
+          replicas: 'Replicas',
+          replicasNeed: 'Replicas needed',
+          p99Total: 'P99 total use',
+          limit: 'Pod Limits',
+          guard: 'Peak share of Limits',
+          memory: 'Recommended memory',
+          recommendedMemory: 'Recommended memory',
+          workingSet: 'Working set before the kill',
+          coefWorkingSet: 'Working set coefficient',
+          memoryLimit: 'Memory limit',
+          coefLimit: 'Memory limit coefficient',
+          history: 'Memory history',
+          coefHistory: 'Memory history coefficient',
+          uplift: 'OOM protection coefficient',
+          other: 'Another set of bases',
+          statedRequest: 'Stated Pod request',
+          floorCoef: 'Floor coefficient',
+          scale: 'Scale',
+          forecastScale: 'Forecast scale',
+          shortfallCap: 'Forecast shortfall cap',
+          applied: 'Applied',
+          finalValue: 'Final recommendation',
+          calculated: 'Calculated',
+          floorValue: 'Floor value'
+        },
+        reserve: {
+          def: 'The largest share of the capacity (the request) of a Pod the load may take, 0.1 to 1. 0.8 keeps 20% free; unset counts as 1: nothing is held back.',
+          role: 'Recommendation = result / capacity reserve coefficient: the smaller it is, the more CPU and memory is recommended. With dynamic replicas it also sets the load of one Pod: Pod request x coefficient.',
+          scope:
+            'The recommended CPU and memory, the load of one Pod with dynamic replicas, and the capacity reserve card of the resource dashboard. Every recommendation reads the value the module has now; 0.8 is only an example.'
+        },
+        headroom: {
+          def: 'The multiple the predicted peak is multiplied by, not below 1.',
+          role: 'Leaves room for the forecast to be wrong: peak 4 x 1.2 = 4.8, then divided by the capacity reserve coefficient. Without a measured forecast shortfall the replicas use it as their margin too.',
+          scope:
+            'The recommendation of CPU, memory and replicas from the forecast of an algorithm. The recommended Requests of the resource dashboard do not use it: they use the target shares and the Requests headroom.'
+        },
+        p90: {
+          def: 'The most of the Requests the P90 use may take at the recommended Requests. 0.8 divides the use by 0.8; 0 follows the system setting (System settings > Resource analysis and recommendation).',
+          role: 'Recommended Requests = the largest of use / target share for P90, P95 and P99, so the smaller the share, the larger the recommendation.',
+          scope:
+            'The recommended Requests of the resource dashboard (CPU and memory use the same shares) and the replicas worked out from them.'
+        },
+        p95: {
+          def: 'The most of the Requests the P95 use may take at the recommended Requests. 0.85 divides the use by 0.85; 0 follows the system setting.',
+          role: 'Recommended Requests = the largest of use / target share for P90, P95 and P99.',
+          scope:
+            'The recommended Requests of the resource dashboard (CPU and memory use the same shares) and the replicas worked out from them.'
+        },
+        p99: {
+          def: 'The most of the Requests the P99 use may take at the recommended Requests. It may be above 1 (1.1): the tail may go over the Requests, which a CPU may do up to its Limits; 0 follows the system setting.',
+          role: 'Recommended Requests = the largest of use / target share for P90, P95 and P99.',
+          scope:
+            'The recommended Requests of the resource dashboard (CPU and memory use the same shares) and the replicas worked out from them.'
+        },
+        cpuRequestHeadroom: {
+          def: 'The margin added over the recommended CPU Requests: 0.1 adds 10%, 0 adds none.',
+          role: 'Recommended CPU Requests = the largest need of the three percentiles x (1 + CPU Requests headroom).',
+          scope:
+            'Only the recommended CPU Requests (resource dashboard). Memory has a headroom of its own; the floors of OOM and throttling still come first.'
+        },
+        memoryRequestHeadroom: {
+          def: 'The margin added over the recommended memory Requests: 0.1 adds 10%, 0 adds none.',
+          role: 'Recommended memory Requests = the largest need of the three percentiles x (1 + memory Requests headroom).',
+          scope:
+            'Only the recommended memory Requests (resource dashboard). CPU has a headroom of its own; the OOM floor still comes first.'
+        },
+        cpuLimitHeadroom: {
+          def: 'How far the recommended CPU Limits is above the P99 use: 0.2 is 20% above; 0 follows the system setting.',
+          role: 'Recommended CPU Limits = max(recommended CPU Requests, CPU P99 use x (1 + CPU Limits headroom)), so it is never below the recommended Requests.',
+          scope:
+            'Only the recommended CPU Limits (resource dashboard). Memory Limits have a headroom of their own; the Limits admission derives from the Requests with the CPU limit ratio do not use it.'
+        },
+        memoryLimitHeadroom: {
+          def: 'How far the recommended memory Limits is above the P99 use: 0.2 is 20% above; 0 follows the system setting.',
+          role: 'Recommended memory Limits = max(recommended memory Requests, memory P99 use x (1 + memory Limits headroom)).',
+          scope:
+            'Only the recommended memory Limits (resource dashboard). CPU Limits have a headroom of their own; the Limits admission derives from the Requests with the memory limit ratio do not use it.'
+        },
+        limitGuard: {
+          def: 'The most of the sum of the Limits of all the Pods their P99 use together may take at the recommended replicas, 0.3 to 1; 0 follows the system setting (System settings > Resource analysis and recommendation).',
+          role: 'Keeps the replicas from being cut so far that the tail runs into the Limits: replicas >= ceil(P99 total use / (Pod Limits x share)), the larger of this and the one worked out from the Requests. The risk of a result uses the same line for a peak near the Limits.',
+          scope:
+            'The recommended replicas and the risk of the resource dashboard, CPU and memory; it does nothing for a Pod without Limits.'
+        },
+        oomUplift: {
+          def: 'After an OOM kill (a container killed for memory) the multiple the memory floor is raised by, 1 to 3.',
+          role: 'The recommended memory is not below max(working set before the kill x its coefficient, memory limit x its coefficient, memory history x its coefficient) x the OOM protection coefficient, then held by the memory cap of the module.',
+          scope:
+            'Memory only, and only when an OOM kill happened within the OOM look-back days; with none it does nothing. CPU is not affected.'
+        },
+        oomWorkingSet: {
+          def: 'The OOM floor has three kinds of base. This is the coefficient of the working set before the kill; 1 keeps it as it is, 0.1 to 5.',
+          role: 'Each base is multiplied by its own coefficient, the largest is taken, then multiplied by the OOM protection coefficient.',
+          scope: 'The OOM floor of the memory only, and only when an OOM kill happened within the OOM look-back days.'
+        },
+        oomLimit: {
+          def: 'The OOM floor has three kinds of base. This is the coefficient of the memory limit on the workload (taken back to a Requests); 1 keeps it as it is, 0.1 to 5.',
+          role: 'Each base is multiplied by its own coefficient, the largest is taken, then multiplied by the OOM protection coefficient.',
+          scope:
+            'The OOM floor of the memory only, when an OOM kill happened within the look-back days and the memory limit was read.'
+        },
+        oomHistory: {
+          def: 'The OOM floor has three kinds of base. This is the coefficient of the memory history before the kill, used when there is neither of the other two; 1 keeps it as it is, 0.1 to 5.',
+          role: 'Each base is multiplied by its own coefficient, the largest is taken, then multiplied by the OOM protection coefficient.',
+          scope:
+            'The OOM floor of the memory only, when an OOM kill happened within the look-back days and neither of the other bases exists.'
+        },
+        floor: {
+          def: 'A lower bound of the recommendation as a share of the Pod request the module states (the Pod CPU and memory requests entered under capacity and replicas). 0 to 1, 0 = off.',
+          role: 'Keeps one recommendation from squeezing a Pod far below what is stated: recommendation >= stated Pod request x floor coefficient.',
+          scope:
+            'The recommended CPU and memory; the Pod requests must be entered and the coefficient above 0. It is taken with the CPU / memory floor value, the larger of the two being the lower bound; the fixed floor value is set under the calculation and bounds of the recommendation.'
+        },
+        shortfall: {
+          def: 'The most the measured peak shortfall of an algorithm counts for, 0.05 to 0.9.',
+          role: 'How much an algorithm missed the peak lately scales its forecast up, by at most 1 / (1 - cap): 0.5 scales it by at most 2. The more it missed, the sooner the replicas reach their maximum, hence the cap.',
+          scope:
+            'The scaling of the forecast of each algorithm in the dynamic replica solve; it does not change the recommended CPU and memory or the resource dashboard.'
+        },
+        minCpu: {
+          def: 'The lowest recommended CPU in millicores (m), per Pod; 0 = none.',
+          role: 'A recommendation below it becomes it: a calculated need of 2000 m with a floor of 3000 m is recommended as 3000 m.',
+          scope:
+            'The CPU recommended for a Pod, from a forecast, the fallback default or a period. Order: result (already divided by the capacity reserve coefficient) -> not below the larger of the floor value and floor coefficient x stated Pod request -> not above the cap, which has the last word.'
+        },
+        minMemory: {
+          def: 'The lowest recommended memory in MiB, per Pod; 0 = none.',
+          role: 'A recommendation below it becomes it: a calculated need of 2000 MiB with a floor of 3000 MiB is recommended as 3000 MiB.',
+          scope:
+            'The memory recommended for a Pod, from a forecast, the fallback default or a period. Order: result (already divided by the capacity reserve coefficient) -> not below the larger of the floor value and floor coefficient x stated Pod request -> not below the OOM floor after a kill -> not above the cap, which has the last word.'
+        }
+      },
       searchWindow:
         'The text search read the last {days} days, because a text cannot use an index and a long range makes the query too slow. Give a time range to read further back.',
       summaryWindow:
         'The counts read the last {hours} hours. Give a time range to read further back: the totals of a long range are the slowest read of this page.',
+      triggers: {
+        col_name: 'Name',
+        col_condition: 'Condition and action',
+        col_value: 'Value read',
+        col_state: 'State',
+        condition:
+          'the {stat} of {metric} over the last {minutes} minutes {op} {threshold} -> {action} {amount} {unit}',
+        outcome:
+          'Result: the other strategies gave {base}, {current} run now, after the triggers it is {result}. Why: {rule}. The least and most replicas and the pace still hold after this.',
+        saveFirst:
+          'A trigger reads the metrics of the module itself. Save the module and add its metrics first, then come back to add triggers.',
+        add: 'Add trigger',
+        defaultName: 'Trigger {n}',
+        priority: 'Priority',
+        helpPriority:
+          'When several triggers ask for different replica counts the higher priority is worked out first (of those that set a count the highest priority wins, equal priorities: the larger). A larger number is a higher priority.',
+        when: 'When',
+        over: 'over the last',
+        minutes: 'minutes',
+        thenDo: 'then',
+        replicasWord: 'replicas',
+        inForce: 'in force',
+        always: 'every day, all day',
+        jvmHeapPressure: 'JVM heap share (heap used / heap maximum)',
+        stat_last: 'last value',
+        stat_avg: 'average',
+        stat_max: 'maximum',
+        stat_min: 'minimum',
+        op_gt: 'is above',
+        op_gte: 'is at least',
+        op_lt: 'is below',
+        op_lte: 'is at most',
+        action_scale_up: 'scale up by',
+        action_scale_down: 'scale down by',
+        action_set: 'set to',
+        unit_replicas: 'replicas',
+        unit_percent: '% of the replicas',
+        nameRequired: 'Give every trigger a name',
+        nameDuplicate: 'Duplicate trigger name: {name}',
+        metricRequired: 'Trigger "{name}" needs a metric',
+        windowInvalid: 'The window of trigger "{name}" is at least 1 minute',
+        amountInvalid: 'The amount of trigger "{name}" must be above 0',
+        setWhole: 'The replicas trigger "{name}" sets must be a whole number',
+        timeInvalid: 'The start and the end of trigger "{name}" must differ',
+        saveFailed:
+          'The module was saved, but not every trigger was (the reason is in the error before this one): check and save again',
+        stateTitle: 'State of the triggers now',
+        fired: 'fired',
+        notFired: 'not fired',
+        inactive: 'out of hours'
+      },
+      capacityCard: {
+        meaning: 'Meaning',
+        source: 'Source of the data',
+        formula: 'Formula',
+        period: 'Period',
+        state_ready: 'Calculated',
+        state_not_set: 'Not set',
+        state_no_history: 'No history',
+        state_insufficient: 'Not enough data',
+        state_error: 'Calculation failed',
+        state_unsaved: 'After saving'
+      },
       modules: {
+        formulaMemoryLimits: 'Memory recommended Limits',
+        formulaCpuLimits: 'CPU recommended Limits',
+        formulaMemoryRequests: 'Memory recommended Requests',
+        formulaCpuRequests: 'CPU recommended Requests',
+        formulaBoardLimits: 'Dashboard recommended Limits',
+        descPeriodsStrategy:
+          'Give the replicas (fixed, at least, at most) and the CPU and memory a value by period and time of day. Add as many as needed: a weekly window, or a one-off absolute time; when several are in force the priority decides.',
+        sectionPeriodsStrategy: 'Time period strategy',
+        groupBase: 'Basics',
+        groupBaseDesc:
+          'Who the module is, what data it reads and which metrics it uses: its details, data and forecast period, monitoring.',
+        groupCalc: 'Calculation',
+        groupCalcDesc:
+          'Capacity, the coefficients, the bounds of the recommendation, OOM protection and JVM pressure: everything a recommendation is worked out from.',
+        groupSafety: 'Safety bounds',
+        groupSafetyDesc:
+          'The least and most replicas, the pace of changes and the fallback defaults. What the forecast, the periods and the triggers give has to pass here last.',
+        groupStrategy: 'Strategies',
+        groupStrategyDesc:
+          'The prediction mode, time periods, metric triggers and the fixed replicas. How they are combined when they act together is in the last section of this group.',
+        sectionPredict: 'Prediction mode',
+        descPredict:
+          'Whether the module is predicted and how: a fixed algorithm, dynamic algorithms, or no prediction. It is not the run mode above (observe, recommend, admission, auto).',
+        sectionTriggers: 'Metric triggers',
+        descTriggers:
+          'No forecast needed: a metric that crosses a threshold within the last minutes scales the replicas up, down or sets them. Add as many as needed, each with its metric, threshold, action and hours.',
+        sectionOrder: 'Fixed replicas and how strategies combine',
+        descOrder:
+          'When several strategies give different replica counts they are combined in the order below; the bounds of the last step hold for all of them.',
+        orderTitle: 'Order',
+        order1:
+          'What the administrator fixed comes first: bypass, a fixed count in a period, the fixed replicas above. Later strategies do not change them.',
+        order2:
+          'The other counts are first given by the forecast (the fallback default when the prediction mode is none or the forecast is unavailable).',
+        order3:
+          'Metric triggers: of those that set a count the highest priority wins (equal: the larger); a scale-up takes the largest increase and is never lowered by a set, the forecast or a scale-down; a scale-down acts only with no scale-up or set, no OOM or JVM pressure and a forecast that asks for no more replicas; of several the one that removes the fewest counts.',
+        order4: 'Periods: "at least" raises, "at most" lowers; several periods are handled by priority.',
+        order5:
+          'The replica bounds (least, most) hold for the final count and come last; the pace then limits how many replicas one action changes and how often.',
+        orderFixedReplicas: 'Fixed replicas',
+        sectionBounds: 'Replica bounds',
+        descBounds:
+          'The least and most replicas bound normal scaling and the fallback alike: what the forecast, the periods, the triggers and the fallback default give never goes past them.',
+        boundsFixed:
+          'Now: the replicas stay between {min} and {max}, never above {max}. The hard maximum and the expansion speed apply to "dynamic expansion" only and do nothing now.',
+        boundsDynamic:
+          'Now: at most {max} replicas as a rule; when the forecast needs more, the ceiling rises by at most {step} per cycle ({ratio} of the ceiling now), up to the hard maximum {hard}, which the replicas never exceed.',
+        boundsMissing: 'Now: the {what} is not set, so the replicas have no {side} bound.',
+        boundsMissingMin: 'least replicas',
+        boundsMissingMax: 'most replicas',
+        boundsSideMin: 'lower',
+        boundsSideMax: 'upper',
+        minReplicasHint:
+          'The least replicas: what the forecast, the periods, the triggers and the fallback default give is never below it, the floor of scaling in. 0 = no bound.',
+        maxReplicasHint:
+          'The usual most replicas: the result of any strategy is never above it. With "fixed" it is the final ceiling; with "dynamic expansion" it is the start and the ceiling may rise to the hard maximum cycle by cycle. 0 = no bound.',
+        maxReplicasModeHint:
+          'Fixed: the most replicas is the ceiling. Dynamic expansion: when the forecast needs more than the most replicas the ceiling may rise cycle by cycle, never above the hard maximum.',
+        hardMaxReplicas: 'Hard maximum replicas',
+        hardMaxReplicasHint:
+          'Used with "dynamic expansion" only: the count the raised ceiling can never pass, not below the most replicas. Example: most 15, hard maximum 25: 15 as a rule, raised cycle by cycle when the forecast needs more, 25 at the most. It does nothing, and is not shown, with "fixed".',
+        expandStepRatio: 'Ceiling expansion speed (per cycle)',
+        expandStepRatioHint:
+          'With dynamic expansion each cycle raises the ceiling by at most this share of the ceiling now (0.25 = 25%), for example 15 -> 19 -> 24 -> 25. It raises the most replicas allowed, not the replicas; how many replicas one action adds or removes is limited by the pace, and the two are not the same thing.',
+        sectionFallback: 'Fallback',
+        descFallbackNew:
+          'The defaults used only when the forecast is unavailable (model failure, too little data, a stale recommendation). The replicas the fallback gives are held to the replica bounds as well; after the forecast is back it takes several healthy cycles in a row to switch back.',
+        sectionApply: 'Recommendation validity and score',
+        capNew:
+          'Once the module is saved and history is collected, the capacity of one Pod and the total capacity are worked out here; no number without a basis is shown now.',
+        capUnsavedEstimate: 'Save with "from history" for the figure to be worked out from the history.',
+        capCardUtil: 'Request utilization of one Pod',
+        capCardPod: 'Safe capacity of one Pod',
+        capCardMin: 'Least safe total capacity',
+        capCardMax: 'Most safe total capacity',
+        capUtilSub: 'Capacity reserve coefficient {value}: the most of its request a Pod is to use',
+        capUtilNotSet: 'No capacity reserve coefficient is set: counted as 100% (nothing held back)',
+        capPodManualSub: 'The value you entered, in RPS (requests per second)',
+        capPodNotSet: 'The safe capacity of one Pod is not entered',
+        capPodEstimateSub: '{used} busy moments of {samples} samples, last {days} days',
+        capPodInsufficientSub: 'Only {used} busy moments; at least {min} are needed',
+        capTotalSub: '{replicas} replicas x {rps} RPS',
+        capTotalNoReplicas: 'The {what} is not set, so the total cannot be worked out',
+        capTotalNoPod: 'There is no safe capacity of one Pod yet, so the total cannot be worked out',
+        capTotalHard: 'With dynamic expansion up to the hard maximum of {hard} replicas: {total} RPS',
+        capMeaningUtil:
+          'The most of the request of a Pod that may be used: the capacity reserve coefficient you set under the coefficients.',
+        capSourceUtil:
+          'A setting (the capacity reserve coefficient), not a measurement; with none set there is no number, and no default without a basis is used.',
+        capFormulaUtil: 'Request utilization of one Pod',
+        capPeriodUtil: 'No period: it is a setting, and the next recommendation uses the new value.',
+        capMeaningPod: 'The requests per second (RPS) one ready Pod can carry safely.',
+        capSourcePodManual:
+          'The value you entered as the safe capacity of one Pod (RPS); it should come from a load test or a controlled observation.',
+        capSourcePodEstimate:
+          'Estimated from the history collected from Prometheus: the request rate, the ready replicas and the CPU of each moment (it needs these three metrics and the CPU request of a Pod).',
+        capFormulaPodManual: 'Safe capacity of one Pod',
+        capFormulaPodEstimate: 'Safe capacity of one Pod',
+        capRuleEstimate: 'P50 (requests / replicas x capacity reserve coefficient / CPU saturation of the Pod)',
+        capPeriodPodManual: 'No period: it is a setting.',
+        capPeriodPodEstimate:
+          'The last {days} days of history; only the busy moments count, when the Pod CPU is at least {busy} of "capacity reserve coefficient x request", and at least {min} of them are needed. With fewer the card says what is missing and makes up no number.',
+        capMeaningTotal: 'The requests per second these replicas can carry safely together.',
+        capSourceTotal: 'The least or most replicas of the replica bounds times the safe capacity of one Pod.',
+        capFormulaMin: 'Least safe total capacity',
+        capFormulaMax: 'Most safe total capacity',
+        capPeriodTotal: 'No period: a product of settings.',
+        capReplicasMin: 'least replicas',
+        capReplicasMax: 'most replicas',
+        coeffGroupForecast: 'Forecast recommendation (CPU, memory, replicas)',
+        coeffGroupRequests: 'Resource dashboard: recommended Requests',
+        coeffGroupLimits: 'Resource dashboard: recommended Limits and replicas',
+        coeffGroupOther: 'Floor and forecast shortfall',
+        coeffOomMoved:
+          'The OOM protection coefficient and the OOM calculation coefficients are set under "OOM protection" below, the JVM pressure under "JVM pressure".',
+        coeffP90: 'P90 target share',
+        coeffP95: 'P95 target share',
+        coeffP99: 'P99 target share',
+        coeffCpuRequestHeadroom: 'CPU Requests headroom',
+        coeffMemoryRequestHeadroom: 'Memory Requests headroom',
+        coeffCpuLimitHeadroom: 'CPU Limits headroom',
+        coeffMemoryLimitHeadroom: 'Memory Limits headroom',
+        coeffLimitGuard: 'Peak share of Limits',
+        sectionOom: 'OOM protection',
+        descOom:
+          'How the memory is raised after an OOM kill and how a kill weighs on the score of an algorithm. The resource dashboard shows only the count, the moments and the score of the kills, never the coefficients set here.',
+        oomCoefTitle: 'OOM calculation coefficients',
+        oomCoefDesc:
+          'Memory floor = max(working set x coefficient, memory limit x coefficient, memory history x coefficient) x OOM protection coefficient; it applies only when a kill happened within the look-back days.',
+        oomMetricsTitle: 'OOM metrics (type: OOM)',
+        sectionJvm: 'JVM pressure',
+        descJvm:
+          'When the JVM heap share passes the threshold the replicas are raised and a pressure score is worked out. It is configured, calculated and shown apart from the OOM protection.',
+        jvmFormulaTitle: 'How it is worked out',
+        jvmFormula:
+          'Heap share = heap used / heap maximum; pressure score = 100 x (1 - heap share / threshold), 0 when the share reaches the threshold.',
+        jvmDisabled: 'The threshold is 0: the rule is off, it does not raise the replicas and works out no score.',
+        jvmMetricsTitle: 'JVM metrics (type: JVM)',
+        floorValueNote:
+          'The floor value: a calculated result below it becomes it; for example a need of 2000 with a floor of 3000 is recommended as 3000. Its unit is the one of the recommendation (CPU: millicores m; memory: MiB), per Pod.',
+        orderBoundsTitle: 'The order a recommendation takes',
+        orderBounds1: 'The result: predicted peak x recommendation coefficient / capacity reserve coefficient',
+        orderBounds2:
+          'Not below the lower bound: the larger of the floor value and the floor coefficient x the stated Pod request',
+        orderBounds3: 'After an OOM kill the memory is not below the OOM floor',
+        orderBounds4: 'Not above the cap (the cap has the last word)',
+        orderBounds5:
+          'Limits = the final Requests x the limit ratio (worked out and written at admission only; scaling never changes Requests or Limits)',
+        minCpu: 'CPU floor value (m)',
+        maxCpu: 'CPU cap (m)',
+        minMemory: 'Memory floor value (MiB)',
+        maxMemory: 'Memory cap (MiB)',
+        descSafety:
+          'The lower bound, the upper bound and the limit ratios of the recommendation. The floor value and the cap are per Pod, 0 = not set; they are guard rails, not forecasts.',
         name: 'Module name',
         title: 'Forecast modules',
         help: 'A module is one workload that is forecast and scaled, with its own dataset (Prometheus metrics), history window, forecast period and replica range. Every enabled algorithm applies to every module. Enable, disable and batch delete are in the batch menu once rows are checked.',
@@ -1483,7 +1936,7 @@ const local = {
         sectionBasic: 'Basics',
         sectionSafety: 'How the recommendation is calculated and bounded',
         sectionSafetyHint:
-          'Recommendation = predicted peak x headroom ratio, then held between the floor and the cap; the limit follows from the final request and the limit ratio. The floor and the cap are guardrails, not forecasts; 0 means no bound.',
+          'Recommendation = predicted peak x recommendation coefficient / capacity reserve coefficient, then held between the floor value and the cap; the limit is the final request times the limit ratio. The floor value and the cap are guard rails, not forecasts, 0 = no limit. The order they apply in is listed below.',
         floorHint:
           'The recommendation never goes below it. A forecast only reflects history: when a service is idle, has missing data or has just started it can be tiny, and a burst would then throttle or OOM the Pod. The floor guards against that. 0 = not set.',
         capHint:
@@ -1493,10 +1946,6 @@ const local = {
         maxFillSteps: 'Max steps to fill',
         maxFillStepsHint:
           'Gaps up to this many steps are linearly interpolated, at training time only (Prometheus and the stored samples are not changed); a longer gap truncates the training data. It counts steps, so the time it covers follows the sampling step: 480 steps are 4 hours at 30 seconds, 48 steps at 5 minutes. What is filled is interpolated, not real data, and the longer the gap the less reliable. 0 disables filling, 10000 is the most.',
-        minCpu: 'CPU floor (m)',
-        maxCpu: 'CPU cap (m)',
-        minMemory: 'Memory floor (MiB)',
-        maxMemory: 'Memory cap (MiB)',
         minReplicas: 'Minimum replicas',
         maxReplicas: 'Maximum replicas',
         fallbackCpu: 'Degraded default CPU (m)',
@@ -1507,7 +1956,7 @@ const local = {
         more: 'More',
         sectionCapacity: 'Capacity and replicas',
         sectionReplicasHint:
-          'How much one Pod can safely carry and how the replicas are worked out. The capacity reserve coefficient is set with the other coefficients below; the least and the most replicas are in the fallback section.',
+          'How many requests one Pod carries safely and how the replicas are worked out. The capacity reserve coefficient is set under "Coefficients"; the least and most replicas under "Safety bounds > Replica bounds".',
         descBasic: 'Which workload the module manages, whether it forecasts, and how it runs.',
         descData:
           'How much history is read, how far ahead it forecasts, the step the data is put on and the floor of the data quality.',
@@ -1518,39 +1967,20 @@ const local = {
         descPeriods:
           'The time zone of the statistics and the fixed periods: in some hours the resources or the replicas can be fixed.',
         descCapacity:
-          'Choose how the replicas are worked out, then give the safe load of one Pod. The four cards below are worked out from what you enter.',
+          'Choose how the replicas are worked out, then enter the safe capacity of one Pod (RPS, requests per second). The four cards below are worked out from what exists; the "?" of each says what it means, where the data comes from, its formula and its period. A number without a basis is not shown: the card says what is missing.',
         descApply: 'How long a recommendation is valid and the algorithm score below which it is no longer taken.',
-        descFallback:
-          'The defaults used when the forecast cannot be, and the conditions to recover; the least and the most replicas and how the most grows are here too, as the guard of the forecast and of the defaults alike.',
         descPace:
-          'The most replicas one action may add or remove, and the shortest time between actions in the same direction. They apply over the whole run cycle, with no distinction of hours; 0 is no limit.',
+          'How many replicas one action adds or removes and how long to wait since the last action in that direction. It holds over the whole run cycle (normal scaling and the fallback), with no time-of-day distinction; 0 = no limit. The pace limits how fast, the replica bounds limit how many: they do not overlap.',
         descCoeff:
-          'Every coefficient that is multiplied or divided by in a calculation is here, set for each module; the calculation reads these values and none is written into the code. The formulas below change as you type.',
-        descProtection:
-          'How the memory is raised after an OOM kill, and the JVM heap pressure and score weight; the metrics they read are added below.',
-        descSafety:
-          'The least and the most of a recommendation and the limit ratios: the floor and the cap are guards, and 0 means no limit.',
+          'The coefficients the recommendation, the capacity and the replicas are worked out with, set for each module; press the "?" beside one for its definition, what it does, its formula, an example and where it applies. The formulas below change as you type.',
         sectionCoeff: 'Calculation coefficients',
-        coeffHint:
-          'Each coefficient of the formulas can be changed here: the capacity reserve coefficient, the recommendation coefficient, the target shares of the dashboard, the OOM protection and calculation coefficients, the floor coefficient and the shortfall cap. A target share of 0 follows the system setting (System management > System settings > Resource analysis and recommendation).',
-        replicaBounds: 'Replica bounds (least / most)',
         coeffReserve: 'Capacity reserve coefficient',
         coeffReserveHint:
           'The most of the capacity of a Pod (its request) that is used, 0.1 to 1; empty or 0 counts as 1 (nothing held back). The recommendation is the result divided by the capacity reserve coefficient: 0.8 leaves 20% free, and the CPU and memory recommended are (predicted peak x recommendation coefficient) / 0.8; in the dynamic replicas the capacity of a Pod is its request x this coefficient. 0.8 is only an example: the value here is what is read.',
-        coeffP90: 'Dashboard P90 target share',
-        coeffP95: 'Dashboard P95 target share',
-        coeffP99: 'Dashboard P99 target share',
-        coeffBoardHint:
-          'When the resource dashboard recommends Requests, the use at that percentile is divided by this share (0.8 divides by 0.8) and the largest of the three is the recommendation; 0 follows the system setting. The P99 may be above 1: the tail is allowed to go over the Requests.',
-        coeffLimitHeadroom: 'Dashboard Limits margin',
-        coeffLimitHeadroomHint:
-          'Recommended Limits = max(recommended Requests, P99 use x (1 + margin)); 0.2 is 20%, 0 follows the system setting.',
         coeffOomCalc: 'OOM calculation coefficient',
         coeffOomWorkingSet: 'OOM calculation coefficient: working set',
         coeffOomLimit: 'OOM calculation coefficient: memory limit',
         coeffOomHistory: 'OOM calculation coefficient: memory history',
-        coeffOomCalcHint:
-          'After an OOM kill the base of the memory floor comes from one of three places: the working set before the kill, the memory limit on the workload (taken back to a request), or, when there is neither, the memory history before the kill. Each is multiplied by its own coefficient, the largest is taken, and the OOM protection coefficient multiplies that. 1 leaves it as it is; 0.1 to 5.',
         coeffFloor: 'Floor coefficient',
         coeffFloorHint:
           'The CPU and memory recommended are never below the Pod request the module states (the Pod CPU and memory request of the dynamic replicas) x the floor coefficient, so one recommendation cannot squeeze a Pod too small; 0 turns it off, 0 to 1.',
@@ -1570,7 +2000,6 @@ const local = {
         capPodRpsSub: 'RPS = Requests Per Second',
         capMinTotal: 'Least safe total capacity',
         capMaxTotal: 'Most safe total capacity',
-        capTotalSub: '{replicas} replicas x safe load of one Pod',
         sectionPace: 'Replica change pace',
         paceHint:
           'The operator reads this module directly to change the replicas of the workload. Set how many replicas one action may add or remove per direction and how long to wait after the last action of that direction; 0 means no limit. Scale-up is usually left open; limit scale-down steps and add a cooldown to avoid flapping.',
@@ -1585,10 +2014,6 @@ const local = {
         scaleDownCooldown: 'Scale-down cooldown (s)',
         scaleDownCooldownHint:
           'Seconds that must pass since the last scale-down action before the next one; stops replicas going up and down while the load flaps. 0 = no limit.',
-        minReplicasHint:
-          'A fixed setting of the module: scaling never goes below this replica count; the operator and the recommendations both use it as the floor.',
-        maxReplicasHint:
-          'A fixed setting of the module: scaling never goes above this replica count; with dynamic expansion it is the starting ceiling and the hard maximum below caps it.',
         fixedReplicasHint:
           'When set, the module keeps exactly this many replicas and no algorithm decides them (CPU and memory still follow the forecast); 0 = the algorithm decides. A time window that fixes the count still wins; "at least" and "at most" windows raise or lower it.',
         fallbackReplicasHint:
@@ -1700,7 +2125,6 @@ const local = {
         stateHealthyHelp: 'Latest recommendation V{version}, not degraded, no consecutive failures.',
         stateNoSnapshotHelp:
           'No recommendation has been made yet: the module is new, its history is too short, or the forecast task has not run.',
-        sectionFallback: 'Fallback defaults, recovery and replica bounds',
         fallbackMinHistory: 'Minimum history coverage',
         fallbackMinHistoryHint:
           'Below this share of the observed span being one contiguous history, the source is not forecast and falls back. Default 0.8.',
@@ -1709,7 +2133,6 @@ const local = {
         recoverCycles: 'Cycles to re-enable',
         recoverCyclesHint:
           'After a degradation the forecast is used again only after this many healthy cycles in a row, so flaky data does not make the recommendation flap. Default 2.',
-        sectionProtection: 'OOM protection and JVM pressure',
         oomLookbackDays: 'OOM look-back days',
         oomLookbackDaysHint:
           'If an OOM kill happened within this many days the memory recommendation is never below the floor. Default 14.',
@@ -1728,7 +2151,6 @@ const local = {
         oomMetrics: 'OOM metrics',
         oomMetricsHint:
           'The metrics the OOM protection reads: OOM kills, the working set before a kill, JVM heap used and maximum (the memory limit is in the dashboard metrics, used for "Dashboard and history"). They are kept apart from the metrics of the forecast; without them the rule does not apply and the recommendation says so.',
-        sectionPredict: 'Prediction',
         predictEnabled: 'Prediction',
         predictEnabledHint:
           'Off by default. Off, the module only collects its history, runs no algorithm and the recommendation uses the fallback values; on, it predicts in the mode below.',
@@ -1781,16 +2203,11 @@ const local = {
         minScore: 'Minimum score (0-100)',
         fallbackGpu: 'Degraded default GPU count',
         maxReplicasMode: 'Maximum replicas mode',
-        maxReplicasModeHint:
-          'Fixed: the maximum is the ceiling. Dynamic: when the forecast exceeds the maximum and the algorithm scored well enough, the effective ceiling rises by at most a ratio per cycle, never beyond the independent hard ceiling, and falls back with the forecast.',
-        hardMaxReplicas: 'Hard ceiling (replicas)',
-        expandStepRatio: 'Largest rise per cycle',
         minGpu: 'GPU floor',
         maxGpu: 'GPU cap',
         workloadKind: 'Workload kind',
         workloadKindHint:
           'A module is one Kubernetes workload: namespace + kind + name. A DaemonSet has no replica count, only its resource requests are adjusted.',
-        sectionApply: 'Applying recommendations',
         minScoreHint:
           'When the score (0-100) of an algorithm is below this, its forecast is not used and the defaults (Fallback) below apply; 0 means no limit.',
         fallbackHint:
@@ -1892,6 +2309,7 @@ const local = {
         source_bypass: 'bypass',
         source_fixed_period: 'fixed period',
         source_fixed_count: 'fixed replicas',
+        source_trigger: 'metric trigger',
         source_algorithm: 'algorithm',
         source_fallback: 'default',
         source_original: 'original',
@@ -3429,6 +3847,22 @@ const local = {
           'The module is saved but not every fixed period was (see the error above); what is stored has been loaded again, so check it and save again'
       },
       moduleMetrics: {
+        col_type: 'Type',
+        helpType:
+          'What the metric is of: OOM (a container killed for memory), JVM (heap, GC, threads), resource (CPU, memory, replicas, request rate), K8s (Requests, Limits, throttling) and so on. The OOM and JVM metrics are added under OOM protection and JVM pressure, which are calculated and shown apart.',
+        class_oom: 'OOM',
+        class_jvm: 'JVM',
+        class_resource: 'Resource',
+        class_k8s: 'K8s',
+        class_gpu: 'GPU',
+        class_network: 'Network',
+        class_other: 'Other',
+        empty_general:
+          'This module has no metric yet. Press "Add metric template", choose a template and set its weight; a metric that is not added takes no part in its forecast, score or resource decision.',
+        empty_oom:
+          'No OOM metric yet. Add the templates of the OOM count and of the working set before a kill so the OOM protection can read the count and the moments.',
+        empty_jvm:
+          'No JVM metric yet. Add the templates of the heap used and of the heap maximum so the JVM pressure can work out the heap share and the score.',
         saveFailed:
           'The module is saved but not every metric it uses was (see the error above); what is stored has been loaded again, so check it and save again',
         stepFiner:

@@ -309,7 +309,11 @@ declare namespace Api {
       rec_p90_target: number;
       rec_p95_target: number;
       rec_p99_target: number;
-      rec_limit_headroom: number;
+      rec_limit_guard: number;
+      rec_cpu_request_headroom: number;
+      rec_memory_request_headroom: number;
+      rec_cpu_limit_headroom: number;
+      rec_memory_limit_headroom: number;
       oom_calc_working_set_ratio: number;
       oom_calc_limit_ratio: number;
       oom_calc_history_ratio: number;
@@ -851,6 +855,55 @@ declare namespace Api {
     }
 
     type PeriodPayload = Partial<Omit<Period, 'id' | 'module_id'>>;
+
+    /** a metric trigger of a module (one of its strategies): while the metric stands on the wrong side of the threshold the replicas are raised, lowered or set */
+    interface Trigger {
+      id: number;
+      module_id: number;
+      name: string;
+      enabled: boolean;
+      priority: number;
+      /** the key of a metric source of the module, or jvm_heap_pressure */
+      metric: string;
+      stat: 'last' | 'avg' | 'max' | 'min';
+      window_minutes: number;
+      operator: 'gt' | 'gte' | 'lt' | 'lte';
+      threshold: number;
+      action: 'scale_up' | 'scale_down' | 'set';
+      unit: 'replicas' | 'percent';
+      amount: number;
+      /** the days (a bit mask, 0 = every day) and the minutes of the day the trigger is in force; equal minutes = all day */
+      weekdays: number;
+      start_minute: number;
+      end_minute: number;
+      remark: string;
+    }
+
+    type TriggerPayload = Partial<Omit<Trigger, 'id' | 'module_id'>>;
+
+    /** the capacity of one Pod of a module, with the state of each figure (nothing but ready carries a number) */
+    type CapacityState = 'ready' | 'not_set' | 'no_source' | 'no_history' | 'insufficient' | 'error';
+
+    interface CapacityReport {
+      mode: CapacityMode;
+      state: CapacityState;
+      value: number;
+      note?: string;
+      manual: number;
+      estimate: number;
+      estimate_state: CapacityState;
+      estimate_note?: string;
+      samples: number;
+      used: number;
+      lookback_days: number;
+      busy_share: number;
+      min_samples: number;
+      rule?: string;
+      reserve: number;
+      reserve_set: boolean;
+      pod_cpu_request_milli: number;
+      pod_memory_request_bytes: number;
+    }
 
     interface QualityGap {
       from: string;

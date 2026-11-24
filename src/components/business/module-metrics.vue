@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NButton, NInputNumber, NSelect } from 'naive-ui';
+import { NButton, NInputNumber, NSelect, NTag } from 'naive-ui';
 import StatusSelect from '@/components/business/status-select.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
 import { $t } from '@/locales';
@@ -26,14 +26,39 @@ import {
  */
 defineOptions({ name: 'ModuleMetrics' });
 
-/** the kinds of metric the OOM protection reads; every other kind belongs to the general scope */
-const OOM_KINDS = ['oom', 'oom_working_set', 'jvm_heap_used', 'jvm_heap_max'];
+/** the kinds of metric of the OOM protection (the kills and the working set before a kill) */
+const OOM_KINDS = ['oom', 'oom_working_set'];
 /** the Requests and the Limits are display metrics: they are bound in the display metrics of the module, not here */
 const DISPLAY_KINDS = ['k8s_cpu_requests', 'k8s_cpu_limits', 'k8s_mem_requests', 'k8s_mem_limits'];
 
-const props = withDefaults(defineProps<{ scope?: 'general' | 'oom' }>(), { scope: 'general' });
-const inScope = (kind: string) =>
-  props.scope === 'oom' ? OOM_KINDS.includes(kind) : !OOM_KINDS.includes(kind) && !DISPLAY_KINDS.includes(kind);
+/** the type of a metric: OOM, JVM, or one of the rest, so a list never shows a name without saying what the metric is of */
+type MetricClass = 'oom' | 'jvm' | 'resource' | 'k8s' | 'gpu' | 'network' | 'other';
+function metricClassOf(kind: string): MetricClass {
+  if (OOM_KINDS.includes(kind)) return 'oom';
+  if (kind.startsWith('jvm_')) return 'jvm';
+  if (kind.startsWith('k8s_')) return 'k8s';
+  if (['cpu', 'memory', 'cpu_util', 'memory_util', 'replicas', 'rps', 'latency'].includes(kind)) return 'resource';
+  if (kind.startsWith('gpu')) return 'gpu';
+  if (kind.startsWith('network')) return 'network';
+  return 'other';
+}
+const CLASS_TAG: Record<MetricClass, 'error' | 'warning' | 'info' | 'default' | 'success'> = {
+  oom: 'error',
+  jvm: 'warning',
+  resource: 'success',
+  k8s: 'info',
+  gpu: 'default',
+  network: 'default',
+  other: 'default'
+};
+
+/** general: what the forecast and the recommendation are calculated from; oom: the OOM protection; jvm: the JVM pressure */
+const props = withDefaults(defineProps<{ scope?: 'general' | 'oom' | 'jvm' }>(), { scope: 'general' });
+const inScope = (kind: string) => {
+  if (props.scope === 'oom') return metricClassOf(kind) === 'oom';
+  if (props.scope === 'jvm') return metricClassOf(kind) === 'jvm';
+  return !['oom', 'jvm'].includes(metricClassOf(kind)) && !DISPLAY_KINDS.includes(kind);
+};
 
 interface Row {
   /** the id of the source this row is saved as; none for a row that was just added */
@@ -76,6 +101,13 @@ const templateById = (id: number | null) => templates.value.find(item => item.id
 
 /** a template named like Requests / Limits but filed under CPU or memory: it would be taken for a metric of the algorithms */
 const DISPLAY_NAME = /(request|limit)/i;
+/** the type of the metric a row stands for: its template's kind (a row with no template yet is of the type of the list it is in) */
+function classOfRow(row: Row): MetricClass {
+  const template = templateById(row.mappingId);
+  if (template) return metricClassOf(template.metric);
+  return props.scope === 'oom' ? 'oom' : props.scope === 'jvm' ? 'jvm' : 'resource';
+}
+
 function looksDisplay(row: Row) {
   const template = templateById(row.mappingId);
   return Boolean(template && ['cpu', 'memory'].includes(template.metric) && DISPLAY_NAME.test(template.name));
@@ -258,6 +290,12 @@ defineExpose({ load, save, problem });
   <div class="module-metrics">
     <div v-if="rows.length" class="metric-grid metric-head">
       <span class="inline-flex items-center gap-4px">
+        {{ $t('page.forecast.moduleMetrics.col_type') }}
+        <IconTooltip icon="mdi-help-circle" placement="top">
+          <div class="max-w-320px leading-22px">{{ $t('page.forecast.moduleMetrics.helpType') }}</div>
+        </IconTooltip>
+      </span>
+      <span class="inline-flex items-center gap-4px">
         {{ $t('page.forecast.moduleMetrics.col_template') }}
         <IconTooltip icon="mdi-help-circle" placement="top">
           <div class="max-w-320px leading-22px">{{ $t('page.forecast.moduleMetrics.helpTemplate') }}</div>
@@ -279,6 +317,9 @@ defineExpose({ load, save, problem });
       <span />
     </div>
     <div v-for="(row, index) in rows" :key="row.id ?? `new-${index}`" class="metric-grid metric-row">
+      <NTag size="small" :bordered="false" :type="CLASS_TAG[classOfRow(row)]">
+        {{ $t(`page.forecast.moduleMetrics.class_${classOfRow(row)}`) }}
+      </NTag>
       <NSelect v-model:value="row.mappingId" filterable size="small" :options="templateOptions" />
       <NInputNumber v-model:value="row.weight" size="small" :min="0" :step="0.5" :show-button="false" />
       <StatusSelect v-model:value="row.enabled" />
@@ -293,7 +334,9 @@ defineExpose({ load, save, problem });
         </NButton>
       </div>
     </div>
-    <div v-if="!rows.length" class="mb-6px text-12px opacity-70">{{ $t('page.forecast.moduleMetrics.empty') }}</div>
+    <div v-if="!rows.length" class="mb-6px text-12px opacity-70">
+      {{ $t(`page.forecast.moduleMetrics.empty_${scope}`) }}
+    </div>
     <NButton size="small" dashed class="mt-6px" @click="add">{{ $t('page.forecast.moduleMetrics.add') }}</NButton>
   </div>
 </template>
@@ -301,7 +344,7 @@ defineExpose({ load, save, problem });
 <style scoped>
 .metric-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 2fr) 90px 112px 64px 52px;
+  grid-template-columns: 64px minmax(240px, 2fr) 90px 112px 64px 52px;
   gap: 8px;
   align-items: center;
 }
