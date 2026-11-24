@@ -50,6 +50,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { plotHeight: 230 });
 const { t, locale } = useI18n();
 
+/** the width of the Requests and of the Limits, the same for both: 70% of the 5.6 the Requests was drawn with when it sat under another line */
+const CONFIG_WIDTH = 3.9;
 const LINE_COLORS = ['#2080f0', '#18a058', '#f0a020', '#8e44ad', '#00a3a3', '#d03050'];
 
 const lines = computed(() => props.spec.lines.filter(line => line.ts.length > 0 && groupShown(line.group)));
@@ -71,8 +73,9 @@ const stripes = computed(() => {
     }
     group.forEach(index => used.add(index));
     if (group.length < 2) return;
+    // the Requests and the Limits keep their one width wherever they sit; a line over them is narrower, so its edge shows
     group.forEach((index, rank) =>
-      map.set(list[index].name, { width: 2 + (group.length - 1 - rank) * 3.6, z: 2 + rank })
+      map.set(list[index].name, { width: list[index].group === 'config' ? CONFIG_WIDTH : 2, z: 2 + rank })
     );
   });
   return map;
@@ -123,7 +126,7 @@ async function draw() {
       z: stripes.value.get(ref.name)?.z ?? (solid ? 5 : 2),
       data: flat(ref.value),
       lineStyle: {
-        width: stripes.value.get(ref.name)?.width ?? (solid ? 2.6 : 1.4),
+        width: ref.group === 'config' ? CONFIG_WIDTH : (stripes.value.get(ref.name)?.width ?? (solid ? 2.6 : 1.4)),
         type: ref.style === 'dashdot' ? [10, 4, 2, 4] : (ref.style ?? 'dashed'),
         color: ref.color
       },

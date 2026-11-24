@@ -73,7 +73,7 @@ const configWords = computed(() => ({
   floorThrottle: p('formulaFloorThrottle'),
   coefSource: p('basisCoefSource'),
   requestHeadroom: p('formulaRequestHeadroom'),
-  limitHeadroom: p('formulaHeadroom'),
+  limitFactor: p('formulaHeadroom'),
   current: p('basisRequestsNow')
 }));
 
@@ -175,13 +175,13 @@ const coefficients = computed(() => {
       },
       {
         name: p('coefLimitMargin', { r: p('sectionCpu') }),
-        value: pct(pr.cpu_limit_headroom || pr.limit_headroom),
+        value: pct(pr.cpu_limit_factor || pr.limit_factor),
         unit: p('unitMarginOfP99'),
         source: p('srcCoefficients')
       },
       {
         name: p('coefLimitMargin', { r: p('sectionMemory') }),
-        value: pct(pr.memory_limit_headroom || pr.limit_headroom),
+        value: pct(pr.memory_limit_factor || pr.limit_factor),
         unit: p('unitMarginOfP99'),
         source: p('srcCoefficients')
       }

@@ -594,7 +594,7 @@ const local = {
       basisExceed:
         '{r}: the use was above the recommended {level} for {share} of the time, in {events} stretches, the longest {longest} minutes; above the Requests now for {now}.',
       basisLimitRatio:
-        '{r}: the Limits is a multiple of the Requests, {now} times now and {rec} times recommended (recommended Limits = max(recommended Requests, P99 x (1 + Limits margin)), so never below the recommended Requests).',
+        '{r}: the Limits is a multiple of the Requests, {now} times now and {rec} times recommended (recommended Limits = max(recommended Requests, P99 x Limits coefficient), so never below the recommended Requests).',
       replicasRowResource: '{r} (Requests of a Pod now)',
       repThisRound: 'Reached by one action',
       repThisRoundNote: 'at most {step} at once, {rounds} actions',
@@ -610,6 +610,7 @@ const local = {
       caliberLabel: 'Caliber',
       caliberAll: 'Together (the largest)',
       caliberAllColumn: 'Together',
+      colByPercentile: 'By {c}',
       caliberAllName: 'Together (the largest of P90, P95, P99)',
       caliberHelp:
         'Which percentile the recommendation is made of: P90, P95 and P99 are each worked out, and "together" is the one that needs the most (it is what the platform recommends, after the bounds of the module). The caliber chosen updates the adjustment column and the basis; every column above is the result of that caliber alone.',
@@ -653,12 +654,12 @@ const local = {
       unitShareOfRequests: 'the share of the Requests the use takes',
       unitShareOfLimits: 'the share of the Limits the use takes',
       unitMargin: 'the share added over the recommended Requests',
-      unitMarginOfP99: 'the share added over the P99 use',
+      unitMarginOfP99: 'a multiple of the P99 use',
       srcCoefficients:
         'Module management > Coefficients; where the module sets none, System settings > Resource analysis and recommendation',
       srcModule: 'Module management > Coefficients (the module own value)',
       coefRequestMargin: '{r} Requests margin',
-      coefLimitMargin: '{r} Limits margin',
+      coefLimitMargin: '{r} Limits coefficient',
       basisNeedByResource: 'Replicas the {r} needs',
       basisDecidedBy:
         'The recommended replicas are decided by the {r} (it needs the most: {n} replicas), then held to the bounds below.',
@@ -1006,7 +1007,7 @@ const local = {
       schemeByConfig: '2. Change the Pod (the replicas stay)',
       schemeFirst: 'first',
       schemeLegend:
-        'Colours: green = reasonable, nothing to change; orange = more than needed (fewer replicas, a lower Requests); red = less than needed (more replicas, a higher Requests); blue = information only (OOM, throttling or too little data).',
+        'Colours: green = reasonable, nothing to change; orange = more than needed (fewer replicas, a lower Requests); red = less than needed (more replicas, a higher Requests); blue = information only (OOM, throttling or too little data). The figures of a column are what that percentile recommends, not the measured use; the measured P90, P95 and P99 are in the use table and the charts below, the raw values of Prometheus, which no Requests, Limits or coefficient changes. The Limits is always the measured P99 times the Limits coefficient, so it is the same in every column.',
       repOut: 'add {n} replicas ({share})',
       repIn: 'remove {n} replicas ({share})',
       repSame: 'The replicas are right, no change',
@@ -1046,7 +1047,7 @@ const local = {
       formulaFloorOom: 'OOM floor',
       formulaFloorThrottle: 'Throttle floor',
       formulaCoefSource: 'Coefficient: from module management (the system setting where the module sets none)',
-      formulaHeadroom: 'Limits margin coefficient',
+      formulaHeadroom: 'Limits coefficient',
       formulaRequestHeadroom: 'Requests margin',
       coefReserveCard: 'Capacity reserve coefficient',
       coefReserveCardHelp:
@@ -1686,7 +1687,7 @@ const local = {
           sampleNeed: 'Sample',
           limits: 'Recommended Limits',
           limitsRecommended: 'Recommended Limits',
-          limitHeadroom: 'Limits headroom',
+          limitFactor: 'Limits coefficient',
           systemValue: 'Not set on the module: the system setting',
           replicas: 'Replicas',
           replicasNeed: 'Replicas needed',
@@ -1755,17 +1756,17 @@ const local = {
           scope:
             'Only the recommended memory Requests (resource dashboard). CPU has a headroom of its own; the OOM floor still comes first.'
         },
-        cpuLimitHeadroom: {
-          def: 'How far the recommended CPU Limits is above the P99 use: 0.2 is 20% above; 0 follows the system setting.',
-          role: 'Recommended CPU Limits = max(recommended CPU Requests, CPU P99 use x (1 + CPU Limits headroom)), so it is never below the recommended Requests.',
+        cpuLimitFactor: {
+          def: 'How many times the P99 use the recommended CPU Limits is: 1.2 is P99 x 1.2 (20% above it); 0 follows the system setting, otherwise not below 1.',
+          role: 'Recommended CPU Limits = max(recommended CPU Requests, CPU P99 use x CPU Limits coefficient), so it is never below the recommended Requests.',
           scope:
-            'Only the recommended CPU Limits (resource dashboard). Memory Limits have a headroom of their own; the Limits admission derives from the Requests with the CPU limit ratio do not use it.'
+            'Only the recommended CPU Limits (resource dashboard). Memory Limits have a coefficient of their own; the Limits admission derives from the Requests with the CPU limit ratio do not use it.'
         },
-        memoryLimitHeadroom: {
-          def: 'How far the recommended memory Limits is above the P99 use: 0.2 is 20% above; 0 follows the system setting.',
-          role: 'Recommended memory Limits = max(recommended memory Requests, memory P99 use x (1 + memory Limits headroom)).',
+        memoryLimitFactor: {
+          def: 'How many times the P99 use the recommended memory Limits is: 1.2 is P99 x 1.2 (20% above it); 0 follows the system setting, otherwise not below 1.',
+          role: 'Recommended memory Limits = max(recommended memory Requests, memory P99 use x memory Limits coefficient).',
           scope:
-            'Only the recommended memory Limits (resource dashboard). CPU Limits have a headroom of their own; the Limits admission derives from the Requests with the memory limit ratio do not use it.'
+            'Only the recommended memory Limits (resource dashboard). CPU Limits have a coefficient of their own; the Limits admission derives from the Requests with the memory limit ratio do not use it.'
         },
         sustain: {
           def: 'The P90, P95 and P99 the recommended Requests and replicas are made of are not taken of the raw points but of the sustained use: every point is the mean of the use over this many minutes before it. 0 follows the system setting (System settings > Resource analysis and recommendation).',
@@ -2016,8 +2017,8 @@ const local = {
         coeffP99: 'P99 target share',
         coeffCpuRequestHeadroom: 'CPU Requests headroom',
         coeffMemoryRequestHeadroom: 'Memory Requests headroom',
-        coeffCpuLimitHeadroom: 'CPU Limits headroom',
-        coeffMemoryLimitHeadroom: 'Memory Limits headroom',
+        coeffCpuLimitFactor: 'CPU Limits coefficient',
+        coeffMemoryLimitFactor: 'Memory Limits coefficient',
         coeffLimitGuard: 'Peak share of Limits',
         sectionOom: 'OOM protection',
         descOom:

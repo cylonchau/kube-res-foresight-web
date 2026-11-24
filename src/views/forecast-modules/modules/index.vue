@@ -203,8 +203,8 @@ function emptyForm() {
     rec_sustain_minutes: 0,
     rec_cpu_request_headroom: 0,
     rec_memory_request_headroom: 0,
-    rec_cpu_limit_headroom: 0,
-    rec_memory_limit_headroom: 0,
+    rec_cpu_limit_factor: 0,
+    rec_memory_limit_factor: 0,
     oom_calc_working_set_ratio: 1,
     oom_calc_limit_ratio: 1,
     oom_calc_history_ratio: 1,
@@ -280,20 +280,20 @@ const coefficientLines = computed(() => {
     cpuLimits: m('formulaCpuLimits'),
     memoryLimits: m('formulaMemoryLimits'),
     requestHeadroom: m('coeffCpuRequestHeadroom'),
-    limitHeadroom: m('coeffCpuLimitHeadroom'),
+    limitFactor: m('coeffCpuLimitFactor'),
     system: m('formulaSystem'),
     keepsNeed: ''
   });
 });
 
 /** what the system settings say where a module leaves a share at 0: read once, shown in the examples of the "?" (0 = not read) */
-const system = reactive({ p90: 0, p95: 0, p99: 0, limitHeadroom: 0, limitGuard: 0, sustain: 0 });
+const system = reactive({ p90: 0, p95: 0, p99: 0, limitFactor: 0, limitGuard: 0, sustain: 0 });
 async function loadSystemDefaults() {
   const keys = {
     p90: 'analysis.rec_p90_target_percent',
     p95: 'analysis.rec_p95_target_percent',
     p99: 'analysis.rec_p99_target_percent',
-    limitHeadroom: 'analysis.rec_limit_headroom_percent',
+    limitFactor: 'analysis.rec_limit_factor_percent',
     limitGuard: 'analysis.rec_limit_guard_percent',
     sustain: 'analysis.rec_sustain_minutes'
   } as const;
@@ -624,8 +624,8 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     rec_sustain_minutes: form.rec_sustain_minutes,
     rec_cpu_request_headroom: form.rec_cpu_request_headroom,
     rec_memory_request_headroom: form.rec_memory_request_headroom,
-    rec_cpu_limit_headroom: form.rec_cpu_limit_headroom,
-    rec_memory_limit_headroom: form.rec_memory_limit_headroom,
+    rec_cpu_limit_factor: form.rec_cpu_limit_factor,
+    rec_memory_limit_factor: form.rec_memory_limit_factor,
     oom_calc_working_set_ratio: form.oom_calc_working_set_ratio,
     oom_calc_limit_ratio: form.oom_calc_limit_ratio,
     oom_calc_history_ratio: form.oom_calc_history_ratio,
@@ -1556,24 +1556,21 @@ onMounted(() => {
             <div class="sub-title">{{ t('page.forecast.modules.coeffGroupLimits') }}</div>
             <NFormItem>
               <template #label>
-                <ParamLabel
-                  :label="t('page.forecast.modules.coeffCpuLimitHeadroom')"
-                  :doc="docOf('cpuLimitHeadroom')"
-                />
+                <ParamLabel :label="t('page.forecast.modules.coeffCpuLimitFactor')" :doc="docOf('cpuLimitFactor')" />
               </template>
-              <NInputNumber v-model:value="form.rec_cpu_limit_headroom" :min="0" :max="3" :step="0.05" class="w-full" />
+              <NInputNumber v-model:value="form.rec_cpu_limit_factor" :min="0" :max="5" :step="0.05" class="w-full" />
             </NFormItem>
             <NFormItem>
               <template #label>
                 <ParamLabel
-                  :label="t('page.forecast.modules.coeffMemoryLimitHeadroom')"
-                  :doc="docOf('memoryLimitHeadroom')"
+                  :label="t('page.forecast.modules.coeffMemoryLimitFactor')"
+                  :doc="docOf('memoryLimitFactor')"
                 />
               </template>
               <NInputNumber
-                v-model:value="form.rec_memory_limit_headroom"
+                v-model:value="form.rec_memory_limit_factor"
                 :min="0"
-                :max="3"
+                :max="5"
                 :step="0.05"
                 class="w-full"
               />

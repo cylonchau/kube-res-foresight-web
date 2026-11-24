@@ -70,8 +70,8 @@ export function recommendationLines(
   const top = Math.max(...needs);
   // each resource has its own margins: the Requests margin is the module's, the Limits margin the module's or else the system's
   const requestMargin = (resource === 'memory' ? params.memory_request_headroom : params.cpu_request_headroom) || 0;
-  const limitMargin =
-    (resource === 'memory' ? params.memory_limit_headroom : params.cpu_limit_headroom) || params.limit_headroom;
+  const limitFactor =
+    (resource === 'memory' ? params.memory_limit_factor : params.cpu_limit_factor) || params.limit_factor;
   const withMargin = requestMargin > 0 ? top * (1 + requestMargin) : top;
   const marginTokens = (figure: boolean): Token[] =>
     requestMargin > 0
@@ -142,7 +142,7 @@ export function recommendationLines(
   if (r.reasons.includes('throttled'))
     lines.push({ label: words.floorThrottle, tokens: [name(words.recommended), op('≥'), num(show(r.request))] });
   if (r.suggested > 0) {
-    const peak = r.usage.p99 * (1 + limitMargin);
+    const peak = r.usage.p99 * limitFactor;
     lines.push({
       label: words.limits,
       tokens: [
@@ -154,11 +154,7 @@ export function recommendationLines(
         op(','),
         name('P99'),
         op('×'),
-        op('('),
-        num('1'),
-        op('+'),
-        coef(formatPercent(limitMargin, 0), words.headroom),
-        op(')'),
+        coef(formatPercent(limitFactor, 0), words.headroom),
         op(')'),
         op('='),
         name('max'),
@@ -184,8 +180,8 @@ export interface CoefficientForm {
   rec_limit_guard: number;
   rec_cpu_request_headroom: number;
   rec_memory_request_headroom: number;
-  rec_cpu_limit_headroom: number;
-  rec_memory_limit_headroom: number;
+  rec_cpu_limit_factor: number;
+  rec_memory_limit_factor: number;
   oom_memory_uplift: number;
   oom_calc_working_set_ratio: number;
   oom_calc_limit_ratio: number;
@@ -213,7 +209,7 @@ export interface PreviewWords {
   cpuLimits: string;
   memoryLimits: string;
   requestHeadroom: string;
-  limitHeadroom: string;
+  limitFactor: string;
   system: string;
   keepsNeed: string;
 }
@@ -302,17 +298,13 @@ export function moduleFormulaLines(f: CoefficientForm, w: PreviewWords): Formula
       op(','),
       name('P99'),
       op('×'),
-      op('('),
-      num('1'),
-      op('+'),
-      coef(margin > 0 ? formatDecimal(margin, 4) : w.system, margin > 0 ? w.limitHeadroom : w.system),
-      op(')'),
+      coef(margin > 0 ? formatDecimal(margin, 4) : w.system, margin > 0 ? w.limitFactor : w.system),
       op(')')
     ]
   });
   lines.push(requests(w.cpuRequests, f.rec_cpu_request_headroom));
   lines.push(requests(w.memoryRequests, f.rec_memory_request_headroom));
-  lines.push(limits(w.cpuLimits, w.cpuRequests, f.rec_cpu_limit_headroom));
-  lines.push(limits(w.memoryLimits, w.memoryRequests, f.rec_memory_limit_headroom));
+  lines.push(limits(w.cpuLimits, w.cpuRequests, f.rec_cpu_limit_factor));
+  lines.push(limits(w.memoryLimits, w.memoryRequests, f.rec_memory_limit_factor));
   return lines;
 }

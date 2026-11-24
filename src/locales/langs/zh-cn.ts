@@ -583,7 +583,7 @@ const local = {
       basisExceed:
         '{r}：使用量超过推荐的 {level} 的时间占 {share}，分 {events} 段，最长连续 {longest} 分钟；超过现在的 Requests 的时间占 {now}。',
       basisLimitRatio:
-        '{r}：Limits 是 Requests 的倍数，现在 {now} 倍，推荐 {rec} 倍（推荐 Limits = max(推荐 Requests, P99 × (1 + Limits 余量))，所以不会低于推荐 Requests）。',
+        '{r}：Limits 是 Requests 的倍数，现在 {now} 倍，推荐 {rec} 倍（推荐 Limits = max(推荐 Requests, P99 × Limits 系数)，所以不会低于推荐 Requests）。',
       replicasRowResource: '{r}（单 Pod 当前 Requests）',
       repThisRound: '本次动作到',
       repThisRoundNote: '单次最多 {step} 个，要 {rounds} 次到位',
@@ -599,6 +599,7 @@ const local = {
       caliberLabel: '计算口径',
       caliberAll: '综合（取最大）',
       caliberAllColumn: '综合',
+      colByPercentile: '按 {c} 推荐',
       caliberAllName: '综合（P90、P95、P99 取最大）',
       caliberHelp:
         '推荐值可以按哪个百分位算：P90、P95、P99 各算一个，“综合”是三个里需求最大的那个（平台的推荐值就是它，再经过模块的边界）。选了某个口径，“调整”一列和计算依据都按它更新；上面每一列是各口径单独算的结果。',
@@ -640,11 +641,11 @@ const local = {
       unitShareOfRequests: '使用量占 Requests 的比例',
       unitShareOfLimits: '使用量占 Limits 的比例',
       unitMargin: '在推荐 Requests 之上再加的比例',
-      unitMarginOfP99: '在 P99 使用量之上再加的比例',
+      unitMarginOfP99: 'P99 使用量的倍数',
       srcCoefficients: '模块管理 > 计算系数；模块没设就取系统设置 > 资源分析与推荐',
       srcModule: '模块管理 > 计算系数（模块自己的值）',
       coefRequestMargin: '{r} Requests 余量',
-      coefLimitMargin: '{r} Limits 余量',
+      coefLimitMargin: '{r} Limits 系数',
       basisNeedByResource: '{r}需要的副本数',
       basisDecidedBy: '最终推荐的副本数由{r}决定（它算出的副本数最多：{n} 个），再经过下面的边界得到推荐值。',
       basisReplicasCount: '{n} 个副本',
@@ -968,7 +969,7 @@ const local = {
       schemeByConfig: '② 调整单 Pod 配置（副本数不变）',
       schemeFirst: '优先',
       schemeLegend:
-        '颜色：绿 = 合理，无需调整；橙 = 多于需要（可以减少副本或降低 Requests）；红 = 少于需要（需要增加副本或提高 Requests）；蓝 = 仅提示（OOM、限流或数据不足）。',
+        '颜色：绿 = 合理，无需调整；橙 = 多于需要（可以减少副本或降低 Requests）；红 = 少于需要（需要增加副本或提高 Requests）；蓝 = 仅提示（OOM、限流或数据不足）。各列的数字是“按该百分位推荐”的结果，不是实测使用量；实测的 P90、P95、P99 在下面的使用量表和折线图里，是 Prometheus 的原始值，不会因 Requests、Limits 或系数改变。Limits 一律按 P99 实测使用量 × Limits 系数，所以各列相同。',
       repOut: '增加 {n} 个副本（{share}）',
       repIn: '减少 {n} 个副本（{share}）',
       repSame: '副本数合适，无需调整',
@@ -1000,7 +1001,7 @@ const local = {
       formulaFloorOom: 'OOM 地板',
       formulaFloorThrottle: '限流地板',
       formulaCoefSource: '系数：来自模块管理（模块没设就跟随系统设置）',
-      formulaHeadroom: 'Limits 余量',
+      formulaHeadroom: 'Limits 系数',
       formulaRequestHeadroom: 'Requests 余量',
       coefReserveCard: '容量保留系数',
       coefReserveCardHelp:
@@ -1608,7 +1609,7 @@ const local = {
           sampleNeed: '样例',
           limits: '推荐 Limits',
           limitsRecommended: '推荐 Limits',
-          limitHeadroom: 'Limits 余量',
+          limitFactor: 'Limits 系数',
           systemValue: '模块没设，取系统设置里的值',
           replicas: '副本数',
           replicasNeed: '所需副本数',
@@ -1673,17 +1674,17 @@ const local = {
           role: '推荐内存 Requests = 三个分位数的最大需求 × (1 + 内存 Requests 余量)。',
           scope: '只作用于内存的推荐 Requests（资源大盘）。CPU 用它自己的余量，两者互不影响；OOM 给出的下限仍然优先。'
         },
-        cpuLimitHeadroom: {
-          def: 'CPU 的推荐 Limits 比 P99 使用量高出的比例，0.2 即高 20%；0 跟随系统设置。',
-          role: '推荐 CPU Limits = max(推荐 CPU Requests, CPU 的 P99 使用量 × (1 + CPU Limits 余量))，所以不会低于推荐的 Requests。',
+        cpuLimitFactor: {
+          def: 'CPU 的推荐 Limits 是 P99 使用量的多少倍，1.2 即 P99 × 1.2（比 P99 高 20%）；0 跟随系统设置，填写时不得小于 1。',
+          role: '推荐 CPU Limits = max(推荐 CPU Requests, CPU 的 P99 使用量 × CPU Limits 系数)，所以不会低于推荐的 Requests。',
           scope:
-            '只作用于 CPU 的推荐 Limits（资源大盘）。内存 Limits 用它自己的余量，两者分开算；准入时由“CPU limit 系数”从 Requests 推出的 Limits 不用它。'
+            '只作用于 CPU 的推荐 Limits（资源大盘）。内存 Limits 用它自己的系数，两者分开算；准入时由“CPU limit 系数”从 Requests 推出的 Limits 不用它。'
         },
-        memoryLimitHeadroom: {
-          def: '内存的推荐 Limits 比 P99 使用量高出的比例，0.2 即高 20%；0 跟随系统设置。',
-          role: '推荐内存 Limits = max(推荐内存 Requests, 内存的 P99 使用量 × (1 + 内存 Limits 余量))。',
+        memoryLimitFactor: {
+          def: '内存的推荐 Limits 是 P99 使用量的多少倍，1.2 即 P99 × 1.2（比 P99 高 20%）；0 跟随系统设置，填写时不得小于 1。',
+          role: '推荐内存 Limits = max(推荐内存 Requests, 内存的 P99 使用量 × 内存 Limits 系数)。',
           scope:
-            '只作用于内存的推荐 Limits（资源大盘）。CPU Limits 用它自己的余量，两者分开算；准入时由“内存 limit 系数”从 Requests 推出的 Limits 不用它。'
+            '只作用于内存的推荐 Limits（资源大盘）。CPU Limits 用它自己的系数，两者分开算；准入时由“内存 limit 系数”从 Requests 推出的 Limits 不用它。'
         },
         sustain: {
           def: '推荐 Requests 和副本数用的 P90、P95、P99，不是按原始点取，而是按“持续使用量”取：每个点是它之前这么多分钟使用量的平均值。0 跟随系统设置（系统管理 > 系统设置 > 资源分析与推荐）。',
@@ -1911,8 +1912,8 @@ const local = {
         coeffP99: 'P99 目标占比',
         coeffCpuRequestHeadroom: 'CPU Requests 余量',
         coeffMemoryRequestHeadroom: '内存 Requests 余量',
-        coeffCpuLimitHeadroom: 'CPU Limits 余量',
-        coeffMemoryLimitHeadroom: '内存 Limits 余量',
+        coeffCpuLimitFactor: 'CPU Limits 系数',
+        coeffMemoryLimitFactor: '内存 Limits 系数',
         coeffLimitGuard: 'Limits 峰值占比上限',
         sectionOom: 'OOM 保护',
         descOom:

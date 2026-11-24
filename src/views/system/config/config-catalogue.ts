@@ -58,9 +58,9 @@ const NOTES: Record<string, ConfigNote> = {
   ...band('p90', 'P90'),
   ...band('p95', 'P95'),
   ...band('p99', 'P99'),
-  'analysis.rec_limit_headroom_percent': {
-    name: '推荐：Limits 余量（百分比）',
-    purpose: '推荐的 Limits = P99 使用量加上这个余量，并且不低于推荐的 Requests（0-300）。'
+  'analysis.rec_limit_factor_percent': {
+    name: '推荐：Limits 系数（P99 使用量的百分比）',
+    purpose: '推荐的 Limits = P99 使用量 × 这个系数（120 = ×1.2），并且不低于推荐的 Requests（100-500）。'
   },
   'analysis.rec_limit_guard_percent': {
     name: '推荐：Limits 峰值占比上限（百分比）',

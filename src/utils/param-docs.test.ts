@@ -12,8 +12,8 @@ const form: DocForm = {
   rec_sustain_minutes: 30,
   rec_cpu_request_headroom: 0.1,
   rec_memory_request_headroom: 0,
-  rec_cpu_limit_headroom: 0,
-  rec_memory_limit_headroom: 0.3,
+  rec_cpu_limit_factor: 0,
+  rec_memory_limit_factor: 1.3,
   oom_memory_uplift: 1.5,
   oom_calc_working_set_ratio: 1,
   oom_calc_limit_ratio: 0.5,
@@ -26,7 +26,7 @@ const form: DocForm = {
 };
 const ctx = {
   t: (key: string) => key,
-  system: { p90: 0.8, p95: 0.85, p99: 1.1, limitHeadroom: 0.2, limitGuard: 0.9, sustain: 30 }
+  system: { p90: 0.8, p95: 0.85, p99: 1.1, limitFactor: 1.2, limitGuard: 0.9, sustain: 30 }
 };
 const plain = (lines: Array<{ tokens: Array<{ text: string }> }>) =>
   lines.map(line => line.tokens.map(t => t.text).join(' '));
@@ -43,11 +43,11 @@ test('the capacity reserve coefficient divides, and its example uses the value t
   assert.equal(plain(paramDoc('reserve', { ...form, target_utilization: 0 }, ctx).example)[0], '4 × 1.2 ÷ 1 = 4.8');
 });
 
-test('the Requests margin and the Limits margin are each resource’s own, and a Limits margin the module leaves unset is the system one', () => {
+test('the Requests margin and the Limits coefficient are each resource’s own, and a Limits coefficient the module leaves unset is the system one', () => {
   assert.equal(plain(paramDoc('cpuRequestHeadroom', form, ctx).example)[0], '4 × ( 1 + 0.1 ) = 4.4');
   assert.equal(plain(paramDoc('memoryRequestHeadroom', form, ctx).example)[0], '4 × ( 1 + 0 ) = 4');
-  assert.match(plain(paramDoc('cpuLimitHeadroom', form, ctx).example)[0], /\( 1 \+ 0\.2 \)/, 'the system 20%');
-  assert.match(plain(paramDoc('memoryLimitHeadroom', form, ctx).example)[0], /\( 1 \+ 0\.3 \)/, 'the module 30%');
+  assert.match(plain(paramDoc('cpuLimitFactor', form, ctx).example)[0], /× 1\.2 \)/, 'the system 120%');
+  assert.match(plain(paramDoc('memoryLimitFactor', form, ctx).example)[0], /× 1\.3 \)/, 'the module 130%');
 });
 
 test('the percentile target follows the system where the module sets none', () => {
@@ -67,7 +67,7 @@ test('every document has all five parts', () => {
     'reserve',
     'headroom',
     'p90',
-    'cpuLimitHeadroom',
+    'cpuLimitFactor',
     'limitGuard',
     'oomUplift',
     'oomLimit',

@@ -21,7 +21,7 @@ export interface ConfigBasisWords {
   floorThrottle: string;
   coefSource: string;
   requestHeadroom: string;
-  limitHeadroom: string;
+  limitFactor: string;
   current: string;
 }
 
@@ -37,8 +37,8 @@ export function configBasisLines(
   const candidates = (r.candidates ?? []).filter(c => caliber === 'all' || c.name === caliber);
   if (!candidates.length) return [];
   const requestMargin = (resource === 'memory' ? params.memory_request_headroom : params.cpu_request_headroom) || 0;
-  const limitMargin =
-    (resource === 'memory' ? params.memory_limit_headroom : params.cpu_limit_headroom) || params.limit_headroom;
+  const limitFactor =
+    (resource === 'memory' ? params.memory_limit_factor : params.cpu_limit_factor) || params.limit_factor;
   const lines: FormulaLine[] = candidates.map(c => ({
     label: c.name,
     tokens: [
@@ -126,11 +126,7 @@ export function configBasisLines(
       name('P99'),
       num(show(p99)),
       op('×'),
-      op('('),
-      num('1'),
-      op('+'),
-      coef(pct(limitMargin), w.limitHeadroom),
-      op(')'),
+      coef(pct(limitFactor), w.limitFactor),
       op(')'),
       op('='),
       res(show(point.limit))

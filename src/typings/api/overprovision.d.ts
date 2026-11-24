@@ -147,9 +147,9 @@ declare namespace Api {
       p90: Band;
       p95: Band;
       p99: Band;
-      limit_headroom: number;
-      cpu_limit_headroom: number;
-      memory_limit_headroom: number;
+      limit_factor: number;
+      cpu_limit_factor: number;
+      memory_limit_factor: number;
       cpu_request_headroom: number;
       memory_request_headroom: number;
       oom_uplift: number;
