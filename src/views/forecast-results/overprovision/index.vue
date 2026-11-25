@@ -3,6 +3,7 @@ import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard, NInput, NSelect, NTag } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
+import OverprovisionAiAdvice from '@/components/business/overprovision-ai-advice.vue';
 import { useRouterPush } from '@/hooks/common/router';
 import { useOverprovisionListState } from '@/hooks/business/use-overprovision-list-state';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
@@ -223,6 +224,8 @@ onMounted(() => {
         </div>
       </div>
     </NCard>
+
+    <OverprovisionAiAdvice />
 
     <div class="min-h-0 flex-1 flex-col">
       <ListTablePanel

@@ -340,6 +340,34 @@ declare namespace Api {
       missing?: boolean;
     }
 
+    /** one run of the periodic AI advice; output is the report, only on the newest report that was made */
+    interface AdviceRun {
+      id: number;
+      status: 'running' | 'success' | 'failed' | string;
+      started_at: string;
+      finished_at: string | null;
+      error?: string;
+      output?: string;
+      tools?: string;
+    }
+
+    /** the periodic AI advice of the resource dashboard: its task (null when it is not switched on), the newest report that was made, and the newest run of any outcome */
+    interface AiAdvice {
+      task: {
+        id: number;
+        name: string;
+        schedule: string;
+        enabled: boolean;
+        lang: string;
+        next_run_at: string | null;
+        last_run_at: string | null;
+        last_status: string;
+        last_error: string;
+      } | null;
+      report: AdviceRun | null;
+      last: AdviceRun | null;
+    }
+
     /** the query sent to Prometheus for one metric of the module */
     interface LiveQuery {
       key: string;

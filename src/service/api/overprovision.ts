@@ -41,3 +41,26 @@ export function fetchGetOverprovisionResources() {
     headers: { 'X-Silent-Error': '1' }
   });
 }
+
+/** the periodic AI advice of the dashboard: the task, the newest report and the newest run (a failed one is seen beside the report before it) */
+export function fetchGetAiAdvice() {
+  return request<Api.Overprovision.AiAdvice>({
+    url: `${base}/overprovision/ai-advice`,
+    method: 'get',
+    headers: { 'X-Silent-Error': '1' }
+  });
+}
+
+/** switches the periodic advice on (one task for the platform, every day at 8) */
+export function fetchEnableAiAdvice(lang: string) {
+  return request<Api.Overprovision.AiAdvice>({
+    url: `${base}/overprovision/ai-advice/enable`,
+    method: 'post',
+    data: { lang }
+  });
+}
+
+/** queues a run of the advice task now */
+export function fetchRunAiAdvice() {
+  return request<string>({ url: `${base}/overprovision/ai-advice/run`, method: 'post' });
+}
