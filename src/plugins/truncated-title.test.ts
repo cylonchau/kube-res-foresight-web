@@ -4,8 +4,8 @@ import { titleFor } from './truncated-title.ts';
 
 test('a text that is cut gets its whole text as the title', () => {
   assert.equal(
-    titleFor({ scrollWidth: 300, clientWidth: 90, textContent: '  dc52-container-cpu-usage ' }),
-    'dc52-container-cpu-usage'
+    titleFor({ scrollWidth: 300, clientWidth: 90, textContent: '  demo-container-cpu-usage ' }),
+    'demo-container-cpu-usage'
   );
 });
 

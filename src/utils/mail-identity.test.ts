@@ -4,25 +4,25 @@ import { clusterOf, identityTables, mailTitle } from './mail-identity.ts';
 
 const detail = {
   module_id: 7,
-  name: 'neptune-web',
-  namespace: 'c08',
+  name: 'shop-web',
+  namespace: 'shop',
   workload_kind: 'Deployment',
-  workload: 'c08-neptune-web',
+  workload: 'shop-shop-web',
   replicas: 12,
   replicas_ready: 11,
   replicas_abnormal: 1,
   replicas_min: 10,
   replicas_max: 13,
-  datasource: { id: 1, name: 'thanos161' },
+  datasource: { id: 1, name: 'demo-prometheus' },
   identity: {
-    cluster: 'dc52',
-    namespace: 'c08',
+    cluster: 'demo',
+    namespace: 'shop',
     kind: 'Deployment',
-    name: 'c08-neptune-web',
+    name: 'shop-shop-web',
     observed_at: 1,
     pods: [
-      { name: 'c08-neptune-web-7d9f-a1', node: 'n1', phase: 'Running', ready: true, restarts: 0 },
-      { name: 'c08-neptune-web-7d9f-b2', phase: 'Running', ready: false, restarts: 3 }
+      { name: 'shop-shop-web-7d9f-a1', node: 'n1', phase: 'Running', ready: true, restarts: 0 },
+      { name: 'shop-shop-web-7d9f-b2', phase: 'Running', ready: false, restarts: 3 }
     ]
   },
   oom: { kills: 2, lookback_days: 14 },
@@ -56,14 +56,14 @@ test('the mail says which cluster, namespace, module and Pods it is about, and h
     ['模块与工作负载', 'Pod（operator 上报）', '模块近期运行情况']
   );
   const who = tables[0].rows;
-  assert.equal(cell(who, '集群'), 'dc52');
-  assert.equal(cell(who, '命名空间'), 'c08');
-  assert.equal(cell(who, '模块'), 'neptune-web');
-  assert.equal(cell(who, '工作负载'), 'Deployment/c08-neptune-web');
+  assert.equal(cell(who, '集群'), 'demo');
+  assert.equal(cell(who, '命名空间'), 'shop');
+  assert.equal(cell(who, '模块'), 'shop-web');
+  assert.equal(cell(who, '工作负载'), 'Deployment/shop-shop-web');
   assert.match(cell(who, 'Pod') ?? '', /2 个，其中未就绪 1 个/);
   assert.deepEqual(
     tables[1].rows.map(r => r[0].text),
-    ['c08-neptune-web-7d9f-a1', 'c08-neptune-web-7d9f-b2']
+    ['shop-shop-web-7d9f-a1', 'shop-shop-web-7d9f-b2']
   );
   const running = tables[2].rows;
   assert.match(cell(running, '副本数') ?? '', /现在 12 个，就绪 11 个，异常 1 个，周期内最少 10、最多 13/);
@@ -74,13 +74,13 @@ test('the mail says which cluster, namespace, module and Pods it is about, and h
 
 test('with no report of the operator the cluster is the data source, said as such, and the Pods are not invented', () => {
   const bare = { ...detail, identity: undefined } as Api.Overprovision.Detail;
-  assert.match(clusterOf(bare, true), /^thanos161（数据源/);
+  assert.match(clusterOf(bare, true), /^demo-prometheus（数据源/);
   const tables = identityTables(bare, true);
   assert.equal(tables.length, 2, 'no table of Pods');
   assert.match(cell(tables[0].rows, 'Pod') ?? '', /没有 Pod 信息/);
 });
 
 test('the subject names the cluster, the namespace and the module', () => {
-  assert.equal(mailTitle(detail, 'neptune-web', '7d'), 'dc52 · c08/neptune-web · 7d');
-  assert.equal(mailTitle(null, 'neptune-web', '7d'), 'neptune-web · 7d');
+  assert.equal(mailTitle(detail, 'shop-web', '7d'), 'demo · shop/shop-web · 7d');
+  assert.equal(mailTitle(null, 'shop-web', '7d'), 'shop-web · 7d');
 });

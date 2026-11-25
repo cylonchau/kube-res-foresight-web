@@ -1,7 +1,7 @@
 /**
  * Text that does not fit its box is cut with an ellipsis; the person has to be able to read all of it. The tables already show the whole text
  * in a tooltip. The selects (the chosen value in the box, and the options of the menu) do not, and a name that is longer than a short select
- * (a source, a module) reads as "dc52-cont..." with nothing to tell the options apart. This puts the whole text in the title of the cut element
+ * (a source, a module) reads as "demo-cont..." with nothing to tell the options apart. This puts the whole text in the title of the cut element
  * when the pointer comes over it, so the browser shows it; one listener for every select of the console, and nothing is touched until the
  * pointer is over a cut text.
  */
