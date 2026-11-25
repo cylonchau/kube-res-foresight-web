@@ -152,6 +152,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'datasource_clusters',
+        path: '/datasource/clusters',
+        component: 'view.datasource_clusters',
+        meta: {
+          title: 'datasource_clusters',
+          i18nKey: 'route.datasource_clusters'
+        }
+      },
+      {
         name: 'datasource_connections',
         path: '/datasource/connections',
         component: 'view.datasource_connections',

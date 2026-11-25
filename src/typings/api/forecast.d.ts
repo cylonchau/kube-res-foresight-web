@@ -248,6 +248,8 @@ declare namespace Api {
       updated_at: string;
       name: string;
       description: string;
+      /** the registered cluster the workload is in; empty is the default cluster */
+      cluster: string;
       enabled: boolean;
       mode: Mode;
       /** the prediction of the module: off until switched on; none runs on the fixed default configuration, fixed on one algorithm, dynamic on the scores */

@@ -41,6 +41,7 @@ import {
   fetchCreatePeriod,
   fetchDeleteForecastModule,
   fetchGetAlgorithms,
+  fetchGetClusters,
   fetchCreateTrigger,
   fetchGetConfig,
   fetchGetForecastModules,
@@ -89,6 +90,19 @@ const searchParams = reactive<{ keyword: string; mode: Api.Forecast.Mode | null;
   mode: null,
   enabled: null
 });
+
+/** the registered clusters: the form of a module asks for one only when there is more than one (the default one is the empty value) */
+const clusters = ref<Api.Cluster.Cluster[]>([]);
+const clusterOptions = computed(() =>
+  clusters.value.map(c => ({
+    label: c.is_default ? `${c.name} (${t('page.datasource.clusters.default')})` : c.name,
+    value: c.is_default ? '' : c.name
+  }))
+);
+async function loadClusters() {
+  const { data } = await fetchGetClusters();
+  clusters.value = data?.list || [];
+}
 
 const modeOptions = computed(() =>
   (['observe', 'recommend', 'admission', 'auto'] as const).map(value => ({
@@ -179,6 +193,7 @@ function emptyForm() {
     predict_enabled: false,
     predict_mode: 'dynamic' as Api.Forecast.PredictMode,
     predict_algorithm: '',
+    cluster: '',
     namespace: '',
     workload_kind: 'Deployment' as Api.Forecast.WorkloadKind,
     workload: '',
@@ -635,6 +650,7 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     predict_enabled: form.predict_enabled,
     predict_mode: form.predict_mode,
     predict_algorithm: form.predict_mode === 'fixed' ? form.predict_algorithm : '',
+    cluster: form.cluster,
     namespace: form.namespace.trim(),
     workload_kind: form.workload_kind,
     workload: form.workload.trim(),
@@ -922,6 +938,13 @@ const columnMap: Record<string, any> = {
     resizable: true,
     render: (row: Api.Forecast.Module) => copyCell(row.name)
   },
+  cluster: {
+    title: t('page.forecast.modules.cluster'),
+    key: 'cluster',
+    width: 120,
+    resizable: true,
+    render: (row: Api.Forecast.Module) => row.cluster || clusters.value.find(c => c.is_default)?.name || '-'
+  },
   namespace: { title: t('page.forecast.modules.namespace'), key: 'namespace', width: 140, resizable: true },
   workload: {
     title: t('page.forecast.modules.workload'),
@@ -1151,6 +1174,7 @@ onMounted(() => {
   cfg.initColumnConfig();
   loadAlgorithms();
   loadSystemDefaults();
+  loadClusters();
   load();
 });
 </script>
@@ -1232,6 +1256,17 @@ onMounted(() => {
             </NFormItem>
             <NFormItem :label="t('page.forecast.modules.mode')">
               <NSelect v-model:value="form.mode" :options="modeOptions" />
+            </NFormItem>
+            <NFormItem v-if="clusters.length > 1">
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.cluster') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-320px leading-22px">{{ t('page.forecast.modules.clusterHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NSelect v-model:value="form.cluster" :options="clusterOptions" />
             </NFormItem>
             <NFormItem :label="t('page.forecast.modules.namespace')">
               <NInput

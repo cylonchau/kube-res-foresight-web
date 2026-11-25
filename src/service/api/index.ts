@@ -10,3 +10,4 @@ export * from './assistant';
 export * from './diagnostics';
 export * from './inventory';
 export * from './overprovision';
+export * from './cluster';

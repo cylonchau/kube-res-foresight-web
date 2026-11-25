@@ -32,6 +32,7 @@ declare module "@elegant-router/types" {
     "authorization_user": "/authorization/user";
     "dashboard": "/dashboard";
     "datasource": "/datasource";
+    "datasource_clusters": "/datasource/clusters";
     "datasource_connections": "/datasource/connections";
     "datasource_metric-mappings": "/datasource/metric-mappings";
     "forecast": "/forecast";
@@ -148,6 +149,7 @@ declare module "@elegant-router/types" {
     | "authorization_role"
     | "authorization_user"
     | "dashboard"
+    | "datasource_clusters"
     | "datasource_connections"
     | "datasource_metric-mappings"
     | "forecast-actions_admissions"

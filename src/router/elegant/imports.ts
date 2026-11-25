@@ -29,6 +29,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   authorization_role: () => import("@/views/authorization/role/index.vue"),
   authorization_user: () => import("@/views/authorization/user/index.vue"),
   dashboard: () => import("@/views/dashboard/index.vue"),
+  datasource_clusters: () => import("@/views/datasource/clusters/index.vue"),
   datasource_connections: () => import("@/views/datasource/connections/index.vue"),
   "datasource_metric-mappings": () => import("@/views/datasource/metric-mappings/index.vue"),
   "forecast-actions_admissions": () => import("@/views/forecast-actions/admissions/index.vue"),
