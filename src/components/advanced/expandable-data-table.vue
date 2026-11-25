@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, ref, useAttrs } from 'vue';
+import { computed, h, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 import { useElementSize } from '@vueuse/core';
 import type { DataTableColumns } from 'naive-ui';
 import { NDataTable, NEmpty, NText } from 'naive-ui';
@@ -56,8 +56,28 @@ const appStore = useAppStore();
 // what they cannot use is left as empty space at the right of the table instead of being poured into one column.
 const tableRef = ref<{ $el?: HTMLElement } | null>(null);
 const containerEl = computed(() => tableRef.value?.$el?.parentElement ?? null);
-const { width: availableWidth } = useElementSize(containerEl);
+const { width: measuredWidth } = useElementSize(containerEl);
 const SCROLLBAR_ROOM = 14;
+
+// the width the columns are fitted to is the one the container settles at: while it moves (the sider folding, the window dragged) the
+// columns keep theirs, so the table is laid out once at the end instead of once per frame. The first measure is used at once.
+const availableWidth = ref(0);
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  measuredWidth,
+  width => {
+    clearTimeout(settleTimer);
+    if (availableWidth.value === 0 || width === 0) {
+      availableWidth.value = width;
+      return;
+    }
+    settleTimer = setTimeout(() => {
+      availableWidth.value = width;
+    }, 120);
+  },
+  { immediate: true, flush: 'sync' }
+);
+onBeforeUnmount(() => clearTimeout(settleTimer));
 
 const forwardedAttrs = computed(() => {
   const { onUnstableColumnResize: _columnResizeListener, ...rest } = attrs;
@@ -238,6 +258,9 @@ function compactColumn(column: TableColumn): TableColumn {
     width,
     minWidth,
     ellipsis: column.ellipsis || { tooltip: true },
+    // the full ellipsis (a tooltip and a size observer in every cell) is only made for the cell the pointer is over: a page of 100 rows has
+    // 600 cells, and each used to carry one
+    ellipsisComponent: column.ellipsisComponent ?? 'performant-ellipsis',
     // naive-ui's SortButton reads renderSorterIcon off the column itself
     // (see node_modules/naive-ui SortButton.mjs) — there is no table-level
     // prop for it in this version, despite the type existing on NDataTable's

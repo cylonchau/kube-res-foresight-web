@@ -212,12 +212,14 @@ export function useEcharts<T extends ECOption>(optionsFactory: () => T, hooks: C
   }
 
   /** resize chart */
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   function resize() {
     chart.value?.resize();
   }
 
   /** destroy chart */
   async function destroy() {
+    clearTimeout(resizeTimer);
     if (!chart.value) return;
 
     await onDestroy?.(chart.value);
@@ -244,9 +246,11 @@ export function useEcharts<T extends ECOption>(optionsFactory: () => T, hooks: C
 
     if (!domRef.value || w <= 0 || h <= 0) return;
 
-    // resize chart
+    // resize chart: once the box has stopped moving. A chart repaints its whole canvas for a resize, and a box that moves (the window
+    // dragged, a panel opening) reports a new size every frame.
     if (isRendered()) {
-      resize();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 100);
 
       return;
     }

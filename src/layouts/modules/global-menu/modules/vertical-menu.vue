@@ -24,12 +24,19 @@ const inverted = computed(() => !themeStore.darkMode && themeStore.sider.inverte
 
 const expandedKeys = ref<string[]>([]);
 
+// the menu re-renders every group when the keys change: a page of the same group asks for the same keys, and leaves the menu alone
+function setExpandedKeys(keys: string[]) {
+  const current = expandedKeys.value;
+  if (current.length === keys.length && current.every((key, index) => key === keys[index])) return;
+  expandedKeys.value = keys;
+}
+
 function updateExpandedKeys() {
   if (appStore.siderCollapse || !selectedKey.value) {
-    expandedKeys.value = [];
+    setExpandedKeys([]);
     return;
   }
-  expandedKeys.value = routeStore.getSelectedMenuKeyPath(selectedKey.value);
+  setExpandedKeys(routeStore.getSelectedMenuKeyPath(selectedKey.value));
 }
 
 watch(
