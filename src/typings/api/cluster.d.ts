@@ -100,5 +100,137 @@ declare namespace Api {
       component?: string;
       search?: string;
     }
+
+    type ChangeKind = 'Node' | 'Pod' | 'Workload' | 'HPA';
+
+    /** one thing an object says about why it changed (a condition, a taint, how a container ended, who wrote the replicas) */
+    interface ChangeReason {
+      source: string;
+      reason?: string;
+      message?: string;
+      component?: string;
+    }
+
+    interface Res {
+      cpu_milli: number;
+      memory_bytes: number;
+    }
+
+    interface PodRef {
+      namespace: string;
+      name: string;
+      phase?: string;
+      workload?: string;
+      requests: Res;
+      limits: Res;
+    }
+
+    interface ContainerState {
+      name: string;
+      restarts: number;
+      state?: string;
+      reason?: string;
+      message?: string;
+      exit_code?: number;
+      last_reason?: string;
+      last_exit_code?: number;
+    }
+
+    /** the configuration of the object when it changed, from the operator's cache at that moment */
+    interface ChangeSnapshot {
+      labels?: Record<string, string>;
+      taints?: string[];
+      capacity?: Res;
+      allocatable?: Res;
+      capacity_pods?: number;
+      pod_count?: number;
+      pods?: PodRef[];
+      requests?: Res;
+      limits?: Res;
+      owner?: string;
+      containers?: ContainerState[];
+      desired?: number;
+      ready?: number;
+      available?: number;
+      min?: number;
+      max?: number;
+      current?: number;
+      target?: string;
+    }
+
+    interface UsagePoint {
+      label: 'before' | 'at' | 'after';
+      at: string;
+      /** cores; null when Prometheus had none */
+      cpu: number | null;
+      /** bytes; null when Prometheus had none */
+      memory: number | null;
+    }
+
+    interface UsageRecord {
+      subject: string;
+      source?: string;
+      note?: string;
+      points: UsagePoint[] | null;
+    }
+
+    interface Change {
+      id: number;
+      cluster: string;
+      record_id: string;
+      kind: ChangeKind;
+      namespace: string;
+      name: string;
+      object_uid: string;
+      type: string;
+      from: string;
+      to: string;
+      occurred_at: string;
+      observed_at: string;
+      received_at: string;
+      operator: string;
+      node: string;
+      workload: string;
+      reasons: ChangeReason[];
+      snapshot: ChangeSnapshot | null;
+      usage: UsageRecord | null;
+      usage_status: 'pending' | 'filled' | 'unavailable';
+      usage_tries: number;
+      usage_note: string;
+    }
+
+    interface ChangeList {
+      list: Change[];
+      total: number;
+      page: number;
+      pageSize: number;
+      retention_days: number;
+    }
+
+    interface ChangeSearchParams {
+      page: number;
+      page_size: number;
+      kind?: string;
+      type?: string;
+      namespace?: string;
+      name?: string;
+      node?: string;
+      search?: string;
+    }
+
+    /** how another change is tied to this one: caused_by rests on evidence (said in `evidence`), related is only near it */
+    interface ChangeLink {
+      relation: 'caused_by' | 'related';
+      direction: 'cause' | 'effect';
+      evidence: string;
+      change: Change;
+    }
+
+    interface ChangeExplanation {
+      change: Change;
+      events: Event[];
+      causes: ChangeLink[];
+      effects: ChangeLink[];
+    }
   }
 }
