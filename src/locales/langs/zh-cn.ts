@@ -4155,7 +4155,10 @@ const local = {
         title: '集群',
         help: '一个集群对应一个 Operator。先在这里登记集群并绑定访问密钥，再用 --cluster=集群名 启动 Operator；Operator 连上之后，在这里设置它读取哪些命名空间。没有登记集群的 Operator 属于默认集群。',
         name: '集群名',
-        nameHint: '小写字母、数字和 -，创建后不能修改。Operator 用 --cluster 带上这个名字。',
+        nameHint:
+          '小写字母、数字和 -。Operator 用 --cluster 带上这个名字；改名后，用这个集群的模块、访问密钥绑定、事件和变化都会跟着改名。',
+        renameWarn:
+          '改名后，已经用旧名字 {old} 启动的 Operator 要把 --cluster 改成新名字，否则平台会拒绝它（没带集群名的 Operator 不受影响）。',
         description: '说明',
         default: '默认',
         defaultHint: '没有指定集群的 Operator 和模块属于默认集群，默认集群不能关闭或删除。',
@@ -4187,7 +4190,7 @@ const local = {
           '这个集群的 Operator 使用的访问密钥必须绑定到它，一个密钥只能绑定一个集群。没有绑定的密钥只能用于默认集群。',
         keysEmpty: '没有可绑定的访问密钥，请先在“集群接入凭据”里创建',
         keyBoundTo: '已绑定到 {cluster}',
-        startHint: 'Operator 启动参数',
+        startHint: 'Operator 启动参数（按上面的集群名自动生成）',
         nameRequired: '请输入集群名',
         viewEvents: '事件',
         deleteBlocked: '集群下还有模块，先移走或删除它们',

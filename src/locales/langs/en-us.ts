@@ -4387,7 +4387,9 @@ const local = {
         help: 'A cluster is what one operator is for. Register the cluster here and bind an access key to it, then start the operator with --cluster=<name>; once it is connected, set here which namespaces it reads. An operator that names no cluster belongs to the default cluster.',
         name: 'Cluster name',
         nameHint:
-          'Lower-case letters, digits and -; it cannot be changed after the cluster is made. The operator sends it with --cluster.',
+          'Lower-case letters, digits and -. The operator sends it with --cluster; when the name is changed, the modules, key bindings, events and changes of the cluster follow it.',
+        renameWarn:
+          'After the rename an operator that was started with the old name {old} has to be started with --cluster set to the new one, or the platform refuses it (an operator that names no cluster is not affected).',
         description: 'Description',
         default: 'Default',
         defaultHint:
@@ -4420,7 +4422,7 @@ const local = {
           'The access key the operator of this cluster uses must be bound to it, and a key can be bound to one cluster. A key that is not bound can only be used for the default cluster.',
         keysEmpty: 'There is no access key to bind: make one under Cluster credentials first',
         keyBoundTo: 'bound to {cluster}',
-        startHint: 'Operator argument',
+        startHint: 'Operator argument (made from the cluster name above)',
         nameRequired: 'Enter the cluster name',
         viewEvents: 'Events',
         deleteBlocked: 'The cluster still has modules: move or delete them first',

@@ -121,12 +121,12 @@ async function open(row?: Api.Cluster.Cluster) {
 }
 
 async function save() {
-  if (!editing.value && !form.name.trim()) {
+  if (!form.name.trim()) {
     message.warning(p('nameRequired'));
     return;
   }
   const payload: Api.Cluster.ClusterPayload = {
-    name: editing.value ? undefined : form.name.trim(),
+    name: form.name.trim(),
     description: form.description.trim(),
     enabled: form.enabled,
     datasource_id: form.datasource_id,
@@ -287,7 +287,11 @@ const {
 } = useTableColumnConfig({ pageCode: PAGE_CODE, columnMap, defaultKeys: defaultColumnKeys });
 
 const modalTitle = computed(() => (editing.value ? `${p('title')} · ${editing.value.name}` : p('title')));
-const startFlag = computed(() => `--cluster=${editing.value?.name || form.name.trim() || '<name>'}`);
+const startFlag = computed(() => `--cluster=${form.name.trim() || '<name>'}`);
+/** the name is being changed: what refers to it follows, and an operator started with the old name has to be started with the new one */
+const renaming = computed(
+  () => Boolean(editing.value) && form.name.trim() !== '' && form.name.trim() !== editing.value?.name
+);
 
 // ---- the events of one cluster, in a drawer
 
@@ -672,11 +676,10 @@ onMounted(async () => {
               </IconTooltip>
             </span>
           </template>
-          <NInput
-            v-model:value="form.name"
-            :disabled="Boolean(editing)"
-            :placeholder="t('common.inputField', { field: p('name') })"
-          />
+          <NInput v-model:value="form.name" :placeholder="t('common.inputField', { field: p('name') })" />
+          <template #feedback>
+            <span v-if="renaming" class="text-warning">{{ p('renameWarn', { old: editing?.name || '' }) }}</span>
+          </template>
         </NFormItem>
         <NFormItem :label="p('startHint')">
           <NInput :value="startFlag" readonly />
