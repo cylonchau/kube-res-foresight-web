@@ -504,6 +504,10 @@ interface PlanRow {
   strong: boolean;
   /** the Requests or Limits row the "?" of the adjustment explains */
   row?: RecRow;
+  /** the Requests and the Limits are two groups, each with its CPU and its memory */
+  group?: 'requests' | 'limits';
+  /** what the figures of the row are made of, in words, with the numbers of the use */
+  basis?: string;
 }
 const cellsOf = (fn: (c: Caliber) => string): Record<Caliber, string> => ({
   all: fn('all'),
@@ -579,10 +583,44 @@ const replicaRows = computed<PlanRow[]>(() => {
   return rows;
 });
 
-/** the way where the Pod changes: the Requests and the Limits of a Pod (or of all the replicas, as the page is set) that each percentile asks for alone, and the three together */
+/** the factor of the Limits of a resource: the module's own, else the system's (the same one the platform made the Limits with) */
+function limitFactorOf(resource: Res) {
+  const params = props.detail?.params;
+  const own = resource === 'cpu' ? params?.cpu_limit_factor : params?.memory_limit_factor;
+  return own && own > 0 ? own : (params?.limit_factor ?? 0);
+}
+
+/**
+ * What the Requests or the Limits of a row are made of. Requests: what each percentile of the use asks of them, over the share of the Requests it is wanted to take; the one that
+ * asks for the most decides (the caliber chosen shows its own). Limits: the P99 of the use of one Pod over the period times the factor, never below the Requests recommended, so the
+ * Limits are about the peaks and do not move with the caliber of the Requests.
+ */
+function basisOf(row: RecRow): string {
+  const r = rec.value?.[row.resource];
+  if (!r) return '';
+  if (row.status !== null) {
+    const c = r.candidates?.find(x => x.name === caliber.value);
+    return c && c.target > 0
+      ? p('requestBasisOne', {
+          c: c.name,
+          use: amountText(row.resource, c.use),
+          target: formatPercent(c.target, 0),
+          need: amountText(row.resource, c.needed)
+        })
+      : p('requestBasisAll');
+  }
+  const factor = limitFactorOf(row.resource);
+  return r.usage?.p99 > 0 && factor > 0
+    ? p('limitBasis', { use: amountText(row.resource, r.usage.p99), factor: formatDecimal(factor, 2) })
+    : '';
+}
+
+/** the way where the Pod changes: the Requests and the Limits of a Pod (or of all the replicas, as the page is set) that each percentile asks for alone, and the three together. The
+ *  Requests of the CPU and of the memory come first, then the Limits of the CPU and of the memory. */
 const configRows = computed<PlanRow[]>(() => {
   const total = props.basis === 'total';
-  return recRows.value
+  const ordered = [...recRows.value].sort((a, b) => Number(a.status === null) - Number(b.status === null));
+  return ordered
     .filter(row => row.recommended > 0 || row.current > 0)
     .map<PlanRow>(row => {
       const r = rec.value?.[row.resource];
@@ -600,7 +638,9 @@ const configRows = computed<PlanRow[]>(() => {
         decides: isRequests ? (r?.candidates?.find(x => x.decides)?.name ?? '') : '',
         adjust: caliber.value === 'all' ? cellAdjust(row) : cellAdjust(row, chosen, false),
         strong: false,
-        row
+        row,
+        group: isRequests ? 'requests' : 'limits',
+        basis: basisOf(row)
       };
     });
 });
@@ -976,42 +1016,54 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in way === 'replicas' ? replicaRows : configRows" :key="item.key">
-                    <td :class="{ 'font-medium': item.strong }">{{ item.label }}</td>
-                    <td>{{ item.now }}</td>
-                    <td
-                      v-for="c in COLUMNS"
-                      :key="c"
-                      :class="{ sel: caliber === c, key: item.strong && caliber === c }"
+                  <template v-for="(item, index) in way === 'replicas' ? replicaRows : configRows" :key="item.key">
+                    <tr
+                      v-if="item.group && (index === 0 || configRows[index - 1]?.group !== item.group)"
+                      class="group-row"
                     >
-                      {{ item.cells[c] }}
-                      <NTag
-                        v-if="item.decides && (item.decides === c || (item.decides === 'all' && c === 'all'))"
-                        size="tiny"
-                        :bordered="false"
-                        type="info"
+                      <td colspan="7">{{ item.group === 'requests' ? p('groupRequests') : p('groupLimits') }}</td>
+                    </tr>
+                    <tr>
+                      <td :class="{ 'font-medium': item.strong }">
+                        {{ item.label }}
+                        <div v-if="item.basis" class="row-basis">{{ item.basis }}</div>
+                      </td>
+                      <td>{{ item.now }}</td>
+                      <td
+                        v-for="c in COLUMNS"
+                        :key="c"
+                        :class="{ sel: caliber === c, key: item.strong && caliber === c }"
                       >
-                        {{ p('basisDecides') }}
-                      </NTag>
-                    </td>
-                    <td>
-                      <span v-if="item.adjust.text !== '-'" class="inline-flex items-center gap-4px">
-                        <NTag size="small" :bordered="false" :type="item.adjust.type">{{ item.adjust.text }}</NTag>
-                        <IconTooltip v-if="item.row && caliber === 'all'" placement="top">
-                          <div class="help-pop">
-                            <div class="font-medium">{{ p('adjHelpTitle') }}</div>
-                            <div v-for="(line, index) in adjustHelp(item.row)" :key="index">{{ line }}</div>
-                          </div>
-                        </IconTooltip>
-                      </span>
-                      <span v-else class="opacity-60">-</span>
-                    </td>
-                  </tr>
+                        {{ item.cells[c] }}
+                        <NTag
+                          v-if="item.decides && (item.decides === c || (item.decides === 'all' && c === 'all'))"
+                          size="tiny"
+                          :bordered="false"
+                          type="info"
+                        >
+                          {{ p('basisDecides') }}
+                        </NTag>
+                      </td>
+                      <td>
+                        <span v-if="item.adjust.text !== '-'" class="inline-flex items-center gap-4px">
+                          <NTag size="small" :bordered="false" :type="item.adjust.type">{{ item.adjust.text }}</NTag>
+                          <IconTooltip v-if="item.row && caliber === 'all'" placement="top">
+                            <div class="help-pop">
+                              <div class="font-medium">{{ p('adjHelpTitle') }}</div>
+                              <div v-for="(line, index) in adjustHelp(item.row)" :key="index">{{ line }}</div>
+                            </div>
+                          </IconTooltip>
+                        </span>
+                        <span v-else class="opacity-60">-</span>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </NTable>
             </div>
             <template v-if="way === 'config'">
               <div v-for="line in shareLines" :key="line.key" class="text-12px opacity-75">{{ line.text }}</div>
+              <div class="text-12px opacity-75">{{ p('percentileRule', { step: step || '-', period: recLabel }) }}</div>
             </template>
           </div>
         </template>
@@ -1242,5 +1294,18 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
 .table-scroll {
   max-width: 100%;
   overflow-x: auto;
+}
+
+.group-row td {
+  font-weight: 600;
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.row-basis {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  opacity: 0.65;
 }
 </style>

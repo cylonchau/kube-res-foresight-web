@@ -628,6 +628,21 @@ const local = {
       adviceNoReport: '还没有生成过报告。',
       adviceLastFailed: '{at} 的运行失败了：{reason}',
       adviceShowsBefore: '展开的是它之前的报告。',
+      groupRequests: 'Requests（CPU 与内存）',
+      groupLimits: 'Limits（CPU 与内存）',
+      requestBasisAll: '取 P90、P95、P99 各自算出的 Requests 里最大的，再加余量；点“计算依据”看每一步。',
+      requestBasisOne: '按 {c}：使用量 {use} ÷ 目标占比 {target} = {need}',
+      limitBasis:
+        'Limits 看峰值：P99 使用量 {use} × 系数 {factor}，且不低于推荐的 Requests；不随上面的口径变化，也不是 Requests 的固定比例。',
+      percentileRule:
+        '分位数怎么算：取这段时间（{period}，步长 {step}）里每个采样点的单 Pod 使用量，从小到大排好，P90 取第 ⌈0.90×n⌉ 个（n 是采样点数，最近邻秩法，不插值）；P95、P99 同理，Max 是最大的那个。平台只算 P50、P90、P95、P99 和 Max，没有 P75。推荐 Requests 用持续一段时间的使用量（见计算依据），Limits 用原始点的 P99。',
+      profileCapacityFormula: '常态承载 = 常态 {n} 个副本 × 单 Pod Requests {request} × 目标占比 {target} = {v}',
+      profileBarNormal: '常态小时（绿）',
+      profileBarBusy: '高于常态的小时（橙，条形更长）',
+      profileBarBasis:
+        '条形的高度 = 这个小时需要的副本数，从 0 起算，最忙的小时（{peak} 个）是满格，数字写在条形上方。副本数按 Requests 算：⌈这个小时所有天的 P{pct} 全副本使用量 ÷（单 Pod Requests × 目标占比 {target}）⌉，CPU、内存取大的；常态是 24 个小时的中位数。',
+      profileLoadMeaning:
+        '每一小格 = 这 {m} 分钟全副本实际使用量的平均值（所有 Pod 的使用量加起来）；“占比”是它除以上面的常态承载。绿色是在常态承载以内（越深越接近），橙色到红色是超过了常态承载（高负载）。',
       profileTitle: '常态与高负载时段',
       profileHelp:
         '把全副本使用量按一天里的小时分开（时区用模块的时区），每个小时取这段时间里所有天的 P{pct}，除以单 Pod 的 Requests 和目标占比 {target}，向上取整，就是这个小时需要的副本数（CPU、内存取较大者）。“常态”是 24 个小时里居中的那个小时需要的副本数，“最忙”是最大的。全天保持最忙的副本数，等于为每天只有几个小时的高负载常年付费；按时段调整常态和高峰，可以在模块管理的“时间周期”里设置。',
@@ -641,7 +656,7 @@ const local = {
       profileNormal: '常态负载',
       profileHigh: '高负载',
       profileNoData: '没有数据',
-      profileCellTitle: '{at}：全副本使用 {use}，占常态承载的 {share}（{level}）',
+      profileCellTitle: '{at}：全副本实际使用 {use}，占常态承载（{capacity}）的 {share}（{level}）',
       profileCellNone: '{at}：没有数据',
       profileHourTitle: '{hour}：需要 {need} 个副本（CPU {cpu}，内存 {memory}）',
       profileSummary: '常态每小时需要 {normal} 个副本，最忙的小时需要 {peak} 个。',

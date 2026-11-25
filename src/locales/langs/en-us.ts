@@ -639,6 +639,23 @@ const local = {
       adviceNoReport: 'No report has been written yet.',
       adviceLastFailed: 'The run of {at} failed: {reason}',
       adviceShowsBefore: 'What opens is the report before it.',
+      groupRequests: 'Requests (CPU and memory)',
+      groupLimits: 'Limits (CPU and memory)',
+      requestBasisAll:
+        'The largest of the Requests that P90, P95 and P99 each ask for, plus the margin; open the basis to see every step.',
+      requestBasisOne: 'By {c}: use {use} / target share {target} = {need}',
+      limitBasis:
+        'Limits are about the peaks: the P99 use {use} x factor {factor}, never below the Requests recommended. They do not move with the caliber above and are not a fixed share of the Requests.',
+      percentileRule:
+        'How a percentile is made: the use of one Pod at each sample of the period ({period}, step {step}) is sorted from small to large, and P90 is the ⌈0.90 x n⌉-th of them (n is the number of samples; nearest rank, no interpolation); P95 and P99 the same, Max is the largest. The platform makes P50, P90, P95, P99 and Max, and no P75. The recommended Requests use the use held for a while (see the basis), the Limits the P99 of the raw points.',
+      profileCapacityFormula:
+        'Normal capacity = {n} normal replicas x {request} Requests of one Pod x {target} target share = {v}',
+      profileBarNormal: 'normal hours (green)',
+      profileBarBusy: 'hours above normal (orange, longer bar)',
+      profileBarBasis:
+        'The height of a bar is the replicas the hour needs, from 0; the busiest hour ({peak}) is the full height and the figure is above the bar. The replicas are counted on the Requests: the P{pct} of the use of all the replicas in that hour of the day over every day, divided by (Requests of one Pod x target share {target}), rounded up; CPU and memory take the larger. Normal is the median of the 24 hours.',
+      profileLoadMeaning:
+        'Each small cell is the mean real use of all the Pods together over {m} minutes; the share is that over the normal capacity above. Green is within the normal capacity (deeper the closer to it), orange to red is above it (the high load).',
       profileTitle: 'The normal part and the busy part of the day',
       profileHelp:
         'The use of all the replicas is taken apart by the hour of the day (in the time zone of the module); for each hour the P{pct} over every day of the period is divided by the Requests of a Pod and the target share {target}, and rounded up: the replicas that hour asks for (the larger of CPU and memory). "Normal" is what the typical hour of the 24 asks for, "busiest" the largest. Keeping the busiest count all day pays for a load of a few hours every day; a count that follows the hours can be set in the periods of module management.',
@@ -652,7 +669,7 @@ const local = {
       profileNormal: 'normal load',
       profileHigh: 'high load',
       profileNoData: 'no data',
-      profileCellTitle: '{at}: all replicas use {use}, {share} of what the normal count carries ({level})',
+      profileCellTitle: '{at}: all replicas really use {use}, {share} of the normal capacity ({capacity}) ({level})',
       profileCellNone: '{at}: no data',
       profileHourTitle: '{hour}: {need} replicas (CPU {cpu}, memory {memory})',
       profileSummary: 'The normal hour asks for {normal} replicas, the busiest {peak}.',
