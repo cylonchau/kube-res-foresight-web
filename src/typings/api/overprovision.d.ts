@@ -253,9 +253,15 @@ declare namespace Api {
     /** the replicas one hour of the day asks for (the hour is in the module's time zone) */
     interface HourNeed {
       hour: number;
+      /** the replicas the use of this hour asks for (an estimate, from the P95 of the use and the Requests of a Pod) */
       need: number;
       cpu: number;
       memory: number;
+      /** the replicas the workload really had in this hour of the day: the median of the samples of the replicas metric (0 = none measured); min, max and the sample count behind it */
+      actual?: number;
+      actual_min?: number;
+      actual_max?: number;
+      actual_samples?: number;
     }
 
     /** which hours of the day are the busy ones: the replicas each hour asks for at the P95 of its own use, over every day of the period */
@@ -270,6 +276,14 @@ declare namespace Api {
       above: { level: number; share: number; events: number; longest_minutes: number } | null;
       resource: string;
       saved: number;
+      /** the measured replicas: the middle one and the largest of the 24 hours (0 when the module has no replicas metric or it returned nothing), the hours that have a figure, the samples they are made of and the metric they are from */
+      actual_normal?: number;
+      actual_peak?: number;
+      actual_hours?: number;
+      actual_samples?: number;
+      actual_source?: string;
+      /** the measured replicas of each of the last 24 hours (0 = none) */
+      recent_replicas?: number[];
       /** the use itself over the last 24 hours (whole hours, the last one cut at now), in cells of cell_seconds: the mean use of all the Pods, -1 where a cell has none */
       recent?: RecentLoad[];
       recent_start?: number;

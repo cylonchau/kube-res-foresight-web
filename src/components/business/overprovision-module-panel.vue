@@ -506,8 +506,8 @@ interface PlanRow {
   row?: RecRow;
   /** the Requests and the Limits are two groups, each with its CPU and its memory */
   group?: 'requests' | 'limits';
-  /** what the figures of the row are made of, in words, with the numbers of the use */
-  basis?: string;
+  /** what the figures of the row are made of, one line each (the Requests of P90, P95 and P99 with their margin, the Limits): shown in the "?" of the row, not in the table */
+  basisLines?: string[];
 }
 const cellsOf = (fn: (c: Caliber) => string): Record<Caliber, string> => ({
   all: fn('all'),
@@ -591,28 +591,44 @@ function limitFactorOf(resource: Res) {
 }
 
 /**
- * What the Requests or the Limits of a row are made of. Requests: what each percentile of the use asks of them, over the share of the Requests it is wanted to take; the one that
- * asks for the most decides (the caliber chosen shows its own). Limits: the P99 of the use of one Pod over the period times the factor, never below the Requests recommended, so the
- * Limits are about the peaks and do not move with the caliber of the Requests.
+ * What the Requests or the Limits of a row are made of, one line for each step, for the "?" of the row (the table itself keeps only the figures). Requests: what each of P90, P95
+ * and P99 asks of them (the use held over the sustain window, over the share of the Requests it is wanted to take), the margin that share leaves, and the Requests that makes; the one
+ * that asks for the most decides. Limits: the P99 of the use of one Pod over the period times the factor, never below the Requests recommended, so the Limits are about the peaks and
+ * do not move with the caliber of the Requests.
  */
-function basisOf(row: RecRow): string {
+function basisLinesOf(row: RecRow): string[] {
   const r = rec.value?.[row.resource];
-  if (!r) return '';
+  if (!r) return [];
   if (row.status !== null) {
-    const c = r.candidates?.find(x => x.name === caliber.value);
-    return c && c.target > 0
-      ? p('requestBasisOne', {
+    const lines = (r.candidates ?? [])
+      .filter(c => c.target > 0)
+      .map(c =>
+        // a share of 100% or more leaves no margin: the use over it is the Requests, and what goes over the Requests for a moment is the Limits'
+        p(c.target >= 1 ? 'basisCandidateLineNoMargin' : 'basisCandidateLine', {
           c: c.name,
           use: amountText(row.resource, c.use),
           target: formatPercent(c.target, 0),
-          need: amountText(row.resource, c.needed)
+          need: amountText(row.resource, c.needed),
+          margin: amountText(row.resource, Math.max(c.needed - c.use, 0)),
+          rec: amountText(row.resource, c.suggested),
+          decides: c.decides ? p('basisCandidateDecides') : ''
         })
-      : p('requestBasisAll');
+      );
+    return lines.length
+      ? [...lines, p('basisRequestsFinal', { rec: amountText(row.resource, row.recommended) })]
+      : [p('requestBasisAll')];
   }
   const factor = limitFactorOf(row.resource);
-  return r.usage?.p99 > 0 && factor > 0
-    ? p('limitBasis', { use: amountText(row.resource, r.usage.p99), factor: formatDecimal(factor, 2) })
-    : '';
+  const lines =
+    r.usage?.p99 > 0 && factor > 0
+      ? [p('limitBasis', { use: amountText(row.resource, r.usage.p99), factor: formatDecimal(factor, 2) })]
+      : [];
+  for (const c of r.candidates ?? []) {
+    if (c.suggested_limit > 0) {
+      lines.push(p('basisLimitCandidate', { c: c.name, limit: amountText(row.resource, c.suggested_limit) }));
+    }
+  }
+  return lines;
 }
 
 /** the way where the Pod changes: the Requests and the Limits of a Pod (or of all the replicas, as the page is set) that each percentile asks for alone, and the three together. The
@@ -640,7 +656,7 @@ const configRows = computed<PlanRow[]>(() => {
         strong: false,
         row,
         group: isRequests ? 'requests' : 'limits',
-        basis: basisOf(row)
+        basisLines: basisLinesOf(row)
       };
     });
 });
@@ -1018,15 +1034,16 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                 <tbody>
                   <template v-for="(item, index) in way === 'replicas' ? replicaRows : configRows" :key="item.key">
                     <tr
-                      v-if="item.group && (index === 0 || configRows[index - 1]?.group !== item.group)"
-                      class="group-row"
+                      :class="{ 'group-start': item.group && index > 0 && configRows[index - 1]?.group !== item.group }"
                     >
-                      <td colspan="7">{{ item.group === 'requests' ? p('groupRequests') : p('groupLimits') }}</td>
-                    </tr>
-                    <tr>
                       <td :class="{ 'font-medium': item.strong }">
                         {{ item.label }}
-                        <div v-if="item.basis" class="row-basis">{{ item.basis }}</div>
+                        <IconTooltip v-if="item.basisLines?.length" placement="top">
+                          <div class="help-pop">
+                            <div class="font-medium">{{ p('basisRowTitle', { label: item.label }) }}</div>
+                            <div v-for="(line, i) in item.basisLines" :key="i">{{ line }}</div>
+                          </div>
+                        </IconTooltip>
                       </td>
                       <td>{{ item.now }}</td>
                       <td
@@ -1296,16 +1313,8 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
   overflow-x: auto;
 }
 
-.group-row td {
-  font-weight: 600;
-  background: rgba(128, 128, 128, 0.08);
-}
-
-.row-basis {
-  margin-top: 2px;
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 16px;
-  opacity: 0.65;
+/* the Requests rows and the Limits rows are told apart by a heavier line between them, not by a row of their own */
+.rec :deep(tr.group-start > td) {
+  border-top: 2px solid rgba(128, 128, 128, 0.55);
 }
 </style>

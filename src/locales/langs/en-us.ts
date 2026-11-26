@@ -639,8 +639,14 @@ const local = {
       adviceNoReport: 'No report has been written yet.',
       adviceLastFailed: 'The run of {at} failed: {reason}',
       adviceShowsBefore: 'What opens is the report before it.',
-      groupRequests: 'Requests (CPU and memory)',
-      groupLimits: 'Limits (CPU and memory)',
+      basisRowTitle: '{label}: how it is worked out',
+      basisCandidateLine:
+        '{c}: use {use} / target share {target} = needs {need} (margin {margin}, the part left for bursts) -> recommends {rec}{decides}',
+      basisCandidateLineNoMargin:
+        '{c}: use {use} / target share {target} = needs {need} (a share of 100% or more leaves no margin; what goes over the Requests for a moment is the part of the Limits) -> recommends {rec}{decides}',
+      basisCandidateDecides: ' (the largest of the three: it decides)',
+      basisRequestsFinal: 'Together: the largest of P90, P95 and P99, then the bounds of the module -> {rec}',
+      basisLimitCandidate: '{c}: the Limits from its peak = {limit}',
       requestBasisAll:
         'The largest of the Requests that P90, P95 and P99 each ask for, plus the margin; open the basis to see every step.',
       requestBasisOne: 'By {c}: use {use} / target share {target} = {need}',
@@ -651,9 +657,26 @@ const local = {
       profileCapacityFormula:
         'Normal capacity = {n} normal replicas x {request} Requests of one Pod x {target} target share = {v}',
       profileBarNormal: 'normal hours (green)',
-      profileBarBusy: 'hours above normal (orange, longer bar)',
-      profileBarBasis:
-        'The height of a bar is the replicas the hour needs, from 0; the busiest hour ({peak}) is the full height and the figure is above the bar. The replicas are counted on the Requests: the P{pct} of the use of all the replicas in that hour of the day over every day, divided by (Requests of one Pod x target share {target}), rounded up; CPU and memory take the larger. Normal is the median of the 24 hours.',
+      profileBarBusy: 'hours of higher use (orange)',
+      profileTickLegend: 'replicas the use asks for, estimated (not the real replicas)',
+      profileActualNote: 'the bars are the replicas measured',
+      profileActualBasis:
+        'A bar is the replicas the workload really ran in that hour, from 0, with the figure above it: the median of the samples of the replicas metric of the module ({source}) in that hour of the day over every day. It is not a forecast and not an estimate; an hour with no sample has no bar and shows "-".',
+      profileNeedBasis:
+        'The blue dash is the replicas the use of that hour asks for (an estimate, not the real replicas): the P{pct} of the use of all the replicas in that hour over every day, divided by (Requests of one Pod x target share {target}), rounded up; CPU and memory take the larger. It is there to compare with the real replicas.',
+      profileColourBasis:
+        'The colour is about the use of the hour only: an hour whose estimate is above the normal one (the median of the 24 estimates) is orange, the others green. It does not set the length of the bar.',
+      profileActualSourceNone: 'no replicas metric is set up',
+      profileNoActual:
+        'There are no real replicas: the module has no replicas metric, or it returned nothing for this period, so no bar is drawn and the estimate does not take its place. Set up a replicas metric for the module (module management) or check its query. The blue dashes below are only what the use asks for.',
+      profileActualSummary:
+        'Real replicas: normally {normal} (the middle of the {hours} hours that have data), at most {peak}; from "{source}", the median of the samples of each hour ({samples} samples).',
+      profileHourTitleActual:
+        '{hour}: {actual} replicas really ran (the samples of the hour: fewest {min}, most {max}, {samples} samples); the use asks for {need} (CPU {cpu}, memory {memory})',
+      profileHourTitleNoActual:
+        '{hour}: no sample of the real replicas in this hour; the use asks for {need} (CPU {cpu}, memory {memory}), which is an estimate',
+      profileRecentReplicas: 'Real replicas',
+      profileRecentReplicasNote: 'the median of each hour, from "{source}"; "-" is an hour with no sample',
       profileLoadMeaning:
         'Each small cell is the mean real use of all the Pods together over {m} minutes; the share is that over the normal capacity above. Green is within the normal capacity (deeper the closer to it), orange to red is above it (the high load).',
       profileTitle: 'The normal part and the busy part of the day',
@@ -672,7 +695,8 @@ const local = {
       profileCellTitle: '{at}: all replicas really use {use}, {share} of the normal capacity ({capacity}) ({level})',
       profileCellNone: '{at}: no data',
       profileHourTitle: '{hour}: {need} replicas (CPU {cpu}, memory {memory})',
-      profileSummary: 'The normal hour asks for {normal} replicas, the busiest {peak}.',
+      profileSummary:
+        'Estimated from the use: the normal hour asks for {normal} replicas, the busiest {peak} (an estimate, not the real replicas).',
       profilePeakHours: 'Above the normal count: {hours}.',
       profileAbove:
         '{r}: the use of all the replicas is above what {normal} replicas carry for {share} of the time, in {events} stretches, the longest {longest} minutes.',
@@ -1151,6 +1175,29 @@ const local = {
       clusterName: 'Cluster (data source)',
       clusterPrimary: 'primary',
       clusterShown: 'showing',
+      srcTitle: 'Where the figures come from: what the operator reports and the cluster metrics',
+      srcOperatorGives:
+        'The operator (the Controller) reports the configuration and the state of the cluster: the nodes (whether each is Ready, and the CPU and memory it can give to Pods), the replicas and the Pod spec of the workloads, the events and the changes of state. The platform stores them for the node and workload pages and the change records.',
+      srcOperatorNot:
+        "The operator does not report use, and does not report the Pods that are no module's: the Pods, Requests and Limits it counts are those of the modules, not of the whole cluster.",
+      srcWhyDeclared:
+        'The numbers of the cluster dashboard are asked of Prometheus when the page opens (nothing is stored), and what to ask is declared in "Metric Templates" as a cluster metric: so each number has a PromQL that can be checked in Grafana, and a figure that is not declared is not replaced by another query.',
+      srcOnlyTitle: '{n} that only Prometheus has',
+      srcBothTitle: '{n} that the operator reports too',
+      srcMustDeclare: 'must be declared',
+      srcDuplicated: 'also reported by the operator',
+      srcColMetric: 'Cluster metric',
+      srcColWhy: 'Why',
+      src_why_used: 'Use: the operator does not report it; only Prometheus (cAdvisor, the node exporter) has it.',
+      src_why_requests:
+        'Requests of the whole cluster: the operator counts the Pods of the modules only, not those of other namespaces that fill the nodes too.',
+      src_why_pods: 'Pods of the whole cluster: the operator counts the Pods of the modules only.',
+      src_why_nodes:
+        'Number of nodes: the node list of the operator has it; declaring it here again is a second setup of the same fact.',
+      src_why_ready: "Whether a node is Ready: every node in the operator's list has it.",
+      src_why_allocatable: "What a node can give to Pods: every node in the operator's list has it.",
+      srcCheck:
+        "What was checked: {n} of the {total} (the number of nodes, the Ready nodes, the allocatable CPU and memory, node Ready) are reported by the operator too. Nothing is stored twice: the cluster metrics are asked when the page opens and not stored, the operator's report is a separate copy; but those {n} are read from two places that are not compared, and declared once more in the metric templates. The use, and the Requests and the Pods of the whole cluster, only Prometheus has, so they have to be declared.",
       clusterDeclared: 'Cluster metrics declared',
       clusterUndeclared: 'Not declared yet',
       clusterView: 'View',
@@ -4470,7 +4517,17 @@ const local = {
         changeKind: 'Kind',
         changeObject: 'Object',
         changeType: 'Change',
-        changeFromTo: 'From → to',
+        changeState: 'State change',
+        diagnose: 'AI diagnosis',
+        diagnoseAgain: 'Diagnose again',
+        diagnosing: 'The AI is reading this change and its events ({s}s so far; usually ten seconds to a minute)…',
+        diagnoseFailed: 'The diagnosis did not finish',
+        diagnoseFailedUnknown: 'No answer came back; try again in a moment',
+        diagnoseNote:
+          'Made by the AI from the facts the platform already holds (the change, the reasons the object gave, the events, the usage); it changed nothing. Check before you follow the steps. {at}',
+        diagnoseCopy: 'Copy',
+        diagnoseCopied: 'Copied',
+        diagnoseCopyFailed: 'Could not copy: select the text by hand',
         changeReason: 'Reason the object gave',
         changeUsage: 'Usage',
         detail: 'Details',

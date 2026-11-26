@@ -628,8 +628,14 @@ const local = {
       adviceNoReport: '还没有生成过报告。',
       adviceLastFailed: '{at} 的运行失败了：{reason}',
       adviceShowsBefore: '展开的是它之前的报告。',
-      groupRequests: 'Requests（CPU 与内存）',
-      groupLimits: 'Limits（CPU 与内存）',
+      basisRowTitle: '{label}：计算过程',
+      basisCandidateLine:
+        '{c}：使用量 {use} ÷ 目标占比 {target} = 需要 {need}（余量 {margin}，即留给突发的部分）→ 推荐 {rec}{decides}',
+      basisCandidateLineNoMargin:
+        '{c}：使用量 {use} ÷ 目标占比 {target} = 需要 {need}（目标占比不低于 100%，不留余量；短时超出 Requests 的部分由 Limits 承担）→ 推荐 {rec}{decides}',
+      basisCandidateDecides: '（三者中最大，由它决定）',
+      basisRequestsFinal: '综合：取 P90、P95、P99 里最大的，再按模块的边界调整 → {rec}',
+      basisLimitCandidate: '{c}：按它的峰值算的 Limits = {limit}',
       requestBasisAll: '取 P90、P95、P99 各自算出的 Requests 里最大的，再加余量；点“计算依据”看每一步。',
       requestBasisOne: '按 {c}：使用量 {use} ÷ 目标占比 {target} = {need}',
       limitBasis:
@@ -638,9 +644,26 @@ const local = {
         '分位数怎么算：取这段时间（{period}，步长 {step}）里每个采样点的单 Pod 使用量，从小到大排好，P90 取第 ⌈0.90×n⌉ 个（n 是采样点数，最近邻秩法，不插值）；P95、P99 同理，Max 是最大的那个。平台只算 P50、P90、P95、P99 和 Max，没有 P75。推荐 Requests 用持续一段时间的使用量（见计算依据），Limits 用原始点的 P99。',
       profileCapacityFormula: '常态承载 = 常态 {n} 个副本 × 单 Pod Requests {request} × 目标占比 {target} = {v}',
       profileBarNormal: '常态小时（绿）',
-      profileBarBusy: '高于常态的小时（橙，条形更长）',
-      profileBarBasis:
-        '条形的高度 = 这个小时需要的副本数，从 0 起算，最忙的小时（{peak} 个）是满格，数字写在条形上方。副本数按 Requests 算：⌈这个小时所有天的 P{pct} 全副本使用量 ÷（单 Pod Requests × 目标占比 {target}）⌉，CPU、内存取大的；常态是 24 个小时的中位数。',
+      profileBarBusy: '用量高于常态的小时（橙）',
+      profileTickLegend: '按使用量估算需要的副本数（不是实际副本数）',
+      profileActualNote: '条形是实测的实际副本数',
+      profileActualBasis:
+        '条形长度 = 这个小时实际运行的副本数，从 0 起算，数字写在条形上方：取模块配置的副本数指标（{source}）在这个小时里所有天的采样的中位数，不是预测值，也不是估算值；这个小时没有采样就不画条形、写“-”。',
+      profileNeedBasis:
+        '蓝色短横线 = 按使用量估算这个小时需要几个副本（估算值，不是实际副本数）：⌈这个小时所有天的全副本使用量 P{pct} ÷（单 Pod Requests × 目标占比 {target}）⌉，CPU、内存取大的；用来对照实际副本数多了还是少了。',
+      profileColourBasis:
+        '颜色只表示这个小时的用量：估算需要的副本数高于常态（24 个小时估算值的中位数）的小时是橙色，其余是绿色；它不决定条形长度。',
+      profileActualSourceNone: '没有配置副本数指标',
+      profileNoActual:
+        '没有实际副本数：这个模块没有配置副本数指标，或它在这段时间没有返回数据，所以不画条形，也不会用估算值代替。给模块配一个副本数指标（模块管理里的指标），或检查它的查询。下面蓝色短横线只是按使用量估算的数量。',
+      profileActualSummary:
+        '实际副本数：常态 {normal} 个（{hours} 个有数据的小时里居中的那个），最多 {peak} 个；来自“{source}”，共 {samples} 个采样的逐小时中位数。',
+      profileHourTitleActual:
+        '{hour}：实际 {actual} 个副本（这个小时的采样里最少 {min}、最多 {max}，共 {samples} 个采样）；按使用量估算需要 {need} 个（CPU {cpu}，内存 {memory}）',
+      profileHourTitleNoActual:
+        '{hour}：这个小时没有实际副本数的采样；按使用量估算需要 {need} 个（CPU {cpu}，内存 {memory}），这是估算值',
+      profileRecentReplicas: '实际副本数',
+      profileRecentReplicasNote: '每个小时的中位数，来自“{source}”，“-”是这个小时没有采样',
       profileLoadMeaning:
         '每一小格 = 这 {m} 分钟全副本实际使用量的平均值（所有 Pod 的使用量加起来）；“占比”是它除以上面的常态承载。绿色是在常态承载以内（越深越接近），橙色到红色是超过了常态承载（高负载）。',
       profileTitle: '常态与高负载时段',
@@ -659,7 +682,8 @@ const local = {
       profileCellTitle: '{at}：全副本实际使用 {use}，占常态承载（{capacity}）的 {share}（{level}）',
       profileCellNone: '{at}：没有数据',
       profileHourTitle: '{hour}：需要 {need} 个副本（CPU {cpu}，内存 {memory}）',
-      profileSummary: '常态每小时需要 {normal} 个副本，最忙的小时需要 {peak} 个。',
+      profileSummary:
+        '按使用量估算：常态每小时需要 {normal} 个副本，最忙的小时需要 {peak} 个（估算值，不是实际副本数）。',
       profilePeakHours: '高于常态的时段：{hours}。',
       profileAbove:
         '{r}：全副本使用量超过 {normal} 个副本能承载的部分，占 {share} 的时间，分 {events} 段，最长连续 {longest} 分钟。',
@@ -1099,6 +1123,27 @@ const local = {
       clusterName: '集群（数据源）',
       clusterPrimary: '主集群',
       clusterShown: '正在看',
+      srcTitle: '数据从哪来：Operator 上报与集群指标是什么关系',
+      srcOperatorGives:
+        'Operator（Controller）上报的是集群里的配置和状态：节点清单（是否 Ready、可分配的 CPU 与内存）、工作负载的副本数和 Pod 规格、事件和状态变化。平台把它们存下来，给节点、工作负载和变化记录用。',
+      srcOperatorNot:
+        'Operator 不上报使用量，也不上报不属于任何模块的 Pod：它数的 Pod、Requests 和 Limits 只是模块的那一部分，不是整个集群。',
+      srcWhyDeclared:
+        '集群大盘的数字是向 Prometheus 现查的（不存库），查什么要在「指标模板」里声明成“集群指标”：这样每个数字都有一条可以拿去 Grafana 核对的 PromQL，没声明的不会用别的查询顶替。',
+      srcOnlyTitle: '只有 Prometheus 有的 {n} 项',
+      srcBothTitle: 'Operator 也在上报的 {n} 项',
+      srcMustDeclare: '必须声明',
+      srcDuplicated: '与 Operator 上报重复',
+      srcColMetric: '集群指标',
+      srcColWhy: '为什么',
+      src_why_used: '使用量：Operator 不上报，只有 Prometheus（cAdvisor、节点导出器）有。',
+      src_why_requests: '全集群的 Requests：Operator 只数模块的 Pod，数不出整个集群（别的命名空间的 Pod 也占着节点）。',
+      src_why_pods: '全集群的 Pod 数：Operator 只数模块的 Pod。',
+      src_why_nodes: '节点数：Operator 的节点清单里就有，这里再声明一次是重复配置。',
+      src_why_ready: '是否 Ready：Operator 的节点清单里每个节点都有。',
+      src_why_allocatable: '可分配资源：Operator 的节点清单里每个节点都有。',
+      srcCheck:
+        '检查结论：{total} 项里 {n} 项（节点数、Ready 节点数、可分配的 CPU 与内存、节点 Ready）Operator 也在上报。没有重复存储：集群指标是现查的，不存库，Operator 的上报是另一份；但这 {n} 项要在两处各取一次，互不核对，也要在指标模板里多声明一遍。其余的使用量、全集群的 Requests 和 Pod 数只有 Prometheus 有，必须声明。',
       clusterDeclared: '已声明的集群指标',
       clusterUndeclared: '还没声明的指标',
       clusterView: '查看',
@@ -4238,7 +4283,17 @@ const local = {
         changeKind: '对象类别',
         changeObject: '对象',
         changeType: '变化',
-        changeFromTo: '从 → 到',
+        changeState: '变化状态',
+        diagnose: '一键 AI 诊断',
+        diagnoseAgain: '重新诊断',
+        diagnosing: 'AI 正在分析这次变化和它的事件（已 {s} 秒，通常十几秒到一分钟）…',
+        diagnoseFailed: '诊断没有完成',
+        diagnoseFailedUnknown: '没有收到回答，请稍后重试',
+        diagnoseNote:
+          'AI 只读取平台已有的事实（变化、对象给出的原因、事件、使用量）生成，没有改动任何东西；按步骤操作前请先核实。{at}',
+        diagnoseCopy: '复制',
+        diagnoseCopied: '已复制',
+        diagnoseCopyFailed: '复制失败，请手动选择文字',
         changeReason: '对象给出的原因',
         changeUsage: '使用量',
         detail: '详情',

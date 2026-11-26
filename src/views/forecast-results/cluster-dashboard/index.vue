@@ -3,6 +3,7 @@ import { computed, h, onMounted, ref } from 'vue';
 import { NButton, NCard, NTag } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import ClusterDataSources from '@/components/business/cluster-data-sources.vue';
 import GrafanaLink from '@/components/business/grafana-link.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import OverprovisionClusterCard from '@/components/business/overprovision-cluster-card.vue';
@@ -157,6 +158,11 @@ onMounted(() => {
         </div>
       </div>
       <div v-if="failure" class="mt-8px text-12px text-[#d03050]">{{ failure }}</div>
+    </NCard>
+
+    <!-- why the cluster metrics are asked for when the operator reports: what each side gives -->
+    <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+      <ClusterDataSources />
     </NCard>
 
     <!-- no cluster: the way to declare one -->

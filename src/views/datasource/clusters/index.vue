@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import { computed, h, onMounted, reactive, ref } from 'vue';
+import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import {
   NButton,
   NCard,
@@ -15,6 +15,7 @@ import {
   NPopconfirm,
   NSelect,
   NSpace,
+  NSpin,
   NTag,
   NTooltip,
   useMessage
@@ -28,6 +29,7 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchCreateCluster,
   fetchDeleteCluster,
+  fetchDiagnoseClusterChange,
   fetchGetClusterChange,
   fetchGetClusterChanges,
   fetchGetClusterEvents,
@@ -37,6 +39,7 @@ import {
   fetchUpdateCluster
 } from '@/service/api';
 import { formatDateTime } from '@/utils/date';
+import { renderMiniMarkdown } from '@/utils/mini-markdown';
 import { operateWidth } from '@/utils/operate-width';
 
 defineOptions({ name: 'DatasourceClusters' });
@@ -47,7 +50,7 @@ defineOptions({ name: 'DatasourceClusters' });
  * tabs: the drawer is a view of one row.
  */
 const PAGE_CODE = 'datasource_clusters';
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.datasource.clusters.${key}`, named ?? {});
 const message = useMessage();
 const loading = ref(false);
@@ -483,6 +486,34 @@ function searchChanges() {
   loadChanges();
 }
 
+/**
+ * The state of a change as the object said it: "Running to ErrImagePull" when it went from one to another, else the one it has (a change that only has a new state, or one
+ * the operator gave in one word), "-" when it gave none. It is the states themselves, not a pair of arrows.
+ */
+function stateText(c: Pick<Api.Cluster.Change, 'from' | 'to'>) {
+  const from = (c.from || '').trim();
+  const to = (c.to || '').trim();
+  if (from && to) return from === to ? to : `${from} to ${to}`;
+  return to || from || '-';
+}
+
+/** the states that say something is wrong: the table shows the one the object is in now in red */
+const FAULT_STATES =
+  /^(ErrImagePull|ErrImageNeverPull|ImagePullBackOff|InvalidImageName|CrashLoopBackOff|CreateContainerConfigError|CreateContainerError|RunContainerError|ContainerCannotRun|OOMKilled|Error|Failed|Evicted|DeadlineExceeded|Unschedulable|NotReady|Unknown|NodeNotReady|Terminating)$/i;
+
+function renderState(row: Pick<Api.Cluster.Change, 'from' | 'to'>) {
+  const from = (row.from || '').trim();
+  const to = (row.to || '').trim();
+  const fault = FAULT_STATES.test(to) || FAULT_STATES.test(from);
+  if (from && to && from !== to) {
+    return h('span', null, [
+      h('span', { class: 'opacity-70' }, `${from} to `),
+      h('span', { class: FAULT_STATES.test(to) ? 'state-fault' : 'font-medium' }, to)
+    ]);
+  }
+  return h('span', { class: fault ? 'state-fault' : '' }, stateText(row));
+}
+
 /** the label of a change type; a type this page does not know is shown as the cluster said it */
 function typeText(type: string) {
   const key = `page.datasource.clusters.ctype_${type}`;
@@ -542,11 +573,11 @@ const changeColumns = computed(() => [
   { title: p('changeObject'), key: 'name', width: 260, ellipsis: { tooltip: true }, render: objectText },
   { title: p('changeType'), key: 'type', width: 130, render: (row: Api.Cluster.Change) => typeText(row.type) },
   {
-    title: p('changeFromTo'),
+    title: p('changeState'),
     key: 'to',
-    width: 220,
+    width: 240,
     ellipsis: { tooltip: true },
-    render: (row: Api.Cluster.Change) => `${row.from || '-'} → ${row.to || '-'}`
+    render: (row: Api.Cluster.Change) => renderState(row)
   },
   { title: p('changeReason'), key: 'reasons', minWidth: 280, ellipsis: { tooltip: true }, render: reasonText },
   { title: p('changeUsage'), key: 'usage_status', width: 130, render: renderUsageStatus },
@@ -564,8 +595,74 @@ const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detail = ref<Api.Cluster.ChangeExplanation | null>(null);
 
+// ---- the one-click AI diagnosis of the change in the detail: idle, asking, answered or failed; the answer belongs to the change it was asked for
+const diagnosis = reactive<{
+  changeId: number;
+  busy: boolean;
+  text: string;
+  error: string;
+  at: string;
+  seconds: number;
+}>({
+  changeId: 0,
+  busy: false,
+  text: '',
+  error: '',
+  at: '',
+  seconds: 0
+});
+let diagnosisTimer: ReturnType<typeof setInterval> | undefined;
+const diagnosisHtml = computed(() => (diagnosis.text ? renderMiniMarkdown(diagnosis.text) : ''));
+
+function stopDiagnosisClock() {
+  if (diagnosisTimer) clearInterval(diagnosisTimer);
+  diagnosisTimer = undefined;
+}
+
+function resetDiagnosis() {
+  stopDiagnosisClock();
+  Object.assign(diagnosis, { changeId: 0, busy: false, text: '', error: '', at: '', seconds: 0 });
+}
+
+async function diagnoseChange() {
+  if (!changesCluster.value || !detail.value || diagnosis.busy) return;
+  const changeId = detail.value.change.id;
+  Object.assign(diagnosis, { changeId, busy: true, text: '', error: '', at: '', seconds: 0 });
+  stopDiagnosisClock();
+  diagnosisTimer = setInterval(() => {
+    diagnosis.seconds += 1;
+  }, 1000);
+  const { data, error } = await fetchDiagnoseClusterChange(
+    changesCluster.value.id,
+    changeId,
+    locale.value === 'en-US' ? 'en' : 'zh'
+  );
+  // the detail was closed or another change opened while the model was thinking: the answer is not for what is on the screen
+  if (diagnosis.changeId !== changeId) return;
+  stopDiagnosisClock();
+  diagnosis.busy = false;
+  if (data?.content) {
+    diagnosis.text = data.content;
+    diagnosis.at = formatDateTime(new Date().toISOString());
+  } else {
+    diagnosis.error = (error as any)?.response?.data?.msg || (error as any)?.message || p('diagnoseFailedUnknown');
+  }
+}
+
+async function copyDiagnosis() {
+  try {
+    await navigator.clipboard.writeText(diagnosis.text);
+    message.success(p('diagnoseCopied'));
+  } catch {
+    message.error(p('diagnoseCopyFailed'));
+  }
+}
+
+onBeforeUnmount(stopDiagnosisClock);
+
 async function openDetail(row: Api.Cluster.Change) {
   if (!changesCluster.value) return;
+  resetDiagnosis();
   detail.value = null;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -613,7 +710,7 @@ const eventColumnsSmall = computed(() => [
 
 function linkTitle(l: Api.Cluster.ChangeLink) {
   const c = l.change;
-  return `${p(`kind_${c.kind}`)} ${objectText(c)} · ${typeText(c.type)} ${c.from || '-'} → ${c.to || '-'} · ${formatDateTime(c.occurred_at)}`;
+  return `${p(`kind_${c.kind}`)} ${objectText(c)} · ${typeText(c.type)} ${stateText(c)} · ${formatDateTime(c.occurred_at)}`;
 }
 
 const linkGroups = computed(() => [
@@ -865,8 +962,8 @@ onMounted(async () => {
               {{ p(`kind_${detail.change.kind}`) }} {{ objectText(detail.change) }}
             </NDescriptionsItem>
             <NDescriptionsItem :label="p('changeType')">{{ typeText(detail.change.type) }}</NDescriptionsItem>
-            <NDescriptionsItem :label="p('changeFromTo')">
-              {{ detail.change.from || '-' }} → {{ detail.change.to || '-' }}
+            <NDescriptionsItem :label="p('changeState')">
+              <component :is="() => renderState(detail!.change)" />
             </NDescriptionsItem>
             <NDescriptionsItem :label="p('changeTime')">
               {{ formatDateTime(detail.change.occurred_at) }}
@@ -986,7 +1083,19 @@ onMounted(async () => {
         </section>
 
         <section class="detail-section">
-          <div class="section-title">{{ p('detailEvents') }}</div>
+          <div class="flex items-center justify-between gap-12px pb-6px">
+            <div class="font-semibold">{{ p('detailEvents') }}</div>
+            <NButton
+              size="small"
+              type="primary"
+              secondary
+              :loading="diagnosis.busy"
+              :disabled="diagnosis.busy"
+              @click="diagnoseChange"
+            >
+              {{ diagnosis.text || diagnosis.error ? p('diagnoseAgain') : p('diagnose') }}
+            </NButton>
+          </div>
           <NDataTable
             v-if="detail.events.length"
             size="small"
@@ -996,6 +1105,22 @@ onMounted(async () => {
             max-height="240"
           />
           <div v-else class="opacity-70">{{ p('detailNoEvents') }}</div>
+          <div v-if="diagnosis.busy || diagnosis.text || diagnosis.error" class="diagnosis-box mt-12px">
+            <div v-if="diagnosis.busy" class="flex items-center gap-8px opacity-80">
+              <NSpin size="small" />
+              <span>{{ p('diagnosing', { s: diagnosis.seconds }) }}</span>
+            </div>
+            <div v-else-if="diagnosis.error" class="diagnosis-error">
+              {{ p('diagnoseFailed') }}: {{ diagnosis.error }}
+            </div>
+            <template v-else>
+              <div class="diagnosis-text" v-html="diagnosisHtml"></div>
+              <div class="mt-8px flex items-center justify-between gap-12px text-12px opacity-70">
+                <span>{{ p('diagnoseNote', { at: diagnosis.at }) }}</span>
+                <NButton size="tiny" quaternary @click="copyDiagnosis">{{ p('diagnoseCopy') }}</NButton>
+              </div>
+            </template>
+          </div>
         </section>
 
         <section v-for="group in linkGroups" :key="group.key" class="detail-section">
@@ -1031,6 +1156,71 @@ onMounted(async () => {
 
 .section-title {
   padding-bottom: 6px;
+  font-weight: 600;
+}
+
+.diagnosis-box {
+  padding: 12px 14px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+  background: rgba(32, 128, 240, 0.05);
+}
+
+.diagnosis-error {
+  color: #d03050;
+  line-height: 22px;
+  word-break: break-word;
+}
+
+.diagnosis-text {
+  max-height: 46vh;
+  overflow-y: auto;
+  line-height: 22px;
+  word-break: break-word;
+}
+
+.diagnosis-text :deep(.md-h) {
+  margin: 12px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.diagnosis-text :deep(.md-h:first-child) {
+  margin-top: 0;
+}
+
+.diagnosis-text :deep(p) {
+  margin: 2px 0;
+}
+
+.diagnosis-text :deep(pre) {
+  margin: 6px 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.diagnosis-text :deep(code) {
+  font-size: 12px;
+}
+
+.diagnosis-text :deep(ol),
+.diagnosis-text :deep(ul) {
+  margin: 4px 0;
+  padding-left: 22px;
+}
+
+.diagnosis-text :deep(ol) {
+  list-style: decimal;
+}
+
+.diagnosis-text :deep(ul) {
+  list-style: disc;
+}
+
+:deep(.state-fault) {
+  color: #d03050;
   font-weight: 600;
 }
 

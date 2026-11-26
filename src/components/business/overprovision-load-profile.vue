@@ -44,15 +44,38 @@ const peakRanges = computed(() => {
 });
 const busy = computed(() => props.profile.peak_hours.length > 0 && props.profile.peak > props.profile.normal);
 const worth = computed(() => busy.value && props.profile.saved >= 0.05);
+/** the replicas the workload really had are measured (the replicas metric of the module); when there is none, the bars are not drawn and nothing takes their place */
+const hasActual = computed(() => (props.profile.actual_hours ?? 0) > 0);
+/** bars and ticks share one scale from zero: the larger of the measured peak and the estimated one */
+const scaleMax = computed(() => Math.max(props.profile.actual_peak ?? 0, props.profile.peak, 1));
 const bars = computed(() =>
-  props.profile.hours.map(h => ({
-    hour: h.hour,
-    need: h.need,
-    height: barPercent(h.need, props.profile.peak),
-    busy: h.need > props.profile.normal,
-    title: p('profileHourTitle', { hour: hourText(h.hour), need: h.need, cpu: h.cpu || '-', memory: h.memory || '-' })
-  }))
+  props.profile.hours.map(h => {
+    const actual = h.actual ?? 0;
+    const estimate = { hour: hourText(h.hour), need: h.need, cpu: h.cpu || '-', memory: h.memory || '-' };
+    return {
+      hour: h.hour,
+      actual,
+      need: h.need,
+      height: barPercent(actual, scaleMax.value),
+      needHeight: barPercent(h.need, scaleMax.value),
+      // the colour says how the use of the hour compares with the normal hour; it is not the length of the bar
+      busy: h.need > props.profile.normal,
+      title:
+        actual > 0
+          ? p('profileHourTitleActual', {
+              ...estimate,
+              actual,
+              min: h.actual_min ?? actual,
+              max: h.actual_max ?? actual,
+              samples: h.actual_samples ?? 0
+            })
+          : p('profileHourTitleNoActual', estimate)
+    };
+  })
 );
+/** the measured replicas of each of the last 24 hours, written under the blocks of the use */
+const recentReplicas = computed(() => props.profile.recent_replicas ?? []);
+const hasRecentReplicas = computed(() => recentReplicas.value.some(n => n > 0));
 
 // ---- the use itself over the last 24 hours: 24 blocks (one for each hour), each cut into cells of 5 or 10 minutes
 
@@ -92,18 +115,12 @@ const loadRows = computed<LoadRow[]>(() => {
     const capacityText = figure(load.resource, load.capacity);
     const hours: LoadHour[] = prof.recent_hours!.map((hour, h) => {
       const cells: LoadCell[] = [];
-      let sum = 0;
-      let count = 0;
       let high = 0;
       for (let c = 0; c < perHour; c += 1) {
         const value = load.values[h * perHour + c] ?? -1;
         const ratio = value < 0 || !(load.capacity > 0) ? -1 : value / load.capacity;
         const at = `${two(hour)}:${two(Math.floor((c * cellSeconds) / 60))}`;
         const isHigh = ratio > 1;
-        if (value >= 0) {
-          sum += ratio;
-          count += 1;
-        }
         if (isHigh) high += 1;
         cells.push({
           key: `${h}-${c}`,
@@ -121,14 +138,15 @@ const loadRows = computed<LoadRow[]>(() => {
                 })
         });
       }
-      const mean = count ? sum / count : -1;
       return {
         hour,
         high,
         cells,
+        // the block of an hour with a high load is outlined in orange and its cells sit inside, apart from the line by a neutral margin: the cells are the same colours as the line, so
+        // without the margin they run into it and the outline cannot be told from them
         style: {
-          background: loadColor(mean).replace(/[\d.]+\)$/, '0.18)'),
-          borderColor: high ? 'rgb(240,140,40)' : 'transparent'
+          background: 'rgba(128, 128, 128, 0.10)',
+          borderColor: high ? 'rgb(240, 140, 40)' : 'transparent'
         }
       };
     });
@@ -166,18 +184,41 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
       <span class="plan-note">{{ p('profileNote', { days: profile.days }) }}</span>
     </div>
 
-    <!-- the replicas each hour of the day asks for -->
+    <!-- the replicas each hour of the day really had (measured), and beside them the replicas the use of that hour asks for (an estimate, marked apart) -->
     <section class="area">
-      <div class="area-title">{{ p('profileReplicasTitle') }}</div>
+      <div class="area-title">
+        {{ p('profileReplicasTitle') }}
+        <IconTooltip placement="top">
+          <div class="help-pop">
+            <div>{{ p('profileActualBasis', { source: profile.actual_source || p('profileActualSourceNone') }) }}</div>
+            <div>
+              {{
+                p('profileNeedBasis', {
+                  pct: profile.percentile,
+                  target: formatPercent(profile.target, 0)
+                })
+              }}
+            </div>
+            <div>{{ p('profileColourBasis') }}</div>
+          </div>
+        </IconTooltip>
+        <span class="plan-note">{{ p('profileActualNote') }}</span>
+      </div>
+      <div v-if="!hasActual" class="no-actual text-12px">{{ p('profileNoActual') }}</div>
       <div class="bars">
         <div v-for="bar in bars" :key="bar.hour" class="bar-col" :title="bar.title">
           <div class="bar-track">
-            <div class="bar-figure" :class="{ busy: bar.busy }">{{ bar.need }}</div>
+            <div class="bar-figure" :class="{ busy: bar.busy }">{{ bar.actual > 0 ? bar.actual : '-' }}</div>
             <div
               class="bar"
               :class="{ busy: bar.busy }"
               :style="{ height: `calc((100% - 12px) * ${bar.height / 100})` }"
             ></div>
+            <span
+              v-if="bar.need > 0"
+              class="need-tick"
+              :style="{ bottom: `calc((100% - 12px) * ${bar.needHeight / 100})` }"
+            ></span>
           </div>
           <div class="bar-label">{{ bar.hour % 3 === 0 ? String(bar.hour).padStart(2, '0') : '' }}</div>
         </div>
@@ -187,17 +228,21 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
         {{ p('profileBarNormal') }}
         <span class="swatch" :style="{ background: LOAD_COLORS.high }"></span>
         {{ p('profileBarBusy') }}
+        <span class="tick-swatch"></span>
+        {{ p('profileTickLegend') }}
       </div>
-      <div class="text-12px opacity-80">
+      <div v-if="hasActual" class="text-12px">
         {{
-          p('profileBarBasis', {
-            pct: profile.percentile,
-            target: formatPercent(profile.target, 0),
-            peak: profile.peak
+          p('profileActualSummary', {
+            normal: profile.actual_normal ?? 0,
+            peak: profile.actual_peak ?? 0,
+            hours: profile.actual_hours ?? 0,
+            samples: profile.actual_samples ?? 0,
+            source: profile.actual_source || p('profileActualSourceNone')
           })
         }}
       </div>
-      <div class="text-12px">
+      <div class="text-12px opacity-80">
         {{ p('profileSummary', { normal: profile.normal, peak: profile.peak }) }}
         <template v-if="busy">{{ p('profilePeakHours', { hours: peakRanges }) }}</template>
       </div>
@@ -258,6 +303,15 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
       </div>
       <div class="hours labels">
         <div v-for="(h, i) in profile.recent_hours" :key="i" class="hour-label">{{ String(h).padStart(2, '0') }}</div>
+      </div>
+      <div v-if="hasRecentReplicas" class="rep-line">
+        <div class="load-name">
+          <b>{{ p('profileRecentReplicas') }}</b>
+          <span class="opacity-70">{{ p('profileRecentReplicasNote', { source: profile.actual_source || '-' }) }}</span>
+        </div>
+        <div class="hours">
+          <div v-for="(n, i) in recentReplicas" :key="i" class="hour-label rep-figure">{{ n > 0 ? n : '-' }}</div>
+        </div>
       </div>
     </section>
   </div>
@@ -320,6 +374,46 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
 
 .bar.busy {
   background: rgb(240, 140, 40);
+}
+
+.bar-track {
+  position: relative;
+}
+
+/* the replicas the use asks for: a dark dash across the column at that height, on the same scale as the bar, so the two are told apart and neither stands in for the other */
+.need-tick {
+  position: absolute;
+  right: -1px;
+  left: -1px;
+  height: 0;
+  pointer-events: none;
+  border-top: 2px solid #2080f0;
+}
+
+.tick-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  margin-left: 8px;
+  border-top: 2px solid #2080f0;
+}
+
+.no-actual {
+  padding: 4px 8px;
+  line-height: 18px;
+  border-left: 3px solid rgb(240, 160, 32);
+  background: rgba(240, 160, 32, 0.08);
+}
+
+.rep-line {
+  display: grid;
+  gap: 2px;
+}
+
+.rep-figure {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
 }
 
 .bar-figure {
@@ -388,9 +482,9 @@ const resourceName = computed(() => p(props.profile.resource === 'memory' ? 'sec
 }
 
 .hour {
-  padding: 2px;
-  border: 1px solid transparent;
-  border-radius: 3px;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 4px;
 }
 
 .cells {
