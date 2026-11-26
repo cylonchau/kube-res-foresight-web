@@ -7,7 +7,6 @@ import ClusterDataSources from '@/components/business/cluster-data-sources.vue';
 import GrafanaLink from '@/components/business/grafana-link.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
 import OverprovisionClusterCard from '@/components/business/overprovision-cluster-card.vue';
-import HelpLabel from '@/components/common/help-label.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import { fetchGetGrafanaSettings, fetchGetOverprovisionClusters } from '@/service/api';
 import { operateWidth } from '@/utils/operate-width';
@@ -63,7 +62,6 @@ function choose(id: number) {
   router.replace({ name: route.name as string, query: { cluster: String(id) } });
 }
 
-const current = computed(() => clusters.value.find(item => item.datasource_id === selected.value) ?? null);
 const clusterGrafana = computed(() => grafanaUrl(grafana.value, {}, {}));
 const goSetup = () => router.push({ path: '/datasource/metric-mappings' });
 
@@ -140,44 +138,8 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex-col gap-10px overflow-y-auto">
-    <!-- how many clusters are managed -->
-    <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-      <div class="flex flex-wrap items-center gap-24px">
-        <div>
-          <div class="text-12px opacity-75">
-            <HelpLabel :label="p('clusterCount')" :help="p('clusterCountHelp')" />
-          </div>
-          <div class="text-28px font-600 leading-36px">{{ count }}</div>
-        </div>
-        <div v-if="current" class="text-13px opacity-80">
-          {{ p('clusterShowing', { name: current.name }) }}
-        </div>
-        <div class="ml-auto flex items-center gap-8px">
-          <GrafanaLink :url="clusterGrafana" :label="p('invGrafanaCluster')" />
-          <NButton size="small" secondary :loading="loading" @click="load">{{ p('reload') }}</NButton>
-        </div>
-      </div>
-      <div v-if="failure" class="mt-8px text-12px text-[#d03050]">{{ failure }}</div>
-    </NCard>
-
-    <!-- why the cluster metrics are asked for when the operator reports: what each side gives -->
-    <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-      <ClusterDataSources />
-    </NCard>
-
-    <!-- no cluster: the way to declare one -->
-    <NCard v-if="!loading && !failure && !count" :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
-      <div class="text-13px font-medium">{{ p('clusterNone') }}</div>
-      <div class="mt-4px text-12px opacity-80">{{ p('clusterNoneHint') }}</div>
-      <NButton size="small" type="primary" secondary class="mt-8px" @click="goSetup">{{ p('clusterGoSetup') }}</NButton>
-    </NCard>
-
-    <!-- the clusters -->
-    <div
-      v-if="count"
-      class="shrink-0 flex-col"
-      :style="{ height: `${Math.min(360, Math.max(230, 180 + count * 37))}px` }"
-    >
+    <!-- the clusters: the same list panel as the other pages, with the count and the Grafana link in its toolbar -->
+    <div class="shrink-0 flex-col" :style="{ height: `${Math.min(360, Math.max(200, 180 + count * 37))}px` }">
       <ListTablePanel
         :title="p('clusterListTitle')"
         :help="p('clusterListHelp')"
@@ -186,13 +148,31 @@ onMounted(() => {
         :data="clusters"
         :row-key="(row: any) => row.datasource_id"
         :remote="false"
+        :empty-hint="failure"
         @refresh="load"
-      />
+      >
+        <template #after-refresh>
+          <NTag size="small" :bordered="false" type="info">{{ p('clusterCount') }} {{ count }}</NTag>
+          <GrafanaLink :url="clusterGrafana" :label="p('invGrafanaCluster')" />
+        </template>
+      </ListTablePanel>
     </div>
+
+    <!-- no cluster: the way to declare one -->
+    <NCard v-if="!loading && !failure && !count" :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+      <div class="text-14px font-medium">{{ p('clusterNone') }}</div>
+      <div class="mt-4px text-12px opacity-80">{{ p('clusterNoneHint') }}</div>
+      <NButton size="small" type="primary" secondary class="mt-8px" @click="goSetup">{{ p('clusterGoSetup') }}</NButton>
+    </NCard>
 
     <!-- the cluster chosen: its figures -->
     <NCard v-if="selected" :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
       <OverprovisionClusterCard :key="selected" open :datasource-id="selected" :grafana-url="clusterGrafana" />
+    </NCard>
+
+    <!-- where the figures come from: below the figures, it is read when asked for -->
+    <NCard :bordered="false" size="small" class="shrink-0 rounded-16px shadow-sm">
+      <ClusterDataSources />
     </NCard>
   </div>
 </template>

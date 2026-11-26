@@ -1826,6 +1826,8 @@ const local = {
           floorCoef: 'Floor coefficient',
           scale: 'Scale',
           forecastScale: 'Forecast scale',
+          measuredShortfall: 'measured shortfall',
+          uncapped: 'without the cap',
           shortfallCap: 'Forecast shortfall cap',
           applied: 'Applied',
           finalValue: 'Final recommendation',
@@ -1836,13 +1838,13 @@ const local = {
           def: 'The largest share of the capacity (the request) of a Pod the load may take, 0.1 to 1. 0.8 keeps 20% free; unset counts as 1: nothing is held back.',
           role: 'Recommendation = result / capacity reserve coefficient: the smaller it is, the more CPU and memory is recommended. With dynamic replicas it also sets the load of one Pod: Pod request x coefficient.',
           scope:
-            'The recommended CPU and memory, the load of one Pod with dynamic replicas, and the capacity reserve card of the resource dashboard. Every recommendation reads the value the module has now; 0.8 is only an example.'
+            'Belongs to the forecast recommendation only: it finally affects the forecast recommendation of CPU and memory and the load one Pod carries in the dynamic replicas (the capacity reserve card of the resource dashboard reads it too). The recommended Requests and Limits of the resource dashboard do not use it: they use the target shares, the Requests margin and the Limits coefficient. Every recommendation reads the value the module holds now, so a change takes effect; 0.8 is only an example.'
         },
         headroom: {
           def: 'The multiple the predicted peak is multiplied by, not below 1.',
           role: 'Leaves room for the forecast to be wrong: peak 4 x 1.2 = 4.8, then divided by the capacity reserve coefficient. Without a measured forecast shortfall the replicas use it as their margin too.',
           scope:
-            'The recommendation of CPU, memory and replicas from the forecast of an algorithm. The recommended Requests of the resource dashboard do not use it: they use the target shares and the Requests headroom.'
+            'Belongs to the forecast recommendation only: the input is the peak the algorithm predicts, and it finally affects the forecast recommendation of CPU, memory and replicas (admission and the operator use it). It does not correspond to any recommendation of the resource dashboard: the dashboard recommends Requests with the target shares and the Requests margin and Limits with the Limits coefficient.'
         },
         p90: {
           def: 'The most of the Requests the P90 use may take at the recommended Requests. 0.8 divides the use by 0.8; 0 follows the system setting (System settings > Resource analysis and recommendation).',
@@ -1922,16 +1924,16 @@ const local = {
             'The OOM floor of the memory only, when an OOM kill happened within the look-back days and neither of the other bases exists.'
         },
         floor: {
-          def: 'A lower bound of the recommendation as a share of the Pod request the module states (the Pod CPU and memory requests entered under capacity and replicas). 0 to 1, 0 = off.',
-          role: 'Keeps one recommendation from squeezing a Pod far below what is stated: recommendation >= stated Pod request x floor coefficient.',
+          def: 'A lower bound of the recommendation, as a share of the Pod request the module states. It is a switch and a share: on, the bound exists; off, there is none (the floor value still holds). The stated Pod requests are entered under capacity and replicas.',
+          role: 'recommendation = max(the calculated need, stated Pod request x floor coefficient). The share multiplies the stated request, not the recommendation; off, the term is absent, it is not a multiplication by 0.',
           scope:
-            'The recommended CPU and memory; the Pod requests must be entered and the coefficient above 0. It is taken with the CPU / memory floor value, the larger of the two being the lower bound; the fixed floor value is set under the calculation and bounds of the recommendation.'
+            'The forecast recommendation of CPU and memory; with no stated Pod request the floor does nothing. It is taken with the CPU / memory floor value, the larger being the lower bound; the cap still has the last word.'
         },
         shortfall: {
-          def: 'The most the measured peak shortfall of an algorithm counts for, 0.05 to 0.9.',
-          role: 'How much an algorithm missed the peak lately scales its forecast up, by at most 1 / (1 - cap): 0.5 scales it by at most 2. The more it missed, the sooner the replicas reach their maximum, hence the cap.',
+          def: 'How much an algorithm missed the peak lately (the P90 of its shortfall) counts for at most, 0.05 to 0.9. It limits the correction of the forecast, not the final recommendation.',
+          role: 'A shortfall s scales the forecast by 1 / (1 - s) to win back the peak it missed; above the cap it counts as the cap, so the scale is at most 1 / (1 - cap). Example: a miss of 30% scales by 1.43; a miss of 70% with a cap of 0.5 scales by 2, not 3.33.',
           scope:
-            'The scaling of the forecast of each algorithm in the dynamic replica solve; it does not change the recommended CPU and memory or the resource dashboard.'
+            'Only the predicted peak of each algorithm in the dynamic replica solve (the replicas). The shortfall is the P90 of up to 30 evaluations of the last 30 days; with fewer than 5 the latest backtest is used, and without one the recommendation coefficient is the margin. It does not limit the recommended CPU and memory (that is the cap) and does not touch the resource dashboard.'
         },
         minCpu: {
           def: 'The lowest recommended CPU in millicores (m), per Pod; 0 = none.',
@@ -2117,9 +2119,12 @@ const local = {
           f_replica_mode: 'Replica mode',
           d_replica_mode:
             'Fixed: the ceiling is the most replicas; dynamic: the ceiling may rise when the forecast needs more, up to the hard ceiling.',
+          f_fixed_replicas_enabled: 'Fixed replicas switch',
+          d_fixed_replicas_enabled:
+            'On, the replicas stay at the fixed count and no algorithm, forecast or trigger decides them (a period that fixes them still wins); off, the count is only stored and takes no part.',
           f_fixed_replicas: 'Fixed replicas',
           d_fixed_replicas:
-            'Above 0 the module keeps that many replicas and no algorithm, forecast or trigger decides them (a period that fixes them still wins); 0 lets the algorithm decide.',
+            'The count the replicas stay at while the switch is on; with the switch off, or no count, it does nothing.',
           f_min_replicas: 'Least replicas',
           d_min_replicas: 'The replicas never go below it (a hard floor).',
           f_max_replicas: 'Most replicas',
@@ -2144,7 +2149,8 @@ const local = {
           d_capacity_mode:
             'Manual: the capacity written; estimate: how much one Pod carries is worked out of the history.',
           f_target_utilization: 'Capacity reserve coefficient',
-          d_target_utilization: 'The recommendation = the need / this coefficient (0.7 leaves room for a 70% use).',
+          d_target_utilization:
+            'The recommendation = the need / this coefficient: 0.8 uses at most 80% of the capacity and keeps 20% free.',
           f_pod_capacity_rps: 'Pod capacity (requests/s)',
           d_pod_capacity_rps: 'The verified safe load of one Pod; dynamic replicas are worked out from it.',
           f_headroom_ratio: 'Recommendation coefficient',
@@ -2184,8 +2190,9 @@ const local = {
           f_rec_limit_guard: 'Peak share of the Limits',
           d_rec_limit_guard:
             'At the recommended replicas the P99 use of all the Pods stays under this share of their Limits, so the replicas are never taken too low. 0 follows the system setting.',
-          f_floor_ratio: 'Recommendation floor',
-          d_floor_ratio: 'Above 0 the recommendation is not below the Pod Requests the module states x this; 0 is off.',
+          f_floor_ratio: 'Floor coefficient',
+          d_floor_ratio:
+            'With the floor on, the recommended CPU and memory are not below the Pod requests the module states x this; 0 when it is off.',
           f_baseline: 'Recommendation period',
           d_baseline:
             'The period the verdict and the recommendation are made over; it does not follow the window of the charts. System setting only.',
@@ -2236,17 +2243,19 @@ const local = {
           d_fallback_memory_bytes: 'The memory Requests used when the forecast is not available.',
           f_fallback_replicas: 'Fallback replicas',
           d_fallback_replicas: 'The replicas used when the forecast is not available.',
-          f_ttl_seconds: 'Recommendation TTL',
-          d_ttl_seconds: 'How long a recommendation is valid.',
+          f_ttl_seconds: 'Recommendation validity',
+          d_ttl_seconds:
+            'How long a recommendation is valid: after it admission no longer rewrites the Pod resources and the operator treats it as no new decision (no scale-down; replicas rise only to the fallback).',
           f_max_missing_ratio: 'Most missing data',
           d_max_missing_ratio: 'Above this share of missing data the run degrades.',
           f_fallback_min_history_ratio: 'Least history share',
           d_fallback_min_history_ratio: 'With less than this share of the history the fallback is used.',
           f_min_score: 'Least algorithm score',
-          d_min_score: 'The forecast of an algorithm instance scoring below this is not used.',
-          f_max_shortfall: 'Largest shortfall correction',
+          d_min_score:
+            'An algorithm scoring below this is not followed and cannot raise the replica ceiling; the fallback applies. 0 = no limit.',
+          f_max_shortfall: 'Forecast shortfall cap',
           d_max_shortfall:
-            'A forecast is scaled by at most this peak shortfall of an algorithm (0.5 scales by at most 2).',
+            'The peak shortfall an algorithm measured counts for at most this, so a forecast is scaled by at most 1 / (1 - this) (0.5 scales by at most 2); only for the replicas of the dynamic replica solve.',
           f_predict_enabled: 'Prediction',
           d_predict_enabled: 'Whether the module is forecast.',
           f_predict_mode: 'Prediction mode',
@@ -2290,10 +2299,10 @@ const local = {
           'No forecast needed: a metric that crosses a threshold within the last minutes scales the replicas up, down or sets them. Add as many as needed, each with its metric, threshold, action and hours.',
         sectionOrder: 'Fixed replicas and the order strategies combine in',
         descOrder:
-          'Fixed replicas writes the replica count as one constant: for a workload that no algorithm, forecast or trigger should change (a stateful service kept at 3, say); with it set, the prediction mode governs only the CPU and the memory. It is not a duplicate of the forecast, the periods or the triggers: it is the step of the merge that comes first and that later strategies do not change (only a fixed period and the bypass are above it). When several strategies give different replica counts they are combined in the order below; the bounds of the last step hold for all of them.',
+          'Fixed replicas write the replica count as one constant: switch it on for a workload that no algorithm, forecast or trigger should change (a stateful service kept at 3, say). With the switch on and a count entered, the prediction mode governs only the CPU and the memory; off, or with no count, it takes no part in any calculation and the other strategies work as usual. It is not a duplicate of the forecast, the periods or the triggers: it is the step of the merge that comes first and that later strategies do not change (only the bypass and a fixed period are above it). When several strategies give different replica counts they are combined in the order below; the bounds of the last step hold for all of them.',
         orderTitle: 'Order',
         order1:
-          'What the administrator fixed comes first: bypass, a fixed count in a period, the fixed replicas above. Later strategies do not change them.',
+          'What the administrator fixed comes first: bypass, a fixed count in a period, the fixed replicas above when switched on. Later strategies do not change them.',
         order2:
           'The other counts are first given by the forecast (the fallback default when the prediction mode is none or the forecast is unavailable).',
         order3:
@@ -2302,6 +2311,18 @@ const local = {
         order5:
           'The replica bounds (least, most) hold for the final count and come last; the pace then limits how many replicas one action changes and how often.',
         orderFixedReplicas: 'Fixed replicas',
+        replicaOrderTitle: 'How the replicas are worked out, in order',
+        replicaOrder1:
+          'The sources give a target first: bypass, a fixed count in a period and the fixed replicas (switched on) come first; the rest comes from the forecast (the fallback when it is unavailable), then the metric triggers and the "at least" / "at most" windows adjust it.',
+        replicaOrder2: 'The least replicas is the floor and the most replicas the everyday ceiling.',
+        replicaOrder3:
+          'Dynamic expansion: when the forecast needs more than the most replicas and the algorithm scored at least the minimum score, the ceiling rises each cycle by at most to ceil(ceiling now x (1 + expansion speed)), never above the hard maximum; when the forecast falls it returns to the most replicas. The hard maximum is the absolute ceiling and exists under dynamic expansion only.',
+        replicaOrder4:
+          'The operator checks the hard floor and ceiling the platform gives; a count outside the least and most replicas is corrected at once, without waiting for the cooldown.',
+        replicaOrder5:
+          'A scale-down needs every replica Ready; then the cooldown: if not enough time passed since the last action of that direction, nothing moves this time.',
+        replicaOrder6:
+          'The step last: one action adds or removes at most the maximum step, the rest follows in the next cycles; an urgent scale-up (the measured load is above the forecast) has no cooldown and no step limit.',
         sectionBounds: 'Replica bounds',
         descBounds:
           'The least and most replicas bound normal scaling and the fallback alike: what the forecast, the periods, the triggers and the fallback default give never goes past them.',
@@ -2326,9 +2347,31 @@ const local = {
         expandStepRatio: 'Ceiling expansion speed (per cycle)',
         expandStepRatioHint:
           'With dynamic expansion each cycle raises the ceiling by at most this share of the ceiling now (0.25 = 25%), for example 15 -> 19 -> 24 -> 25. It raises the most replicas allowed, not the replicas; how many replicas one action adds or removes is limited by the pace, and the two are not the same thing.',
+        paceUp: 'Scale-up',
+        paceDown: 'Scale-down',
+        paceBoth: '{dir}: at most {step} per action and at least {sec} s between two, so at most {hour} per hour.',
+        paceStepOnly: '{dir}: at most {step} per action, no interval.',
+        paceCooldownOnly: '{dir}: at least {sec} s between two, any number at a time.',
+        paceNone: '{dir}: no limit.',
+        paceOrder:
+          'The expansion speed raises the most replicas allowed; the maximum step limits how many replicas one action really adds or removes. The first decides how high the replicas may go, the second how fast; they apply one after the other and do not overwrite each other.',
+        fallbackFlowTitle: 'An outage of the platform and the way back',
+        flowOk: 'The platform answers: the replicas follow its decision.',
+        flowCache:
+          'The platform is away: for {cache} the operator keeps using the last decision it remembers, which can raise the replicas and never lower them.',
+        flowHold:
+          'The memory has expired too: the replicas are frozen at the current count for {hold}. A short outage ends here without changing any replica.',
+        flowDegraded:
+          'Still away: only now the fallback replicas are used, and they only raise: a fallback below the current count changes nothing (12 running, fallback 4: still 12). Each step adds at most the maximum scale-up step, with at least {cooldown} between two.',
+        flowRecover:
+          'The platform is back: scale-ups follow its decision at once; a scale-down waits until it has answered {answers} times in a row and been stable for {stable}, and then still keeps to the scale-down step, cooldown and every replica being Ready.',
+        flowRecord:
+          'Every action is recorded (state, basis, time); the records of the outage are reported to the platform when it is back, none is lost.',
+        spanMinutes: '{n} min',
+        spanSeconds: '{n} s',
         sectionFallback: 'Fallback',
         descFallbackNew:
-          'The defaults used only when the forecast is unavailable (model failure, too little data, a stale recommendation). The replicas the fallback gives are held to the replica bounds as well; after the forecast is back it takes several healthy cycles in a row to switch back.',
+          'The defaults used only when the forecast or the platform is unavailable (model failure, too little data, a stale recommendation, the platform away). The replicas the fallback gives are held to the replica bounds and only ever raise them; after the forecast is back it takes several healthy cycles in a row to switch back.',
         sectionApply: 'Recommendation validity and score',
         capNew:
           'Once the module is saved and history is collected, the capacity of one Pod and the total capacity are worked out here; no number without a basis is shown now.',
@@ -2374,7 +2417,43 @@ const local = {
         coeffGroupForecast: 'Forecast recommendation (CPU, memory, replicas)',
         coeffGroupRequests: 'Resource dashboard: recommended Requests',
         coeffGroupLimits: 'Resource dashboard: recommended Limits and replicas',
-        coeffGroupOther: 'Floor and forecast shortfall',
+        coeffGroupForecastNote:
+          'The input is the peak the forecast gives; the result is the forecast recommendation of CPU, memory and replicas, which admission and the operator use.',
+        coeffGroupRequestsNote:
+          'The input is the use measured in Prometheus (P90, P95, P99); the result is the recommended Requests of the resource dashboard.',
+        coeffGroupLimitsNote:
+          'The input is the measured P99; the result is the recommended Limits and replicas of the resource dashboard.',
+        coeffGroupOtherNote:
+          'Corrects the error of the forecast itself and only works on the dynamic replicas; the floor coefficient sits with the floor values under the floor and cap of the recommendation.',
+        coeffFloorSwitch: 'Floor from the stated request',
+        floorNote:
+          'Now: stated Pod CPU request {stated} m x {ratio} = {byRatio} m, against the CPU floor value {fixed} m, the lower bound is the larger, {floor} m. Memory is the same.',
+        floorNoteNoRequest:
+          'The stated Pod request (under capacity and replicas) is not entered, so this floor does nothing now.',
+        matrixTitle: 'Which coefficients make each result',
+        matrixForecast: 'Forecast recommendation (input: the predicted peak)',
+        matrixBoard: 'Resource dashboard (input: the measured use)',
+        matrixRow_cpuRequests: 'CPU Requests',
+        matrixRow_memoryRequests: 'Memory Requests',
+        matrixRow_cpuLimits: 'CPU Limits',
+        matrixRow_memoryLimits: 'Memory Limits',
+        matrixRow_replicas: 'Replicas',
+        matrixForecast_cpuRequests:
+          'predicted peak x recommendation coefficient / capacity reserve coefficient, then held by the floor and the cap',
+        matrixForecast_memoryRequests: 'as CPU; after an OOM kill also not below the OOM floor',
+        matrixForecast_cpuLimits: 'final Requests x CPU limit factor (written at admission only)',
+        matrixForecast_memoryLimits: 'final Requests x memory limit factor (written at admission only)',
+        matrixForecast_replicas:
+          'ceil(predicted peak x recommendation coefficient / safe capacity of a Pod); a measured shortfall (within the cap) replaces the recommendation coefficient',
+        matrixBoard_cpuRequests:
+          'max(P90 / P90 target share, P95 / P95 target share, P99 / P99 target share) x (1 + CPU Requests margin)',
+        matrixBoard_memoryRequests:
+          'as CPU with the memory Requests margin; after an OOM kill also not below the OOM floor',
+        matrixBoard_cpuLimits: 'max(recommended Requests, P99 x CPU Limits coefficient)',
+        matrixBoard_memoryLimits: 'max(recommended Requests, P99 x memory Limits coefficient)',
+        matrixBoard_replicas:
+          'from the recommended Requests, then not below the total P99 use / (Pod Limits x peak share limit)',
+        coeffGroupOther: 'Forecast shortfall',
         coeffOomMoved:
           'The OOM protection coefficient and the OOM calculation coefficients are set under "OOM protection" below, the JVM pressure under "JVM pressure".',
         coeffP90: 'P90 target share',
@@ -2439,15 +2518,16 @@ const local = {
         editTitle: 'Edit forecast module',
         required: 'Name, namespace and workload are required',
         sectionBasic: 'Basics',
-        sectionSafety: 'How the recommendation is calculated and bounded',
+        sectionSafety: 'Floor and cap of the recommendation',
         sectionSafetyHint:
-          'Recommendation = predicted peak x recommendation coefficient / capacity reserve coefficient, then held between the floor value and the cap; the limit is the final request times the limit ratio. The floor value and the cap are guard rails, not forecasts, 0 = no limit. The order they apply in is listed below.',
+          'The floor and cap values are guardrails, not forecast results; 0 = none. The coefficients of the calculation itself are set above under the calculation coefficients, not repeated here. The limit is the final request x the limit factor. The order they apply in is listed below.',
         floorHint:
           'The recommendation never goes below it. A forecast only reflects history: when a service is idle, has missing data or has just started it can be tiny, and a burst would then throttle or OOM the Pod. The floor guards against that. 0 = not set.',
         capHint:
           'The recommendation never goes above it, so an abnormal forecast (a spike, bad data) cannot claim too much at once. 0 = not set.',
         ttlSeconds: 'Recommendation validity (s)',
-        ttlHint: 'After it expires neither admission nor the operator uses the recommendation until a new one is made.',
+        ttlHint:
+          'How long a recommendation is valid. After it: admission no longer rewrites the Pod CPU and memory and leaves what the workload says; the operator treats it as no new decision, never scales down, freezes the replicas and raises them to the fallback in steps only when the fallback is higher (see Fallback).',
         maxFillSteps: 'Max steps to fill',
         maxFillStepsHint:
           'Gaps up to this many steps are linearly interpolated, at training time only (Prometheus and the stored samples are not changed); a longer gap truncates the training data. It counts steps, so the time it covers follows the sampling step: 480 steps are 4 hours at 30 seconds, 48 steps at 5 minutes. What is filled is interpolated, not real data, and the longer the gap the less reliable. 0 disables filling, 10000 is the most.',
@@ -2473,7 +2553,8 @@ const local = {
           'The time zone of the statistics and the fixed periods: in some hours the resources or the replicas can be fixed.',
         descCapacity:
           'Choose how the replicas are worked out, then enter the safe capacity of one Pod (RPS, requests per second). The four cards below are worked out from what exists; the "?" of each says what it means, where the data comes from, its formula and its period. A number without a basis is not shown: the card says what is missing.',
-        descApply: 'How long a recommendation is valid and the algorithm score below which it is no longer taken.',
+        descApply:
+          'How long a recommendation is valid and the algorithm score below which it is no longer taken; what happens after it expires or is not taken is in the "?" of each.',
         descPace:
           'How many replicas one action adds or removes and how long to wait since the last action in that direction. It holds over the whole run cycle (normal scaling and the fallback), with no time-of-day distinction; 0 = no limit. The pace limits how fast, the replica bounds limit how many: they do not overlap.',
         descCoeff:
@@ -2488,10 +2569,10 @@ const local = {
         coeffOomHistory: 'OOM calculation coefficient: memory history',
         coeffFloor: 'Floor coefficient',
         coeffFloorHint:
-          'The CPU and memory recommended are never below the Pod request the module states (the Pod CPU and memory request of the dynamic replicas) x the floor coefficient, so one recommendation cannot squeeze a Pod too small; 0 turns it off, 0 to 1.',
+          'On, the recommended CPU and memory are never below the Pod request the module states x the floor coefficient, so one recommendation cannot squeeze a Pod too small. The stated Pod request is entered under capacity and replicas; without it the floor does nothing. 0.05 to 1; example: a stated 4000 m and a coefficient of 0.5 keep the recommendation at 2000 m or more.',
         coeffShortfall: 'Forecast shortfall cap',
         coeffShortfallHint:
-          'A measured shortfall of an algorithm at the peak above this is counted as this, so a forecast is scaled by at most shortfall / (1 - shortfall): 0.5 scales it up to twice. 0.05 to 0.9; the larger the shortfall the more the replicas are pushed to the maximum, hence the cap.',
+          'How much an algorithm missed the peak lately (the P90 of its shortfall); above this cap it counts as the cap. The forecast is scaled by 1 / (1 - shortfall), so by at most 1 / (1 - cap): 0.5 scales it up to twice. 0.05 to 0.9. Only for the replicas of the dynamic replica solve; it does not limit the final recommendation or touch the resource dashboard. With fewer than 5 evaluations the latest backtest is used, and without one the recommendation coefficient is the margin.',
         coeffPreview: 'Formulas (they change with the values above)',
         formulaCpu: 'CPU recommended',
         formulaMemory: 'Memory recommended',
@@ -2519,10 +2600,19 @@ const local = {
         scaleDownCooldown: 'Scale-down cooldown (s)',
         scaleDownCooldownHint:
           'Seconds that must pass since the last scale-down action before the next one; stops replicas going up and down while the load flaps. 0 = no limit.',
+        fixedReplicasEnabled: 'Use the fixed replicas',
+        fixedReplicasEnabledHint:
+          'On, the replicas stay at the fixed count; off, it is only stored and takes no part in any calculation, and the other strategies decide the replicas as usual. With no fixed count entered, switching on has no effect.',
+        fixedReplicasRequired: 'With the fixed replicas on, enter a count above 0',
+        fixedNoteOn:
+          'On: the replicas stay at {n}; the forecast and the triggers do not change it; a fixed count in a period comes first, "at least" and "at most" windows still raise or lower it; the least and most replicas limit it last.',
+        fixedNoteOffKept:
+          'Off: the fixed count {n} is only stored and takes no part; the replicas follow the forecast, the periods and the triggers.',
+        fixedNoteOff: 'Not on: the replicas follow the forecast, the periods and the triggers.',
         fixedReplicasHint:
-          'When set, the module keeps exactly this many replicas and no algorithm decides them (CPU and memory still follow the forecast); 0 = the algorithm decides. A time window that fixes the count still wins; "at least" and "at most" windows raise or lower it.',
+          'While the switch is on the replicas stay at this count and no algorithm decides them (CPU and memory still follow the forecast). A time window that fixes the count still wins; "at least" and "at most" windows raise or lower it; the least and most replicas limit it last.',
         fallbackReplicasHint:
-          'The replica count the operator uses when there is no fresh forecast (model failure, too little data, expired recommendation); it never scales down below the current count because of it. 0 = unset: the current replicas are frozen.',
+          'The replica count the operator uses when there is no fresh forecast (model failure, too little data, expired recommendation); it only raises: a count below the current one changes nothing. 0 = unset: the current replicas are frozen. The steps are in the flow below.',
         limitCpuRatio: 'CPU limit factor',
         limitMemoryRatio: 'Memory limit factor',
         limitRatioHint:
@@ -2714,7 +2804,7 @@ const local = {
         workloadKindHint:
           'A module is one Kubernetes workload: namespace + kind + name. A DaemonSet has no replica count, only its resource requests are adjusted.',
         minScoreHint:
-          'When the score (0-100) of an algorithm is below this, its forecast is not used and the defaults (Fallback) below apply; 0 means no limit.',
+          'When the score (0-100) of an algorithm is below this, its forecast is not used and cannot raise the replica ceiling; the fallback below applies (it never lowers the replicas). 0 means no limit.',
         fallbackHint:
           'Defaults used when no forecast is usable (no data, too little history, a failed forecast, a low score). Each field applies on its own and stays inside the bounds; 0 keeps the original value of that field while degraded. Recovery needs several healthy cycles in a row.',
         protectionHint:

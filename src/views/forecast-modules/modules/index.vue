@@ -243,6 +243,7 @@ function emptyForm() {
     fallback_memory_mib: 0,
     fallback_replicas: 0,
     fixed_replicas: 0,
+    fixed_replicas_enabled: false,
     headroom_ratio: 1,
     limit_cpu_ratio: 0,
     limit_memory_ratio: 0,
@@ -268,6 +269,20 @@ function emptyForm() {
   };
 }
 const form = reactive(emptyForm());
+/** the floor coefficient is a number with a switch: the form holds the effective figure (0 = off), and the switch remembers the last one so turning it on again restores it */
+const FLOOR_START = 0.5;
+let floorMemo = FLOOR_START;
+const floorOn = computed({
+  get: () => form.floor_ratio > 0,
+  set: (on: boolean) => {
+    if (on) {
+      form.floor_ratio = floorMemo > 0 ? floorMemo : FLOOR_START;
+    } else {
+      if (form.floor_ratio > 0) floorMemo = form.floor_ratio;
+      form.floor_ratio = 0;
+    }
+  }
+});
 /** The module a clone is taken from; its metric sources and fixed periods are copied once the clone exists. Algorithms are platform-wide and apply to the clone by themselves. */
 const cloneSource = ref<Api.Forecast.Module>();
 const periodEditor = ref<InstanceType<typeof PeriodEditor>>();
@@ -327,6 +342,33 @@ async function loadSystemDefaults() {
       const value = Number(data?.config_value);
       // the percentages of the settings are shares; the sustain window is minutes
       if (Number.isFinite(value) && value > 0) system[name] = name === 'sustain' ? value : value / 100;
+    })
+  );
+}
+
+/** the times of the operator's outage rules in seconds, read from the system parameters (null = not read): the flow under the fallback names them */
+const operatorTimes = reactive<Record<'cache' | 'hold' | 'cooldown' | 'answers' | 'stable', number | null>>({
+  cache: null,
+  hold: null,
+  cooldown: null,
+  answers: null,
+  stable: null
+});
+async function loadOperatorTimes() {
+  const keys = {
+    cache: 'operator.decision_cache_ttl_seconds',
+    hold: 'operator.degrade_hold_seconds',
+    cooldown: 'operator.degrade_cooldown_seconds',
+    answers: 'operator.recover_answers',
+    stable: 'operator.recover_stable_seconds'
+  } as const;
+  await Promise.all(
+    (Object.keys(keys) as Array<keyof typeof keys>).map(async name => {
+      const { data } = await fetchGetConfig(keys[name]);
+      const value = Number(data?.config_value);
+      if (data?.config_value !== undefined && data.config_value !== '' && Number.isFinite(value) && value >= 0) {
+        operatorTimes[name] = value;
+      }
     })
   );
 }
@@ -534,6 +576,68 @@ const boundsNote = computed(() => {
   }
   if (!(min > 0)) return `${m('boundsFixed', { min: 0, max })}`;
   return m('boundsFixed', { min, max });
+});
+
+/** the rows of the table that says which coefficient makes which result, in the two calculations */
+const coeffMatrixRows = ['cpuRequests', 'memoryRequests', 'cpuLimits', 'memoryLimits', 'replicas'] as const;
+
+/** the floor coefficient with the figures of the form: the stated Pod request times it, against the fixed floor value, the larger is the lower bound */
+const floorNote = computed(() => {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  const stated = form.pod_cpu_request_milli;
+  if (!(stated > 0)) return m('floorNoteNoRequest');
+  const byRatio = Math.ceil(stated * form.floor_ratio);
+  const fixed = form.min_cpu_milli;
+  return m('floorNote', {
+    stated,
+    ratio: formatNumber(form.floor_ratio),
+    byRatio,
+    fixed: fixed > 0 ? fixed : '-',
+    floor: Math.max(byRatio, fixed)
+  });
+});
+
+/** what the fixed replicas do now: on and holding a count, off with a count kept, or not set */
+const fixedNote = computed(() => {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  if (form.fixed_replicas_enabled) return m('fixedNoteOn', { n: form.fixed_replicas || '-' });
+  if (form.fixed_replicas > 0) return m('fixedNoteOffKept', { n: form.fixed_replicas });
+  return m('fixedNoteOff');
+});
+
+/** what the step and the cooldown of a direction add up to: the most replicas one action moves and how often */
+function paceLine(direction: 'up' | 'down', step: number, cooldown: number) {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  const dir = m(direction === 'up' ? 'paceUp' : 'paceDown');
+  if (step > 0 && cooldown > 0)
+    return m('paceBoth', { dir, step, sec: cooldown, hour: Math.floor(3600 / cooldown) * step });
+  if (step > 0) return m('paceStepOnly', { dir, step });
+  if (cooldown > 0) return m('paceCooldownOnly', { dir, sec: cooldown });
+  return m('paceNone', { dir });
+}
+const paceNote = computed(() => ({
+  up: paceLine('up', form.scale_up_max_step, form.scale_up_cooldown_seconds),
+  down: paceLine('down', form.scale_down_max_step, form.scale_down_cooldown_seconds)
+}));
+
+/** a time in seconds as the flow writes it: whole minutes as minutes, else seconds; "-" when the parameter was not read */
+function spanText(seconds: number | null) {
+  if (seconds === null) return '-';
+  if (seconds > 0 && seconds % 60 === 0) return t('page.forecast.modules.spanMinutes', { n: seconds / 60 });
+  return t('page.forecast.modules.spanSeconds', { n: seconds });
+}
+
+/** the way of an outage of the platform and of its end, with the times the system parameters hold */
+const fallbackFlow = computed(() => {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  return [
+    m('flowOk'),
+    m('flowCache', { cache: spanText(operatorTimes.cache) }),
+    m('flowHold', { hold: spanText(operatorTimes.hold) }),
+    m('flowDegraded', { cooldown: spanText(operatorTimes.cooldown) }),
+    m('flowRecover', { answers: operatorTimes.answers ?? '-', stable: spanText(operatorTimes.stable) }),
+    m('flowRecord')
+  ];
 });
 
 /** the bounds that have a "?" of the full kind (definition, formula, example, scope) */
@@ -755,6 +859,7 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     fallback_memory_bytes: Math.round(form.fallback_memory_mib * MIB),
     fallback_replicas: form.fallback_replicas,
     fixed_replicas: form.fixed_replicas,
+    fixed_replicas_enabled: form.fixed_replicas_enabled,
     headroom_ratio: form.headroom_ratio,
     limit_cpu_ratio: form.limit_cpu_ratio,
     limit_memory_ratio: form.limit_memory_ratio,
@@ -832,6 +937,10 @@ async function copyConfiguration(sourceId: number, targetId: number) {
 async function save() {
   if (!form.name.trim() || !form.namespace.trim() || !form.workload.trim()) {
     message.warning(t('page.forecast.modules.required'));
+    return;
+  }
+  if (form.fixed_replicas_enabled && !(form.fixed_replicas >= 1)) {
+    message.warning(t('page.forecast.modules.fixedReplicasRequired'));
     return;
   }
   if (form.predict_enabled && form.predict_mode === 'fixed' && !form.predict_algorithm) {
@@ -1242,6 +1351,7 @@ onMounted(() => {
   cfg.initColumnConfig();
   loadAlgorithms();
   loadSystemDefaults();
+  loadOperatorTimes();
   loadClusters();
   load();
 });
@@ -1680,6 +1790,7 @@ onMounted(() => {
           <div class="mod-sec-desc">{{ t('page.forecast.modules.descCoeff') }}</div>
           <NForm :model="form" label-placement="top">
             <div class="sub-title">{{ t('page.forecast.modules.coeffGroupForecast') }}</div>
+            <div class="group-note">{{ t('page.forecast.modules.coeffGroupForecastNote') }}</div>
             <NFormItem>
               <template #label>
                 <ParamLabel :label="t('page.forecast.modules.coeffReserve')" :doc="docOf('reserve')" />
@@ -1693,6 +1804,7 @@ onMounted(() => {
               <NInputNumber v-model:value="form.headroom_ratio" :min="1" :max="10" :step="0.05" class="w-full" />
             </NFormItem>
             <div class="sub-title">{{ t('page.forecast.modules.coeffGroupRequests') }}</div>
+            <div class="group-note">{{ t('page.forecast.modules.coeffGroupRequestsNote') }}</div>
             <NFormItem>
               <template #label>
                 <ParamLabel :label="t('page.forecast.modules.coeffP90')" :doc="docOf('p90')" />
@@ -1754,6 +1866,7 @@ onMounted(() => {
               />
             </NFormItem>
             <div class="sub-title">{{ t('page.forecast.modules.coeffGroupLimits') }}</div>
+            <div class="group-note">{{ t('page.forecast.modules.coeffGroupLimitsNote') }}</div>
             <NFormItem>
               <template #label>
                 <ParamLabel :label="t('page.forecast.modules.coeffCpuLimitFactor')" :doc="docOf('cpuLimitFactor')" />
@@ -1782,12 +1895,7 @@ onMounted(() => {
               <NInputNumber v-model:value="form.rec_limit_guard" :min="0" :max="1" :step="0.05" class="w-full" />
             </NFormItem>
             <div class="sub-title">{{ t('page.forecast.modules.coeffGroupOther') }}</div>
-            <NFormItem>
-              <template #label>
-                <ParamLabel :label="t('page.forecast.modules.coeffFloor')" :doc="docOf('floor')" />
-              </template>
-              <NInputNumber v-model:value="form.floor_ratio" :min="0" :max="1" :step="0.05" class="w-full" />
-            </NFormItem>
+            <div class="group-note">{{ t('page.forecast.modules.coeffGroupOtherNote') }}</div>
             <NFormItem>
               <template #label>
                 <ParamLabel :label="t('page.forecast.modules.coeffShortfall')" :doc="docOf('shortfall')" />
@@ -1796,6 +1904,25 @@ onMounted(() => {
             </NFormItem>
           </NForm>
           <div class="live-note">{{ t('page.forecast.modules.coeffOomMoved') }}</div>
+          <div class="coeff-matrix">
+            <div class="order-title">{{ t('page.forecast.modules.matrixTitle') }}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>{{ t('page.forecast.modules.matrixForecast') }}</th>
+                  <th>{{ t('page.forecast.modules.matrixBoard') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in coeffMatrixRows" :key="row">
+                  <th>{{ t(`page.forecast.modules.matrixRow_${row}`) }}</th>
+                  <td>{{ t(`page.forecast.modules.matrixForecast_${row}`) }}</td>
+                  <td>{{ t(`page.forecast.modules.matrixBoard_${row}`) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <div class="coeff-preview">
             <div class="coeff-preview-title">{{ t('page.forecast.modules.coeffPreview') }}</div>
             <FormulaView :lines="coefficientLines" />
@@ -1854,8 +1981,26 @@ onMounted(() => {
               </template>
               <NInputNumber v-model:value="form.limit_memory_ratio" :min="0" :max="10" :step="0.1" class="w-full" />
             </NFormItem>
+            <NFormItem>
+              <template #label>
+                <ParamLabel :label="t('page.forecast.modules.coeffFloorSwitch')" :doc="docOf('floor')" />
+              </template>
+              <StatusSelect v-model:value="floorOn" />
+            </NFormItem>
+            <NFormItem v-if="floorOn">
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.coeffFloor') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.coeffFloorHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NInputNumber v-model:value="form.floor_ratio" :min="0.05" :max="1" :step="0.05" class="w-full" />
+            </NFormItem>
           </NForm>
           <div class="live-note">{{ t('page.forecast.modules.floorValueNote') }}</div>
+          <div v-if="floorOn" class="live-note">{{ floorNote }}</div>
           <div class="order-box">
             <div class="order-title">{{ t('page.forecast.modules.orderBoundsTitle') }}</div>
             <ol>
@@ -2061,6 +2206,12 @@ onMounted(() => {
             </template>
           </NForm>
           <div class="live-note">{{ boundsNote }}</div>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.replicaOrderTitle') }}</div>
+            <ol>
+              <li v-for="n in 6" :key="n">{{ t(`page.forecast.modules.replicaOrder${n}`) }}</li>
+            </ol>
+          </div>
         </section>
 
         <section class="mod-sec">
@@ -2084,6 +2235,9 @@ onMounted(() => {
               <NInputNumber v-model:value="form[paceModel[key]]" :min="0" :precision="0" class="w-full" />
             </NFormItem>
           </NForm>
+          <div class="live-note">{{ paceNote.up }}</div>
+          <div class="live-note">{{ paceNote.down }}</div>
+          <div class="live-note">{{ t('page.forecast.modules.paceOrder') }}</div>
         </section>
 
         <section class="mod-sec">
@@ -2127,6 +2281,12 @@ onMounted(() => {
               <NInputNumber v-model:value="form.recover_cycles" :min="1" :max="20" :precision="0" class="w-full" />
             </NFormItem>
           </NForm>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.fallbackFlowTitle') }}</div>
+            <ol>
+              <li v-for="step in fallbackFlow" :key="step">{{ step }}</li>
+            </ol>
+          </div>
         </section>
 
         <section class="mod-sec">
@@ -2241,15 +2401,35 @@ onMounted(() => {
             <NFormItem>
               <template #label>
                 <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.fixedReplicasEnabled') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">
+                      {{ t('page.forecast.modules.fixedReplicasEnabledHint') }}
+                    </div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <StatusSelect v-model:value="form.fixed_replicas_enabled" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
                   {{ t('page.forecast.modules.fixedReplicas') }}
                   <IconTooltip icon="mdi-help-circle" placement="top">
                     <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.fixedReplicasHint') }}</div>
                   </IconTooltip>
                 </span>
               </template>
-              <NInputNumber v-model:value="form.fixed_replicas" :min="0" :precision="0" class="w-full" />
+              <NInputNumber
+                v-model:value="form.fixed_replicas"
+                :min="0"
+                :precision="0"
+                :disabled="!form.fixed_replicas_enabled"
+                class="w-full"
+              />
             </NFormItem>
           </NForm>
+          <div class="live-note">{{ fixedNote }}</div>
           <div class="order-box">
             <div class="order-title">{{ t('page.forecast.modules.orderTitle') }}</div>
             <ol>
@@ -2422,6 +2602,48 @@ onMounted(() => {
 
 .coeff-preview {
   margin: 2px 0 10px;
+}
+
+.group-note {
+  grid-column: 1 / -1;
+  margin: -2px 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0.7;
+}
+
+.coeff-matrix {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  overflow-x: auto;
+}
+
+.coeff-matrix table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.coeff-matrix th,
+.coeff-matrix td {
+  padding: 4px 8px;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.coeff-matrix thead th {
+  border-top: 0;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.coeff-matrix tbody th {
+  white-space: nowrap;
+  font-weight: 600;
 }
 
 .coeff-preview-title {

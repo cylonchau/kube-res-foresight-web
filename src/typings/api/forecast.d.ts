@@ -304,6 +304,8 @@ declare namespace Api {
       fallback_replicas: number;
       /** 0 = the algorithm decides the replicas; a number keeps the module at that many (time windows can still change it) */
       fixed_replicas: number;
+      /** whether the fixed count takes part: off, it is kept in the form and does not hold the replicas */
+      fixed_replicas_enabled: boolean;
       headroom_ratio: number;
       pod_capacity_rps: number;
       timezone: string;

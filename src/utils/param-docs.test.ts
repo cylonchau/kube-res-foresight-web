@@ -57,7 +57,14 @@ test('the percentile target follows the system where the module sets none', () =
 
 test('the floor and the shortfall cap are worked out from their coefficients', () => {
   assert.equal(plain(paramDoc('floor', form, ctx).example)[0], '4000 m × 0.5 = 2000 m');
-  assert.equal(plain(paramDoc('shortfall', form, ctx).example)[0], '1 ÷ ( 1 − 0.5 ) = 2 ×');
+  // the floor is the larger of the calculated need and the stated request times the coefficient: it is never a multiplication of the recommendation
+  assert.equal(plain(paramDoc('floor', form, ctx).example)[1], 'max ( 1500 m , 2000 m ) = 2000 m');
+  assert.equal(plain(paramDoc('floor', form, ctx).formula)[0].includes('max'), true);
+  // switched off (0) the example is not "× 0 = 0": it shows what the switch starts from
+  assert.equal(plain(paramDoc('floor', { ...form, floor_ratio: 0 }, ctx).example)[0], '4000 m × 0.5 = 2000 m');
+  // a shortfall of 0.7 above the cap of 0.5 counts as the cap: the forecast is scaled by 2, not by 3.3333
+  assert.equal(plain(paramDoc('shortfall', form, ctx).example)[0], '1 ÷ ( 1 − min ( 0.7 , 0.5 ) ) = 2 ×');
+  assert.equal(plain(paramDoc('shortfall', form, ctx).example)[1], '1 ÷ ( 1 − 0.7 ) = 3.3333 ×');
   // the floor value: a need below it becomes it
   assert.match(plain(paramDoc('minCpu', form, ctx).example)[0], /= 3000 m$/);
 });

@@ -93,7 +93,21 @@ function targetOf(id: 'p90' | 'p95' | 'p99', f: DocForm, ctx: DocContext) {
 }
 
 /** a sample use of a Pod that the examples are worked on; it is a sample, not a figure of the module */
-export const SAMPLE = { peak: 4, use: 3, total: 20, limit: 4, workingSet: 2, stated: 4000, memoryNeed: 8 };
+export const SAMPLE = {
+  peak: 4,
+  use: 3,
+  total: 20,
+  limit: 4,
+  workingSet: 2,
+  stated: 4000,
+  memoryNeed: 8,
+  /** a calculated need below what the floor holds, and a measured shortfall above the cap */
+  calculated: 1500,
+  shortfall: 0.7
+};
+
+/** the coefficient the examples of the floor use while the floor is off: what turning it on starts from */
+export const FLOOR_START = 0.5;
 
 /** the document of a parameter, with the examples worked out from the form */
 export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
@@ -418,17 +432,24 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
         ]
       };
     }
-    case 'floor':
+    case 'floor': {
+      // off (0) the example still shows what the switch does: it starts from the first coefficient it takes
+      const ratio = f.floor_ratio > 0 ? f.floor_ratio : FLOOR_START;
       return {
         ...base,
         formula: [
           line(
             n('recommended'),
             name(n('recommendedValue')),
-            op('≥'),
+            eq,
+            name('max'),
+            op('('),
+            name(n('calculated')),
+            op(','),
             name(n('statedRequest')),
             times,
-            name(n('floorCoef'))
+            name(n('floorCoef')),
+            op(')')
           )
         ],
         example: [
@@ -437,27 +458,48 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
             sample(SAMPLE.stated),
             op('m'),
             times,
-            coef(fx(f.floor_ratio)),
+            coef(fx(ratio)),
             eq,
-            res(`${fx(SAMPLE.stated * f.floor_ratio, 0)} m`)
+            res(`${fx(SAMPLE.stated * ratio, 0)} m`)
+          ),
+          line(
+            n('applied'),
+            name('max'),
+            op('('),
+            sample(SAMPLE.calculated),
+            op('m'),
+            op(','),
+            sample(SAMPLE.stated * ratio),
+            op('m'),
+            op(')'),
+            eq,
+            res(`${fx(Math.max(SAMPLE.calculated, SAMPLE.stated * ratio), 0)} m`)
           )
         ]
       };
+    }
     case 'shortfall': {
       const s = f.max_shortfall > 0 && f.max_shortfall < 1 ? f.max_shortfall : 0.5;
+      const measured = SAMPLE.shortfall;
+      const counted = Math.min(measured, s);
       return {
         ...base,
         formula: [
           line(
             n('scale'),
             name(n('forecastScale')),
-            op('≤'),
+            eq,
             num('1'),
             over,
             op('('),
             num('1'),
             op('−'),
+            name('min'),
+            op('('),
+            name(n('measuredShortfall')),
+            op(','),
             name(n('shortfallCap')),
+            op(')'),
             op(')')
           )
         ],
@@ -469,10 +511,27 @@ export function paramDoc(id: ParamId, f: DocForm, ctx: DocContext): ParamDoc {
             op('('),
             num('1'),
             op('−'),
+            name('min'),
+            op('('),
+            sample(measured),
+            op(','),
             coef(fx(s)),
             op(')'),
+            op(')'),
             eq,
-            res(`${fx(1 / (1 - s))} ×`)
+            res(`${fx(1 / (1 - counted))} ×`)
+          ),
+          line(
+            n('uncapped'),
+            num('1'),
+            over,
+            op('('),
+            num('1'),
+            op('−'),
+            sample(measured),
+            op(')'),
+            eq,
+            res(`${fx(1 / (1 - measured))} ×`)
           )
         ]
       };
