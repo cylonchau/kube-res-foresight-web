@@ -1323,6 +1323,7 @@ const local = {
       clusterUsed: '实际使用',
       clusterAllocatable: '可分配',
       clusterMissing: '{n} 个集群指标没有在「指标模板」里声明（指标类型选“集群指标”），所以没有查它：',
+      slowRead: 'Prometheus 读取较慢，平台在后台继续读，已等待 {n} 秒',
       reload: '刷新',
       srcMapping: '指标模板：{name}',
       src_parameter: '系统参数',

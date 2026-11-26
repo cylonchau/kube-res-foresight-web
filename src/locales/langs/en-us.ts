@@ -1387,6 +1387,7 @@ const local = {
       clusterAllocatable: 'allocatable',
       clusterMissing:
         '{n} cluster metrics are not declared in the metric templates (metric type: cluster metric), so they are not asked:',
+      slowRead: 'Prometheus is slow: the platform keeps reading in the background, {n} s so far',
       reload: 'Reload',
       srcMapping: 'metric template: {name}',
       src_parameter: 'system parameter',

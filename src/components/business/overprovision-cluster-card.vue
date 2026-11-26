@@ -42,7 +42,10 @@ async function load(force = false) {
   loadedFor = props.datasourceId;
   loading.value = true;
   failure.value = '';
-  const { data, error } = await fetchGetOverprovisionCluster(props.datasourceId || undefined);
+  const asked = props.datasourceId;
+  const { data, error } = await fetchGetOverprovisionCluster(props.datasourceId || undefined, {
+    cancelled: () => loadedFor !== asked
+  });
   loading.value = false;
   if (data) cluster.value = data;
   else {

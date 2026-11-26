@@ -56,11 +56,15 @@ function reasonOf(error: unknown) {
 }
 
 /** the requests and limits come in a request of their own, so the list is there at once and the figures follow */
+let resourcesSeq = 0;
 async function loadResources() {
+  resourcesSeq += 1;
+  const seq = resourcesSeq;
   resourcesLoading.value = true;
   resourcesError.value = '';
   try {
-    const { data, error } = await fetchGetOverprovisionResources();
+    const { data, error } = await fetchGetOverprovisionResources({ cancelled: () => seq !== resourcesSeq });
+    if (seq !== resourcesSeq) return;
     if (!data) {
       resourcesError.value = reasonOf(error);
       return;

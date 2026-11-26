@@ -60,6 +60,8 @@ function reasonOf(error: unknown) {
 }
 
 let detailSeq = 0;
+/** how many seconds the platform has been reading from Prometheus for this page, 0 when it answered at once */
+const waitedSeconds = ref(0);
 async function loadDetail() {
   const id = moduleId.value;
   detail.value = null;
@@ -71,13 +73,22 @@ async function loadDetail() {
   detailSeq += 1;
   const seq = detailSeq;
   detailLoading.value = true;
+  waitedSeconds.value = 0;
   try {
-    const { data, error } = await fetchGetModuleOverprovision(id, win.value.params);
+    const { data, error } = await fetchGetModuleOverprovision(id, win.value.params, {
+      onWait: seconds => {
+        waitedSeconds.value = seconds;
+      },
+      cancelled: () => seq !== detailSeq
+    });
     if (seq !== detailSeq) return;
     detail.value = data ?? null;
     if (!data) detailError.value = reasonOf(error);
   } finally {
-    if (seq === detailSeq) detailLoading.value = false;
+    if (seq === detailSeq) {
+      detailLoading.value = false;
+      waitedSeconds.value = 0;
+    }
   }
 }
 
@@ -155,6 +166,9 @@ onMounted(() => {
           <NSelect v-model:value="opts.basis" size="small" class="w-130px" :options="basisOptions" />
         </span>
         <div class="filter-actions">
+          <span v-if="detailLoading && waitedSeconds > 0" class="text-12px opacity-70">
+            {{ p('slowRead', { n: waitedSeconds }) }}
+          </span>
           <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
           <NButton size="small" secondary :loading="detailLoading" @click="loadDetail">{{ p('reload') }}</NButton>
         </div>
