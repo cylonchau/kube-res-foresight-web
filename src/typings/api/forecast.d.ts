@@ -365,6 +365,9 @@ declare namespace Api {
       /** the replica count the operator reported last */
       actual_replicas: number | null;
       ready_replicas: number | null;
+      /** where the replicas come from: the operator's last scaling report, or what it last read of the workload; the newer of the two */
+      actual_from?: 'execution' | 'inventory';
+      actual_at?: string;
     }
 
     /** the auxiliary metric kinds a source can take besides the forecast ones */

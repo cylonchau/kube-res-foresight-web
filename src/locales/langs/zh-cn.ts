@@ -2603,7 +2603,7 @@ const local = {
           '只运行这个算法。它被平台关闭时也照常为这个模块运行；非基线算法要先通过回测晋升才会被采用。',
         predictAlgorithmRequired: '固定算法模式需要选择一个算法',
         actualReplicasHelp:
-          '工作负载当前实际运行的副本数（operator 最近一次上报）；还没有上报时显示 -。推荐的副本数在「资源推荐」里看。',
+          '工作负载当前实际运行的副本数：operator 最近一次读到的工作负载状态，或最近一次扩缩容上报，取较新的一个；operator 还没有读到这个工作负载（没有部署 operator、集群对不上、工作负载不存在或读不了）时显示 -。推荐的副本数在「资源推荐」里看。',
         auxHint_oom: '窗口内 OOM 终止次数，用来判断内存是否被低估，并触发 OOM 地板。',
         auxHint_oom_working_set: 'OOM 前的内存工作集峰值，OOM 地板的依据。',
         auxHint_latency: '请求延迟，仅作观察或协变量。',

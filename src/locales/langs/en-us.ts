@@ -2765,7 +2765,7 @@ const local = {
           'The only algorithm that runs. It runs for this module even when the platform has it switched off; one that is not a baseline is followed only after a backtest promoted it.',
         predictAlgorithmRequired: 'The fixed mode needs an algorithm',
         actualReplicasHelp:
-          'The replicas the workload runs now (the last report of the operator); - before it has reported. The recommended count is on the recommendations page.',
+          'The replicas the workload runs now: what the operator last read of the workload, or its last scaling report, the newer of the two; - while the operator has not read the workload (no operator, the cluster does not match, the workload does not exist or cannot be read). The recommended count is on the recommendations page.',
         auxHint_oom: 'OOM kills per window; shows under-provisioned memory and triggers the OOM floor.',
         auxHint_oom_working_set: 'Working-set peak before an OOM; the basis of the OOM floor.',
         auxHint_latency: 'Request latency; for observation or as a covariate.',
