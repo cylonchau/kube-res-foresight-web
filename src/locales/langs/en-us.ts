@@ -2023,6 +2023,31 @@ const local = {
           'Give the replicas (fixed, at least, at most) and the CPU and memory a value by period and time of day. Add as many as needed: a weekly window, or a one-off absolute time; when several are in force the priority decides.',
         sectionPeriodsStrategy: 'Time period strategy',
         coeffSustain: 'Sustain window (minutes)',
+        registeredPending: 'To configure',
+        registeredReady: 'Ready to enable',
+        registeredTitle: 'This module was registered by itself and cannot be switched on yet',
+        registeredHelp:
+          'Registration only knows which workload it is and the Pod spec the operator read; nobody can guess the largest replica count or which metrics to read, so it is switched off and observing, and nothing is scaled. It can be switched on once these are done:',
+        blocker_max_replicas: 'The maximum of replicas is not set (in Safety bounds, or copy it from another module)',
+        blocker_replica_bounds: 'The minimum of replicas is above the maximum',
+        blocker_metric_sources:
+          'No CPU or memory metric source is on (add one in the monitoring binding, or copy it from another module)',
+        copyTitle: 'Copy the configuration of another module',
+        copyDesc:
+          'Pick a module that is set up and take its parameters in one step; the form below then shows the new values and you change what differs. Only a module that is switched off can take them.',
+        copyPick: 'Choose the module to copy from',
+        copyGroupsNone: 'Choose at least one group of parameters',
+        copyGroup_replicas: 'Replica bounds and pace',
+        copyGroup_data: 'Data and forecast period',
+        copyGroup_resources: 'Resource bounds, coefficients and OOM protection',
+        copyGroup_predict: 'How it predicts',
+        copyGroup_sources: 'Metric sources (on the same metric template)',
+        copyGroup_periods: 'Periods',
+        copyNotCopied:
+          "Not copied: the name, description, cluster, namespace, workload, service and container (who the module is); enabled, mode and bypass; the Pod spec the operator read; whether it predicts. A source is copied only when its template has {'{{namespace}}'} or {'{{workload}}'}; one that names a workload in its query is skipped and said so; a source or period of the same name stays as it is.",
+        copyRun: 'Copy',
+        copyDone: 'Copied: {groups}',
+        copySkippedTitle: 'Not copied:',
         groupBase: 'Basics',
         groupBaseDesc:
           'Who the module is, what data it reads and which metrics it uses: its details, data and forecast period, monitoring.',
@@ -4469,6 +4494,11 @@ const local = {
           'The access key the operator of this cluster uses must be bound to it, and a key can be bound to one cluster. A key that is not bound can only be used for the default cluster.',
         keysEmpty: 'There is no access key to bind: make one under Cluster credentials first',
         keyBoundTo: 'bound to {cluster}',
+        autoRegister: 'Register workloads by themselves',
+        autoRegisterHint:
+          'With this on, and an operator reading the cluster, a Deployment, StatefulSet or DaemonSet that carries the label kube-res-foresight.io/register=true becomes a module. A new module is switched off and observing: nothing is scaled until its required parameters are complete. A label and not an annotation, because the API server can select on a label: the operator reads only the labelled workloads, not every workload of the cluster.',
+        autoRegisterNote:
+          "Off by default. Label a workload: kubectl label deployment <name> kube-res-foresight.io/register=true. The annotation kube-res-foresight.io/copy-from=<a module that is set up> makes the new module take that module's parameters at once (still switched off). A workload that already is a module is not changed; after a registered module is deleted, remove the label so it is not registered again (or switch this off and on).",
         startHint: 'Operator argument (made from the cluster name above)',
         nameRequired: 'Enter the cluster name',
         viewEvents: 'Events',

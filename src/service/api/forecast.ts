@@ -12,6 +12,19 @@ export function fetchGetForecastModules(params?: Api.Forecast.ModuleSearchParams
   return request<Api.Forecast.ModuleList>({ url: `${base}/modules`, method: 'get', params });
 }
 
+export function fetchGetForecastModule(id: number) {
+  return request<Api.Forecast.Module>({ url: `${base}/modules/${id}`, method: 'get' });
+}
+
+/** the parameters of another module onto this one (it has to be switched off); groups empty = all of them */
+export function fetchCopyModuleConfig(id: number, data: { from_id: number; groups: string[] }) {
+  return request<{ copied: string[]; skipped: Array<{ what: string; reason: string }> }>({
+    url: `${base}/modules/${id}/copy-config`,
+    method: 'post',
+    data
+  });
+}
+
 export function fetchCreateForecastModule(data: Api.Forecast.ModulePayload) {
   return request<Api.Forecast.Module>({ url: `${base}/modules`, method: 'post', data });
 }

@@ -16,6 +16,8 @@ declare namespace Api {
       namespace_include: string[];
       namespace_exclude: string[];
       key_ids: number[];
+      /** the platform registers the workloads of the cluster that carry the label kube-res-foresight.io/register=true as modules (switched off) */
+      auto_register: boolean;
       modules: number;
       last_seen_at: string | null;
       operator: string;
@@ -38,6 +40,7 @@ declare namespace Api {
       namespace_include: string[];
       namespace_exclude: string[];
       key_ids: number[];
+      auto_register: boolean;
     }
 
     /** an access key that can be bound to a cluster */

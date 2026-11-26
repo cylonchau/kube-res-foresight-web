@@ -1,7 +1,10 @@
 <script setup lang="tsx">
 import { computed, h, nextTick, onMounted, reactive, ref } from 'vue';
 import {
+  NAlert,
   NButton,
+  NCheckbox,
+  NCheckboxGroup,
   NForm,
   NFormItem,
   NFormItemGi,
@@ -36,6 +39,8 @@ import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchBatchModules,
   fetchBypassModule,
+  fetchCopyModuleConfig,
+  fetchGetForecastModule,
   fetchCreateForecastModule,
   fetchCreateModuleSource,
   fetchCreatePeriod,
@@ -610,8 +615,63 @@ function runPreview() {
   );
 }
 
+/** what a registered module still lacks, in words, for a tooltip or the notice of the form */
+function blockersText(codes?: string[] | null) {
+  return (codes ?? []).map(code => t(`page.forecast.modules.blocker_${code}`)).join('；');
+}
+
+// ---- the parameters of another module onto this one (a module is switched off to take them; it is one step, and the form is then edited as usual)
+const copyFrom = ref<number | null>(null);
+const copyGroups = ref<string[]>(['replicas', 'data', 'resources', 'predict', 'sources', 'periods']);
+const copyOptions = ref<Array<{ label: string; value: number }>>([]);
+const copying = ref(false);
+/** what the last copy did: what was taken, and what was left and why (shown under the button, so the reasons are not lost with a toast) */
+const copyResult = ref<{ copied: string[]; skipped: Array<{ what: string; reason: string }> } | null>(null);
+const COPY_GROUPS = ['replicas', 'data', 'resources', 'predict', 'sources', 'periods'] as const;
+
+async function searchCopySources(keyword = '') {
+  const { data } = await fetchGetForecastModules({ page: 1, page_size: 20, keyword: keyword || undefined });
+  copyOptions.value = (data?.list ?? [])
+    .filter(item => item.id !== editing.value?.id)
+    .map(item => ({
+      label: `${item.name} (${item.namespace}/${item.workload}${item.cluster ? ` · ${item.cluster}` : ''})`,
+      value: item.id
+    }));
+}
+
+async function copyFromModule() {
+  const target = editing.value;
+  if (!target || !copyFrom.value) {
+    message.warning(t('page.forecast.modules.copyPick'));
+    return;
+  }
+  if (!copyGroups.value.length) {
+    message.warning(t('page.forecast.modules.copyGroupsNone'));
+    return;
+  }
+  copying.value = true;
+  try {
+    const { data, error } = await fetchCopyModuleConfig(target.id, {
+      from_id: copyFrom.value,
+      groups: copyGroups.value
+    });
+    if (error || !data) return;
+    message.success(t('page.forecast.modules.copyDone', { groups: data.copied.join('、') || '-' }));
+    // the form shows what the module has now (what was typed and not saved is replaced), and the list too
+    const fresh = await fetchGetForecastModule(target.id);
+    if (fresh.data) open(fresh.data);
+    copyResult.value = { copied: data.copied ?? [], skipped: data.skipped ?? [] };
+    load();
+  } finally {
+    copying.value = false;
+  }
+}
+
 function open(row?: Api.Forecast.Module) {
   editing.value = row;
+  copyFrom.value = null;
+  copyResult.value = null;
+  if (row && !row.enabled) searchCopySources();
   cloneSource.value = undefined;
   Object.assign(form, emptyForm());
   if (row) {
@@ -970,7 +1030,15 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Module) =>
       row.enabled
         ? chip({ type: 'success', icon: 'carbon:checkmark-filled' }, t('common.enable'))
-        : chip({ type: 'default', icon: 'carbon:subtract-alt' }, t('common.disable'))
+        : row.auto_registered
+          ? chip(
+              { type: 'warning', icon: 'carbon:warning-alt' },
+              row.enable_blockers?.length
+                ? t('page.forecast.modules.registeredPending')
+                : t('page.forecast.modules.registeredReady'),
+              blockersText(row.enable_blockers)
+            )
+          : chip({ type: 'default', icon: 'carbon:subtract-alt' }, t('common.disable'))
   },
   bypass: {
     title: t('page.forecast.modules.bypass'),
@@ -1238,6 +1306,62 @@ onMounted(() => {
     <!-- create / edit -->
     <NModal v-model:show="visible" preset="card" :title="modalTitle" class="edit-modal-wide">
       <div class="max-h-70vh overflow-y-auto pr-8px">
+        <NAlert
+          v-if="editing?.auto_registered && editing?.enable_blockers?.length"
+          type="warning"
+          :show-icon="true"
+          class="mb-12px"
+        >
+          <div class="font-medium">{{ t('page.forecast.modules.registeredTitle') }}</div>
+          <div class="text-12px leading-20px">{{ t('page.forecast.modules.registeredHelp') }}</div>
+          <ul class="m-0 pl-18px text-12px leading-20px">
+            <li v-for="code in editing.enable_blockers" :key="code">
+              {{ t(`page.forecast.modules.blocker_${code}`) }}
+            </li>
+          </ul>
+        </NAlert>
+        <section v-if="editing && !editing.enabled" class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.copyTitle') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.copyDesc') }}</div>
+          <div class="flex-col gap-8px">
+            <NSelect
+              v-model:value="copyFrom"
+              filterable
+              remote
+              clearable
+              :options="copyOptions"
+              :placeholder="t('page.forecast.modules.copyPick')"
+              @search="searchCopySources"
+            />
+            <NCheckboxGroup v-model:value="copyGroups">
+              <NSpace>
+                <NCheckbox
+                  v-for="g in COPY_GROUPS"
+                  :key="g"
+                  :value="g"
+                  :label="t(`page.forecast.modules.copyGroup_${g}`)"
+                />
+              </NSpace>
+            </NCheckboxGroup>
+            <div class="text-12px leading-20px opacity-70">{{ t('page.forecast.modules.copyNotCopied') }}</div>
+            <div>
+              <NButton type="primary" secondary :loading="copying" :disabled="!copyFrom" @click="copyFromModule">
+                {{ t('page.forecast.modules.copyRun') }}
+              </NButton>
+            </div>
+            <div v-if="copyResult" class="text-12px leading-20px">
+              <div>{{ t('page.forecast.modules.copyDone', { groups: copyResult.copied.join('、') || '-' }) }}</div>
+              <div v-if="copyResult.skipped.length" class="font-medium">
+                {{ t('page.forecast.modules.copySkippedTitle') }}
+              </div>
+              <ul v-if="copyResult.skipped.length" class="m-0 pl-18px">
+                <li v-for="item in copyResult.skipped" :key="item.what">{{ item.what }}：{{ item.reason }}</li>
+              </ul>
+            </div>
+          </div>
+        </section>
         <div class="mod-group">
           <div class="mod-group-title">{{ t('page.forecast.modules.groupBase') }}</div>
           <div class="mod-group-desc">{{ t('page.forecast.modules.groupBaseDesc') }}</div>

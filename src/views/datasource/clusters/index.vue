@@ -69,7 +69,8 @@ function emptyForm() {
     datasource_id: 0,
     namespace_include: [] as string[],
     namespace_exclude: [] as string[],
-    key_ids: [] as number[]
+    key_ids: [] as number[],
+    auto_register: false
   };
 }
 const form = reactive(emptyForm());
@@ -116,7 +117,8 @@ async function open(row?: Api.Cluster.Cluster) {
       datasource_id: row.datasource_id,
       namespace_include: [...row.namespace_include],
       namespace_exclude: [...row.namespace_exclude],
-      key_ids: [...row.key_ids]
+      key_ids: [...row.key_ids],
+      auto_register: row.auto_register ?? false
     });
   }
   visible.value = true;
@@ -135,7 +137,8 @@ async function save() {
     datasource_id: form.datasource_id,
     namespace_include: form.namespace_include,
     namespace_exclude: form.namespace_exclude,
-    key_ids: form.key_ids
+    key_ids: form.key_ids,
+    auto_register: form.auto_register
   };
   saving.value = true;
   try {
@@ -786,6 +789,20 @@ onMounted(async () => {
         </NFormItem>
         <NFormItem :label="p('enabled')">
           <StatusSelect v-model:value="form.enabled" :disabled="editing?.is_default" />
+        </NFormItem>
+        <NFormItem>
+          <template #label>
+            <span class="inline-flex items-center gap-4px">
+              {{ p('autoRegister') }}
+              <IconTooltip icon="mdi-help-circle" placement="top">
+                <div class="max-w-420px leading-22px">{{ p('autoRegisterHint') }}</div>
+              </IconTooltip>
+            </span>
+          </template>
+          <div class="flex-col gap-4px">
+            <StatusSelect v-model:value="form.auto_register" />
+            <div class="text-12px leading-20px opacity-70">{{ p('autoRegisterNote') }}</div>
+          </div>
         </NFormItem>
         <NFormItem>
           <template #label>

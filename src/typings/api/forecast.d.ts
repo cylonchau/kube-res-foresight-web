@@ -248,6 +248,10 @@ declare namespace Api {
       updated_at: string;
       name: string;
       description: string;
+      /** made by the platform from a workload that carried the registration label: it is switched off until it has what it needs */
+      auto_registered?: boolean;
+      /** what such a module still lacks before it may be switched on: max_replicas, replica_bounds, metric_sources (empty when it may be) */
+      enable_blockers?: string[] | null;
       /** the registered cluster the workload is in; empty is the default cluster */
       cluster: string;
       enabled: boolean;
