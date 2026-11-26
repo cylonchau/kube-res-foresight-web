@@ -25,6 +25,7 @@ import StatusSelect from '@/components/business/status-select.vue';
 import ExpandableDataTable from '@/components/advanced/expandable-data-table.vue';
 import TableHeaderOperation from '@/components/advanced/table-header-operation.vue';
 import IconTooltip from '@/components/common/icon-tooltip.vue';
+import { useBackgroundTask } from '@/hooks/business/use-background-task';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchCreateCluster,
@@ -615,7 +616,13 @@ const diagnosis = reactive<{
   seconds: 0
 });
 let diagnosisTimer: ReturnType<typeof setInterval> | undefined;
+const diagnosisTask = useBackgroundTask<Api.Assistant.Reply>({ storageKey: () => null });
 const diagnosisHtml = computed(() => (diagnosis.text ? renderMiniMarkdown(diagnosis.text) : ''));
+/** the answer as far as the model has written it, while it is still writing */
+const diagnosisPartialHtml = computed(() => {
+  const text = diagnosis.busy ? (diagnosisTask.state.task?.partial ?? '') : '';
+  return text ? renderMiniMarkdown(text) : '';
+});
 
 function stopDiagnosisClock() {
   if (diagnosisTimer) clearInterval(diagnosisTimer);
@@ -624,6 +631,7 @@ function stopDiagnosisClock() {
 
 function resetDiagnosis() {
   stopDiagnosisClock();
+  diagnosisTask.reset();
   Object.assign(diagnosis, { changeId: 0, busy: false, text: '', error: '', at: '', seconds: 0 });
 }
 
@@ -635,20 +643,20 @@ async function diagnoseChange() {
   diagnosisTimer = setInterval(() => {
     diagnosis.seconds += 1;
   }, 1000);
-  const { data, error } = await fetchDiagnoseClusterChange(
-    changesCluster.value.id,
-    changeId,
-    locale.value === 'en-US' ? 'en' : 'zh'
+  const clusterId = changesCluster.value.id;
+  await diagnosisTask.start(() =>
+    fetchDiagnoseClusterChange(clusterId, changeId, locale.value === 'en-US' ? 'en' : 'zh')
   );
   // the detail was closed or another change opened while the model was thinking: the answer is not for what is on the screen
   if (diagnosis.changeId !== changeId) return;
   stopDiagnosisClock();
   diagnosis.busy = false;
-  if (data?.content) {
-    diagnosis.text = data.content;
+  const content = diagnosisTask.state.result?.content;
+  if (content) {
+    diagnosis.text = content;
     diagnosis.at = formatDateTime(new Date().toISOString());
   } else {
-    diagnosis.error = (error as any)?.response?.data?.msg || (error as any)?.message || p('diagnoseFailedUnknown');
+    diagnosis.error = diagnosisTask.state.error || p('diagnoseFailedUnknown');
   }
 }
 
@@ -930,7 +938,7 @@ onMounted(async () => {
 
     <NDrawer v-model:show="changesOpen" :width="1280" placement="right">
       <NDrawerContent :title="p('changesTitle', { name: changesCluster?.name || '' })" closable>
-        <div class="pb-12px leading-22px opacity-80">{{ p('changesHelp', { days: changeRetention }) }}</div>
+        <div class="pb-12px text-12px opacity-70">{{ p('changesHelp', { days: changeRetention }) }}</div>
         <NSpace class="pb-12px" align="center">
           <NSelect
             v-model:value="changeSearch.kind"
@@ -1078,7 +1086,6 @@ onMounted(async () => {
 
         <section class="detail-section">
           <div class="section-title">{{ p('detailUsage') }}</div>
-          <div class="pb-4px opacity-70">{{ p('usageHelp') }}</div>
           <div v-if="detail.change.usage_status === 'pending'" class="opacity-70">{{ p('usagePending') }}</div>
           <template v-else>
             <div v-if="detail.change.usage" class="pb-4px opacity-80">
@@ -1123,9 +1130,12 @@ onMounted(async () => {
           />
           <div v-else class="opacity-70">{{ p('detailNoEvents') }}</div>
           <div v-if="diagnosis.busy || diagnosis.text || diagnosis.error" class="diagnosis-box mt-12px">
-            <div v-if="diagnosis.busy" class="flex items-center gap-8px opacity-80">
-              <NSpin size="small" />
-              <span>{{ p('diagnosing', { s: diagnosis.seconds }) }}</span>
+            <div v-if="diagnosis.busy">
+              <div class="flex items-center gap-8px opacity-80">
+                <NSpin size="small" />
+                <span>{{ p('diagnosing', { s: diagnosis.seconds }) }}</span>
+              </div>
+              <div v-if="diagnosisPartialHtml" class="diagnosis-text mt-8px" v-html="diagnosisPartialHtml"></div>
             </div>
             <div v-else-if="diagnosis.error" class="diagnosis-error">
               {{ p('diagnoseFailed') }}: {{ diagnosis.error }}
@@ -1155,7 +1165,6 @@ onMounted(async () => {
             <div class="link-evidence">{{ p('relationEvidence') }}: {{ l.evidence }}</div>
           </div>
         </section>
-        <div class="opacity-60 text-12px">{{ p('relationNote') }}</div>
       </div>
     </NModal>
   </div>

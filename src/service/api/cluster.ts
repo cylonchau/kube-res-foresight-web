@@ -36,13 +36,14 @@ export function fetchGetClusterChange(id: number, changeId: number) {
 
 /**
  * the one-click AI diagnosis of a change: the platform gives the model the facts it holds (the change, its reasons, the events about the object, the usage, the changes tied to it)
- * and the answer says the cause and how to fix it. The failure is shown by the page itself, so the request does not pop one up as well.
+ * and the answer says the cause and how to fix it. A model takes longer than a gateway waits, so the diagnosis is queued as a task that is read until it ends (the result is the reply).
+ * The failure is shown by the page itself, so the request does not pop one up as well.
  */
 export function fetchDiagnoseClusterChange(id: number, changeId: number, lang: string) {
-  return request<Api.Assistant.Reply>({
+  return request<Api.Assistant.AsyncTask<Api.Assistant.Reply>>({
     url: `/api/v1/clusters/${id}/changes/${changeId}/diagnose`,
     method: 'post',
     data: { lang },
-    headers: { 'X-Silent-Error': '1', 'X-Long-Request': '1' }
+    headers: { 'X-Silent-Error': '1' }
   });
 }

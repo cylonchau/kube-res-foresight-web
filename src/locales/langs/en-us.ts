@@ -4537,8 +4537,7 @@ const local = {
         sep: ', ',
         viewChanges: 'Changes',
         changesTitle: 'Changes of {name}',
-        changesHelp:
-          'The state changes of nodes, Pods, workloads (their replicas) and HPAs the operator saw, with the reasons the object itself gave. Details show the configuration at the change, the usage before and after it (asked of Prometheus, not the operator), the events about the object, and how it is tied to changes of other objects: a cause is only said with evidence, and changes that are only near each other are said to be related. Kept {days} days.',
+        changesHelp: 'State changes of nodes, Pods, workloads and HPAs, kept for {days} days.',
         changesEmpty:
           'No changes yet. Check that the operator is connected, that the system parameter cluster.collect_changes is true, and that the operator role lets it read nodes, pods, deployments, statefulsets and horizontalpodautoscalers.',
         searchChanges: 'Search object name, state or reason',
@@ -4603,7 +4602,6 @@ const local = {
         snapContainers: 'Containers',
         snapNothing: 'No configuration recorded',
         detailUsage: 'Usage (asked of Prometheus)',
-        usageHelp: 'Asked before, at and after the change; no data is shown as not found, never as 0.',
         usageSubject: 'Object',
         usageSource: 'Data source',
         usageCpu: 'CPU (cores)',
@@ -4623,9 +4621,7 @@ const local = {
         relation_caused_by: 'Cause',
         relation_related: 'Related, not necessarily the reason',
         relation_effect: 'Caused by this change',
-        relationEvidence: 'Evidence',
-        relationNote:
-          'A cause is only said with evidence (the reason text or an event names it, or the owner relation); changes that are only near each other are related.'
+        relationEvidence: 'Evidence'
       },
       connections: {
         name: 'Datasource name',

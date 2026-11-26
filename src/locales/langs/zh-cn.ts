@@ -4302,8 +4302,7 @@ const local = {
         sep: '，',
         viewChanges: '变化',
         changesTitle: '{name} 的变化',
-        changesHelp:
-          '这是 Operator 看到的节点、Pod、工作负载（副本数）和 HPA 的状态变化，原因是对象自己给出的。点“详情”看变化时的配置、前后的使用量（向 Prometheus 查，不是 Operator 的）、这个对象的事件，以及和其他对象变化的关系：只有证据才写“原因”，位置和时间相近而没有证据的只写“相关”。保留 {days} 天。',
+        changesHelp: '节点、Pod、工作负载和 HPA 的状态变化，保留 {days} 天。',
         changesEmpty:
           '还没有变化。确认 Operator 已连接、系统参数 cluster.collect_changes 为 true，且 Operator 的角色允许读取节点、Pod、Deployment、StatefulSet 和 HPA。',
         searchChanges: '搜索对象名、状态或原因',
@@ -4368,7 +4367,6 @@ const local = {
         snapContainers: '容器',
         snapNothing: '没有记录配置',
         detailUsage: '使用量（向 Prometheus 查）',
-        usageHelp: '变化前、变化时、变化后各查一次；没有数据写“未取到”，不写 0。',
         usageSubject: '对象',
         usageSource: '数据源',
         usageCpu: 'CPU（核）',
@@ -4388,8 +4386,7 @@ const local = {
         relation_caused_by: '原因',
         relation_related: '相关，不一定是原因',
         relation_effect: '由这次变化引起',
-        relationEvidence: '依据',
-        relationNote: '“原因”只在有证据时才写（原因文字或事件指向它，或属主关系）；位置和时间相近但没有证据的写“相关”。'
+        relationEvidence: '依据'
       },
       connections: {
         name: '数据源名称',
