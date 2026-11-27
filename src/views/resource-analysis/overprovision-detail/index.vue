@@ -116,8 +116,8 @@ watch(moduleId, () => {
 
 /** back to the list: the first level, as it was left; this page's tab is closed behind it */
 async function backToList() {
-  await routerPushByKey('forecast-results_overprovision');
-  await tabStore.removeTabByRouteName('forecast-results_overprovision-detail');
+  await routerPushByKey('resource-analysis_overprovision');
+  await tabStore.removeTabByRouteName('resource-analysis_overprovision-detail');
 }
 
 const toolbarGrafana = computed(() =>
@@ -137,7 +137,7 @@ async function analyzeWithAi() {
   if (!d || ai.state.running) return;
   const question = buildAnalysisQuestion(d, aiLabel.value, locale.value === 'en-US' ? 'en-US' : 'zh-CN');
   await ai.run(d.module_id, question, locale.value, aiLabel.value, {
-    page: 'forecast-results_overprovision-detail',
+    page: 'resource-analysis_overprovision-detail',
     title: p('detailPageTitle'),
     module_id: d.module_id,
     namespace: d.namespace,

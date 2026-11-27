@@ -16,7 +16,7 @@ defineOptions({ name: 'ForecastResultsOverprovision' });
 
 /**
  * The resource dashboard, first level: the list of the modules. Choose a namespace or search, and open a module: its analysis is a page of its own (the second
- * level, `forecast-results_overprovision-detail`), and coming back from it brings this list back as it was left. The rows are the modules of the module
+ * level, `resource-analysis_overprovision-detail`), and coming back from it brings this list back as it was left. The rows are the modules of the module
  * management, every one of them, a row to a line and a page at a time (previous and next). The table has the CPU and memory requests and limits of one Pod of
  * each module, every one of them the answer of the Prometheus data source the module's dashboard metrics (Requests / Limits) point to; a module without such a
  * metric has a dash and the reason. The cluster has its own dashboard.
@@ -120,7 +120,7 @@ watch(
 
 /** a module is opened as the second level; what is chosen here stays in the list state */
 function open(row: Api.Forecast.Module) {
-  routerPushByKey('forecast-results_overprovision-detail', { query: { module: String(row.id) } });
+  routerPushByKey('resource-analysis_overprovision-detail', { query: { module: String(row.id) } });
 }
 
 // ---- the table: the requests and limits of one Pod, from Prometheus

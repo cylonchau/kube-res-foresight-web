@@ -313,15 +313,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
-        name: 'forecast-results_cluster-dashboard',
-        path: '/forecast-results/cluster-dashboard',
-        component: 'view.forecast-results_cluster-dashboard',
-        meta: {
-          title: 'forecast-results_cluster-dashboard',
-          i18nKey: 'route.forecast-results_cluster-dashboard'
-        }
-      },
-      {
         name: 'forecast-results_effect',
         path: '/forecast-results/effect',
         component: 'view.forecast-results_effect',
@@ -355,24 +346,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'forecast-results_leaderboard',
           i18nKey: 'route.forecast-results_leaderboard'
-        }
-      },
-      {
-        name: 'forecast-results_overprovision',
-        path: '/forecast-results/overprovision',
-        component: 'view.forecast-results_overprovision',
-        meta: {
-          title: 'forecast-results_overprovision',
-          i18nKey: 'route.forecast-results_overprovision'
-        }
-      },
-      {
-        name: 'forecast-results_overprovision-detail',
-        path: '/forecast-results/overprovision-detail',
-        component: 'view.forecast-results_overprovision-detail',
-        meta: {
-          title: 'forecast-results_overprovision-detail',
-          i18nKey: 'route.forecast-results_overprovision-detail'
         }
       }
     ]
@@ -427,6 +400,44 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'monitoring_datasets',
           i18nKey: 'route.monitoring_datasets'
+        }
+      }
+    ]
+  },
+  {
+    name: 'resource-analysis',
+    path: '/resource-analysis',
+    component: 'layout.base',
+    meta: {
+      title: 'resource-analysis',
+      i18nKey: 'route.resource-analysis'
+    },
+    children: [
+      {
+        name: 'resource-analysis_cluster-dashboard',
+        path: '/resource-analysis/cluster-dashboard',
+        component: 'view.resource-analysis_cluster-dashboard',
+        meta: {
+          title: 'resource-analysis_cluster-dashboard',
+          i18nKey: 'route.resource-analysis_cluster-dashboard'
+        }
+      },
+      {
+        name: 'resource-analysis_overprovision',
+        path: '/resource-analysis/overprovision',
+        component: 'view.resource-analysis_overprovision',
+        meta: {
+          title: 'resource-analysis_overprovision',
+          i18nKey: 'route.resource-analysis_overprovision'
+        }
+      },
+      {
+        name: 'resource-analysis_overprovision-detail',
+        path: '/resource-analysis/overprovision-detail',
+        component: 'view.resource-analysis_overprovision-detail',
+        meta: {
+          title: 'resource-analysis_overprovision-detail',
+          i18nKey: 'route.resource-analysis_overprovision-detail'
         }
       }
     ]
