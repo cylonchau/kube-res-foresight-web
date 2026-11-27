@@ -390,7 +390,7 @@ const local = {
     'forecast-results_effect': 'Effect report',
     'forecast-results_leaderboard': 'Measured leaderboard',
     'resource-analysis_overprovision': 'Resource dashboard',
-    'resource-analysis_rules': 'Resource Assessment',
+    'node-pool': 'Node Pools',
     'resource-analysis_overprovision-detail': 'Module resource analysis',
     'resource-analysis_cluster-dashboard': 'Cluster dashboard',
     'forecast-actions': 'Recommendations and execution',
@@ -651,14 +651,14 @@ const local = {
       result: 'Result',
       reason: 'Reason',
       calculate: 'Calculate now',
-      stripTitle: 'Resource Assessment (background)',
+      stripTitle: 'Recommendation mode (background)',
       stripReplicas: 'Replicas',
       stripCpu: 'CPU Requests',
       stripMemory: 'Memory Requests',
       stripAt: 'assessed {at}',
-      stripOpen: 'Dispatch detail',
+      stripOpen: 'Open the recommendations',
       stripNone:
-        'No Resource Assessment of this module in the background yet (made every 10 minutes, for an enabled module).',
+        'The background has made no recommendation-mode calculation of this module yet (every 10 minutes, for an enabled module).',
       stripNote:
         'The fixed formula the background makes on a schedule. It is independent of the analysis below, which asks Prometheus now; read this line while that one is slow.',
       switchToRule: 'Follow the fixed formula',
@@ -1930,6 +1930,49 @@ const local = {
         tools: 'Tools used'
       }
     },
+    nodePool: {
+      title: 'Node pools',
+      help: 'A node pool is a group of Kubernetes nodes of one shape: told apart by Node Selector labels, with the CPU and memory of one node (and the GPUs of a GPU node) and what it is for. The platform recommends the pool that fits the Pod of a module best, shown with the CPU, memory and replicas recommendation; whether the workload is moved there is decided by the run mode of the module.',
+      keyword: 'Keyword',
+      keywordPlaceholder: 'Pool name or remark',
+      name: 'Name',
+      namePlaceholder: 'for example memory-4c32g',
+      kind: 'Type',
+      kind_cpu: 'CPU-intensive',
+      kind_memory: 'Memory-intensive',
+      kind_gpu: 'GPU',
+      kind_general: 'General',
+      kindHelp_cpu: 'Many cores, relatively little memory, for example a node of 8 cores and 16 GiB.',
+      kindHelp_memory: 'A lot of memory, relatively few cores, for example a node of 4 cores and 32 GiB.',
+      kindHelp_gpu: 'Nodes with GPUs; only a workload that asks for a GPU is recommended here, and only here.',
+      kindHelp_general: 'Nodes with no leaning.',
+      selector: 'Node Selector labels',
+      selectorHelp:
+        'The labels that select the nodes of this pool; a Pod that carries the same Node Selector lands on them. For example pool = memory-4c32g.',
+      labelKey: 'Label name',
+      labelValue: 'Label value',
+      nodeSize: 'Size of one node',
+      nodeSizeHelp:
+        'What one node can give to Pods (the allocatable of the node, not the machine). The recommendation works out how many Pods a node holds and what is left. Required for a pool that is on.',
+      cores: 'CPU cores',
+      coresUnit: 'cores',
+      memory: 'Memory',
+      gpu: 'GPUs',
+      coresValue: '{n} cores',
+      gpuValue: '{n} GPUs',
+      cluster: 'Cluster',
+      clusterHelp: 'The cluster the pool is in. Empty means every cluster has nodes with these labels.',
+      clusterPlaceholder: 'empty = every cluster',
+      allClusters: 'Every cluster',
+      priority: 'Priority',
+      priorityHelp: 'When two pools fit equally well, the higher number is recommended first.',
+      addTitle: 'Add a node pool',
+      editTitle: 'Edit the node pool',
+      nameRequired: 'Give the node pool a name',
+      labelsRequired: 'Give at least one Node Selector label',
+      sizeRequired: 'A pool that is on needs the CPU and memory of one node',
+      gpuRequired: 'A GPU pool needs the GPUs of one node'
+    },
     forecast: {
       params: {
         part_definition: 'Definition',
@@ -2147,6 +2190,15 @@ const local = {
         stat_avg: 'average',
         stat_max: 'maximum',
         stat_min: 'minimum',
+        stat_p90: 'P90',
+        stat_p95: 'P95',
+        stat_p99: 'P99',
+        unit_proportional: 'proportional to the metric, at most',
+        helpUnit:
+          '"replicas" and "% of the replicas" move a fixed amount each time; "proportional to the metric" works it out: the replicas that run x the value / the threshold (the threshold must be above 0), and the amount is the most replicas one step moves. Example: threshold 80, metric 90, 10 replicas make 12, and an amount of 1 adds just 1 this time.',
+        proportionalThreshold: 'Trigger "{name}" is proportional to the metric: its threshold must be above 0',
+        proportionalWhole:
+          'Trigger "{name}" is proportional to the metric: the most replicas one step moves must be a whole number',
         op_gt: 'is above',
         op_gte: 'is at least',
         op_lt: 'is below',
@@ -2471,28 +2523,105 @@ const local = {
           e_predict_mode_fixed: 'Fixed algorithm',
           e_predict_mode_dynamic: 'Dynamic'
         },
-        groupStrategy: 'Strategies',
+        sectionDecision: 'Decision mode',
+        descDecision:
+          'What decides the replicas and the resources of the module; one at a time. The three strategies (time periods, metric triggers, a fixed count) rank above the forecast and the recommendation mode: those two can be on only while all three strategies are off, and at most one strategy is on.',
+        decisionRules:
+          'Rules: 1. At most one of the three strategies is on. 2. The forecast and the recommendation mode can be on only while all three strategies are off, and not both. 3. To change, switch the one that is on off and then the new one on; the platform checks the same rules when it saves.',
+        decisionStrategyTag: 'Strategy',
+        decisionBlocked: 'Switch "{mode}" off first to enable this',
+        decision_algorithm: 'Forecast',
+        decision_recommend: 'Recommendation mode',
+        decision_periods: 'Time period strategy',
+        decision_triggers: 'Metric trigger strategy',
+        decision_fixed: 'Fixed replicas strategy',
+        decision_none: 'None',
+        colDecision: 'Decision mode',
+        decisionHint:
+          'What decides the replicas and the resources of this module: the forecast, the recommendation mode (the fixed formula), one of the three strategies, or none (it only collects data and keeps the default configuration).',
+        decisionDesc_algorithm:
+          'Forecasts the load with the prediction algorithms and gives the CPU, memory and replicas from the forecast.',
+        decisionDesc_recommend:
+          'Works the CPU and memory Requests / Limits and the replicas out of the real use (P90, P95, P99, MAX) with the fixed formula; made in the background on a schedule and stored.',
+        decisionDesc_periods: 'Sets the replicas (fixed, at least, at most) and the CPU and memory by time period.',
+        decisionDesc_triggers:
+          'Scales out, scales in or sets the replicas when a metric stands over a threshold for a while.',
+        decisionDesc_fixed: 'Keeps the replicas at the number given and does not scale.',
+        decisionHint_algorithm:
+          'Once on, only the parameters of the forecast are shown and used: data and forecast period, capacity and replicas, forecast mode, lowest score. The forecast is made by the background forecast task.',
+        decisionHint_recommend:
+          'Once on, only the parameters of the fixed formula are shown and used: the coefficients (target share of P90, P95, P99, the margin, the Limits multiple) and the resource floor and cap. It is calculated and stored apart from the forecast; the two are never mixed.',
+        decisionHint_periods:
+          'Once on, the replicas follow the periods that are switched on; with no period in force the replicas stay. CPU and memory are those of the period, or the default configuration.',
+        decisionHint_triggers:
+          'Once on, only the triggers decide the replicas: with none fired the replicas stay; a fired trigger moves them by the amount set at most, within the minimum and maximum and the pace.',
+        decisionHint_fixed:
+          'Once on, the replicas stay at the number given; the forecast, the triggers and the periods do not change it; the minimum and maximum still hold.',
+        decisionNow_algorithm: 'The forecast decides now: the replicas, CPU and memory come from the forecast.',
+        decisionNow_recommend:
+          'The recommendation mode decides now: the CPU and memory Requests / Limits and the replicas are worked out of the real use (P90, P95, P99) with the fixed formula, in the background, and stored.',
+        decisionNow_periods:
+          'The time period strategy decides now: the periods give the replicas, and with none in force the replicas stay.',
+        decisionNow_triggers:
+          'The metric trigger strategy decides now: a fired trigger scales by the amount set, with none fired the replicas stay; every check is worked out again from the replicas that run then.',
+        decisionNow_fixed:
+          'The fixed replicas strategy decides now: the replicas stay at the number below and nothing scales them.',
+        decisionNow_none:
+          'Nothing decides now: the module only collects data and keeps the default replicas and resources.',
+        modeHelp_observe: 'Observe only: collects data, gives no recommendation, changes nothing.',
+        modeHelp_recommend:
+          'Recommend only: gives the recommended CPU, memory, replicas and node pool, shown only; the cluster is not changed.',
+        modeHelp_admission:
+          'Admission: when a workload is created or updated, admission (Kyverno) sets the CPU and memory Requests / Limits and the Node Selector of the node pool from the recommendation; running replicas are not touched.',
+        modeHelp_auto:
+          'Auto: besides admission, the operator adjusts the replicas; started with --adjust-pod-spec it also changes the CPU and memory Requests / Limits and the node pool of the workload.',
+        sectionRecommend: 'Recommendation mode',
+        descRecommend:
+          'The recommendation mode follows the fixed formula, no forecast. A background task works the result out of the real use (P90, P95, P99, MAX) on a schedule and stores it; the operator and admission read it, nobody has to open the resource dashboard.',
+        recommendTitle: 'How it is worked out',
+        recommendStep1:
+          'It reads the real CPU and memory use of the module over the last stretch and takes the P90, P95, P99 and the maximum.',
+        recommendStep2:
+          'With the target shares and margins of "Coefficients" it works out the CPU and memory Requests of one Pod; the Limits are the use times a multiple.',
+        recommendStep3:
+          'The total use of all the Pods over the Requests of one Pod gives the recommended replicas, and how many more or fewer than now.',
+        recommendStep4:
+          'With too little data the result is marked uncertain and the operator does not follow it; read the result and its reasons under Recommendations and Execution > Resource Recommendations.',
+        triggerRulesTitle: 'How a trigger is worked out',
+        triggerRule1:
+          'At every check each trigger reduces its metric over the last N minutes with its statistic (latest, average, maximum, minimum, or P90, P95, P99) to one figure and compares it with the threshold; which metric, which statistic and which threshold are written in the sentence of each trigger.',
+        triggerRule2:
+          'How much one step moves is one of three: a fixed number of replicas, a share of the replicas that run, or "proportional to the metric": the replicas that run x the value / the threshold, at most the number set away (a threshold of 80% and a use of 90% needs 12 of 10 replicas).',
+        triggerRule3:
+          'A trigger that stays over its threshold next time is worked out again from the replicas that run then and moves them again, until the metric falls back or the maximum or minimum is reached; the cooldown of the pace sets the time between two actions, with none every check moves them.',
+        triggerRule4:
+          'When triggers that scale out and in fire together each counts its weight x how far past its threshold; the larger total decides, and an OOM or heap pressure takes the scale-ins out.',
+        triggerRule5:
+          'The result stays between the minimum and maximum of the replicas, and the step limit and cooldown of the pace hold after that; every decision says why in the detail of the recommendation.',
+        sectionFixed: 'Fixed replicas strategy',
+        descFixed:
+          'Once on, the replicas stay at this number: the forecast, the triggers and the periods do not change it and nothing scales it; the minimum and maximum still hold.',
+        sectionNodePool: 'Node pool',
+        descNodePool:
+          'Recommends the node pool that fits the Pod of this module (configured under Node Pools), shown with the CPU, memory and replicas recommendation.',
+        nodePoolEnabled: 'Recommend a node pool',
+        nodePoolEnabledHint:
+          'Once on, the recommendation names the node pool that fits the Pod best: the one whose nodes are left with the least CPU and memory unused. A Pod of 200m CPU and 4Gi of memory fits a memory-intensive pool better.',
+        nodePoolNote_observe: 'The run mode is Observe only: nothing is recommended, so no node pool either.',
+        nodePoolNote_recommend: 'The run mode is Recommend only: the node pool is shown, the workload is not changed.',
+        nodePoolNote_admission:
+          'The run mode is Admission: when a workload is created or updated, admission puts the Node Selector of the recommended pool on the Pod.',
+        nodePoolNote_auto:
+          'The run mode is Auto: besides admission, an operator started with --adjust-pod-spec writes the Node Selector of the recommended pool on the workload, which rolls its Pods.',
+        groupStrategy: 'Decision mode and strategies',
         groupStrategyDesc:
-          'The prediction mode, time periods, metric triggers and the fixed replicas. How they are combined when they act together is in the last section of this group.',
+          'Pick what decides the replicas and the resources: the forecast, the recommendation mode, or one of the three strategies (time periods, metric triggers, a fixed count).',
         sectionPredict: 'Prediction mode',
         descPredict:
           'Whether the module is predicted and how: a fixed algorithm, dynamic algorithms, or no prediction. It is not the run mode above (observe, recommend, admission, auto).',
         sectionTriggers: 'Metric triggers',
         descTriggers:
           'No forecast needed: a metric that crosses a threshold within the last minutes scales the replicas up, down or sets them. Add as many as needed, each with its metric, threshold, action and hours.',
-        sectionOrder: 'Fixed replicas and the order strategies combine in',
-        descOrder:
-          'Fixed replicas write the replica count as one constant: switch it on for a workload that no algorithm, forecast or trigger should change (a stateful service kept at 3, say). With the switch on and a count entered, the prediction mode governs only the CPU and the memory; off, or with no count, it takes no part in any calculation and the other strategies work as usual. It is not a duplicate of the forecast, the periods or the triggers: it is the step of the merge that comes first and that later strategies do not change (only the bypass and a fixed period are above it). When several strategies give different replica counts they are combined in the order below; the bounds of the last step hold for all of them.',
-        orderTitle: 'Order',
-        order1:
-          'What the administrator fixed comes first: bypass, a fixed count in a period, the fixed replicas above when switched on. Later strategies do not change them.',
-        order2:
-          'The other counts are first given by the forecast (the fallback default when the prediction mode is none or the forecast is unavailable).',
-        order3:
-          'Metric triggers: of those that set a count the highest priority wins (equal: the larger); a scale-up takes the largest increase and is never lowered by a set, the forecast or a scale-down; a scale-down acts only with no scale-up or set, no OOM or JVM pressure and a forecast that asks for no more replicas; of several the one that removes the fewest counts.',
-        order4: 'Periods: "at least" raises, "at most" lowers; several periods are handled by priority.',
-        order5:
-          'The replica bounds (least, most) hold for the final count and come last; the pace then limits how many replicas one action changes and how often.',
         orderFixedReplicas: 'Fixed replicas',
         replicaOrderTitle: 'How the replicas are worked out, in order',
         replicaOrder1:
@@ -2714,27 +2843,6 @@ const local = {
           'With them (both metrics present, a threshold above 0): the heap used / the heap maximum is read, and JVM Committed is not (Committed is only what the JVM reserved from the system; a high value does not mean a shortage). Above the threshold it acts in three places: the dynamic constraints get a "JVM heap" item for the replicas; the scale-ins of the triggers leave the comparison (no scaling in during an OOM kill or a heap under pressure); and a trigger can read the "JVM heap occupancy" as its metric.',
         jvmEffectWhere:
           'The detail of every recommendation has a "JVM heap pressure" line with the occupancy read, the threshold and whether it acted.',
-        strategyTitle: 'Strategies in force',
-        strategy_bypass: 'Bypass',
-        strategy_fixedCount: 'Fixed replicas',
-        strategy_source_algorithm: 'Forecast',
-        strategy_source_rule: 'Fixed formula',
-        strategy_source_fallback: 'Fallback default',
-        strategy_triggers: 'Metric triggers',
-        strategy_periods: 'Periods',
-        strategyState_active: 'in force',
-        strategyState_off: 'not used',
-        strategyState_overridden: 'overridden, changes no replicas',
-        strategyDecides_bypass:
-          'Bypass: the replicas are left to the cluster; neither the operator nor admission touches this module.',
-        strategyDecides_fixedCount:
-          'Fixed replicas {n}: the replicas stay {n}; the forecast, the triggers and the "at least / at most" of the periods do not change them (only a bypass and a period of the "fixed" kind rank above it); the least and most replicas still bound them.',
-        strategyDecides_rule:
-          'The fixed formula gives the replicas, the triggers ({triggers}) adjust them, the periods ({periods}) bound them, and the least and most replicas come last.',
-        strategyDecides_forecast:
-          'The forecast gives the replicas, the triggers ({triggers}) adjust them, the periods ({periods}) bound them, and the least and most replicas come last.',
-        strategyDecides_fallback:
-          'The forecast is off and the fixed formula is not chosen: nothing gives the replicas, so the fallback default applies (the replicas stay as they are when none is set); the triggers ({triggers}) and the periods ({periods}) still adjust them.',
         strategyMode: 'Run mode "{mode}": {effect}',
         strategyMode_observe: 'It records and shows, makes no recommendation and writes nothing to the cluster.',
         strategyMode_recommend: 'It makes and shows a recommendation and writes nothing to the cluster.',
@@ -2742,8 +2850,6 @@ const local = {
           'The recommended CPU and memory are written when a Pod is created or updated (admission); the replicas are not touched.',
         strategyMode_auto:
           'The operator carries out the replicas of the recommendation, and the CPU and memory of a Pod are written at admission.',
-        heldByFixed:
-          'A fixed count is on: the settings of this section change no replicas (only a period of the "fixed" kind ranks above a fixed count), and the platform does not work them out any more.',
         sectionBasic: 'Basics',
         sectionSafety: 'Floor and cap of the recommendation',
         sectionSafetyHint:
@@ -2827,19 +2933,7 @@ const local = {
         scaleDownCooldown: 'Scale-down cooldown (s)',
         scaleDownCooldownHint:
           'Seconds that must pass since the last scale-down action before the next one; stops replicas going up and down while the load flaps. 0 = no limit.',
-        fixedReplicasEnabled: 'Use the fixed replicas',
-        fixedReplicasEnabledHint:
-          'On, the replicas stay at the fixed count; off, it is only stored and takes no part in any calculation, and the other strategies decide the replicas as usual. With no fixed count entered, switching on has no effect.',
         fixedReplicasRequired: 'With the fixed replicas on, enter a count above 0',
-        decisionSource: 'Decision source',
-        decisionSourceHint:
-          'Which source the replicas and the CPU and memory Requests of one Pod follow: the algorithm forecasts (from the metrics of the module, the default) or the fixed formula (worked out from the P90, P95 and P99 of the real use, with no forecast). The module follows one; the other is still calculated and shown and decides nothing. The calculations of the formula are in Resource analysis > Fixed formula results.',
-        decisionSource_algorithm: 'Algorithm forecast',
-        decisionSource_rule: 'Fixed formula (P90 / P95 / P99)',
-        decisionSourceNote_rule:
-          'Follows the fixed formula: the replicas and the Pod Requests are those of the newest certain calculation (made every 10 minutes; when it is older than 30 minutes or not certain the algorithm forecasts decide). The bypass, a fixed period and the fixed replicas rank above it; then the minimum and maximum replicas, the periods, the triggers and the pace of the scaling bound it, and the mode says how far it goes.',
-        decisionSourceNote_algorithm:
-          'Follows the algorithm forecasts: the replicas and the Pod Requests are decided by the prediction algorithms of the module; the fixed formula is shown for comparison.',
         fixedNoteOn:
           'On: the replicas stay at {n}; the forecast and the triggers do not change it; a fixed count in a period comes first, "at least" and "at most" windows still raise or lower it; the least and most replicas limit it last.',
         fixedNoteOffKept:
@@ -2908,13 +3002,6 @@ const local = {
         weekday_4: 'Thu',
         weekday_5: 'Fri',
         weekday_6: 'Sat',
-        bypassTitle: 'Bypass module',
-        bypassHint:
-          'A bypassed module keeps every original resource and replica count: neither admission nor the operator changes anything until it is resumed.',
-        bypassReason: 'Reason (required, audited)',
-        bypassReasonRequired: 'Enter the reason',
-        bypassOn: 'Bypassed',
-        bypassOff: 'Resumed',
         step_collect: 'Collect history',
         step_predict: 'Forecast',
         step_backtest: 'Rolling backtest',
@@ -2990,7 +3077,6 @@ const local = {
         predictMode_dynamic_short: 'Dynamic',
         predictFixedTag: 'Fixed: {algorithm}',
         predictOff: 'Off',
-        colPredict: 'Prediction',
         predictAlgorithm: 'Algorithm',
         predictAlgorithmHint:
           'The only algorithm that runs. It runs for this module even when the platform has it switched off; one that is not a baseline is followed only after a backtest promoted it.',

@@ -405,6 +405,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     ]
   },
   {
+    name: 'node-pool',
+    path: '/node-pool',
+    component: 'layout.base$view.node-pool',
+    meta: {
+      title: 'node-pool',
+      i18nKey: 'route.node-pool'
+    }
+  },
+  {
     name: 'resource-analysis',
     path: '/resource-analysis',
     component: 'layout.base',
@@ -438,15 +447,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'resource-analysis_overprovision-detail',
           i18nKey: 'route.resource-analysis_overprovision-detail'
-        }
-      },
-      {
-        name: 'resource-analysis_rules',
-        path: '/resource-analysis/rules',
-        component: 'view.resource-analysis_rules',
-        meta: {
-          title: 'resource-analysis_rules',
-          i18nKey: 'route.resource-analysis_rules'
         }
       }
     ]

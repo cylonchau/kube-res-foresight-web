@@ -61,7 +61,10 @@ const metricOptions = computed(() => [
   { label: $t('page.forecast.triggers.ruleGap'), value: RULE_GAP }
 ]);
 const statOptions = computed(() =>
-  (['last', 'avg', 'max', 'min'] as const).map(value => ({ label: $t(`page.forecast.triggers.stat_${value}`), value }))
+  (['last', 'avg', 'max', 'min', 'p90', 'p95', 'p99'] as const).map(value => ({
+    label: $t(`page.forecast.triggers.stat_${value}`),
+    value
+  }))
 );
 const operatorOptions = computed(() =>
   (['gt', 'gte', 'lt', 'lte'] as const).map(value => ({ label: $t(`page.forecast.triggers.op_${value}`), value }))
@@ -73,7 +76,10 @@ const actionOptions = computed(() =>
   }))
 );
 const unitOptions = computed(() =>
-  (['replicas', 'percent'] as const).map(value => ({ label: $t(`page.forecast.triggers.unit_${value}`), value }))
+  (['replicas', 'percent', 'proportional'] as const).map(value => ({
+    label: $t(`page.forecast.triggers.unit_${value}`),
+    value
+  }))
 );
 const dayOptions = computed(() =>
   [1, 2, 3, 4, 5, 6, 0].map(value => ({ label: $t(`page.forecast.periods.day_${value}` as any), value }))
@@ -166,6 +172,10 @@ function problem(): string {
     if (!(row.window >= 1)) return $t('page.forecast.triggers.windowInvalid', { name });
     if (!(row.amount > 0)) return $t('page.forecast.triggers.amountInvalid', { name });
     if (row.action === 'set' && !Number.isInteger(row.amount)) return $t('page.forecast.triggers.setWhole', { name });
+    if (row.action !== 'set' && row.unit === 'proportional') {
+      if (!(row.threshold > 0)) return $t('page.forecast.triggers.proportionalThreshold', { name });
+      if (!Number.isInteger(row.amount)) return $t('page.forecast.triggers.proportionalWhole', { name });
+    }
     if (row.days.length && row.startMinute === row.endMinute && (row.startMinute !== 0 || row.endMinute !== 0))
       return $t('page.forecast.triggers.timeInvalid', { name });
   }
@@ -280,6 +290,9 @@ defineExpose({ load, save, problem, refreshSources, current, summary });
           class="trigger-unit"
         />
         <span v-else class="trigger-word">{{ $t('page.forecast.triggers.replicasWord') }}</span>
+        <IconTooltip v-if="row.action !== 'set'" icon="mdi-help-circle" placement="top">
+          <div class="max-w-420px leading-22px">{{ $t('page.forecast.triggers.helpUnit') }}</div>
+        </IconTooltip>
         <span class="trigger-word">{{ $t('page.forecast.triggers.inForce') }}</span>
         <NSelect
           v-model:value="row.days"

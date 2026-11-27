@@ -62,7 +62,7 @@ const memory = computed(() => {
       <span>{{ r('stripCpu') }} {{ cpu }}</span>
       <span>{{ r('stripMemory') }} {{ memory }}</span>
       <span class="opacity-70">{{ r('stripAt', { at: formatDateTime(latest.checked_at) }) }}</span>
-      <NButton size="tiny" type="info" secondary @click="routerPushByKey('resource-analysis_rules')">
+      <NButton size="tiny" type="info" secondary @click="routerPushByKey('forecast-actions_recommendations')">
         {{ r('stripOpen') }}
       </NButton>
     </template>

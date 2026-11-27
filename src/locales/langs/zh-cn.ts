@@ -385,7 +385,7 @@ const local = {
     'forecast-results_evaluations': '实测评估记录',
     'forecast-results_leaderboard': '实测排行榜',
     'resource-analysis_overprovision': '资源大盘',
-    'resource-analysis_rules': '资源评估（固定公式）',
+    'node-pool': '节点池管理',
     'resource-analysis_overprovision-detail': '模块资源分析',
     'resource-analysis_cluster-dashboard': '集群大盘',
     'forecast-actions': '推荐与执行',
@@ -635,13 +635,13 @@ const local = {
       result: '结果',
       reason: '原因',
       calculate: '立即计算',
-      stripTitle: '后台资源评估',
+      stripTitle: '推荐模式（后台计算）',
       stripReplicas: '副本',
       stripCpu: 'CPU Requests',
       stripMemory: '内存 Requests',
       stripAt: '{at} 评估',
-      stripOpen: '调度详情',
-      stripNone: '后台还没有这个模块的资源评估（每 10 分钟算一次，需要模块启用）。',
+      stripOpen: '查看推荐',
+      stripNone: '后台还没有这个模块的推荐模式计算结果（每 10 分钟算一次，需要模块启用）。',
       stripNote: '后台定时算的固定公式结果，和下面现在读 Prometheus 的分析互相独立；下面读得慢时先看这一行。',
       switchToRule: '改为跟随固定公式',
       switchToAlgorithm: '改为跟随算法预测',
@@ -1837,6 +1837,49 @@ const local = {
         tools: '用到的工具'
       }
     },
+    nodePool: {
+      title: '节点池列表',
+      help: '节点池是一组同样规格的 Kubernetes 节点：用 Node Selector 标签区分，写明单个节点的 CPU、内存（GPU 节点还有卡数）和用途。平台会按模块单个 Pod 的 CPU、内存推荐最合适的节点池，和 CPU、内存、副本数的推荐一起展示；要不要真的把工作负载调过去，由模块的运行模式决定。',
+      keyword: '关键字',
+      keywordPlaceholder: '节点池名称或备注',
+      name: '名称',
+      namePlaceholder: '例如 memory-4c32g',
+      kind: '类型',
+      kind_cpu: 'CPU 密集型',
+      kind_memory: '内存密集型',
+      kind_gpu: 'GPU',
+      kind_general: '通用',
+      kindHelp_cpu: '核数多、内存相对少，例如 8 核 / 16 GiB 的节点。',
+      kindHelp_memory: '内存多、核数相对少，例如 4 核 / 32 GiB 的节点。',
+      kindHelp_gpu: '带 GPU 的节点；只有要 GPU 的工作负载会被推荐到这里，也只会被推荐到这里。',
+      kindHelp_general: '没有明显倾向的节点。',
+      selector: 'Node Selector 标签',
+      selectorHelp:
+        '选中这个池子里节点的标签，Pod 带上同样的 Node Selector 才会落到这些节点上。例如 pool = memory-4c32g。',
+      labelKey: '标签名',
+      labelValue: '标签值',
+      nodeSize: '单个节点的规格',
+      nodeSizeHelp:
+        '一个节点能给 Pod 的 CPU 和内存（节点的 allocatable，不是整机规格）。推荐靠它算一个节点放几个 Pod、放完剩下多少。启用的节点池必须填。',
+      cores: 'CPU 核数',
+      coresUnit: '核',
+      memory: '内存',
+      gpu: 'GPU 卡数',
+      coresValue: '{n} 核',
+      gpuValue: '{n} 卡',
+      cluster: '集群',
+      clusterHelp: '节点池所在的集群。留空表示每个集群里都有这样标签的节点。',
+      clusterPlaceholder: '留空 = 所有集群',
+      allClusters: '所有集群',
+      priority: '优先级',
+      priorityHelp: '两个节点池同样合适时，数字大的先推荐。',
+      addTitle: '新增节点池',
+      editTitle: '编辑节点池',
+      nameRequired: '请填写节点池名称',
+      labelsRequired: '至少填一个 Node Selector 标签',
+      sizeRequired: '启用的节点池要填单个节点的 CPU 和内存',
+      gpuRequired: 'GPU 节点池要填每个节点的 GPU 卡数'
+    },
     forecast: {
       params: {
         part_definition: '定义',
@@ -2042,6 +2085,14 @@ const local = {
         stat_avg: '平均值',
         stat_max: '最大值',
         stat_min: '最小值',
+        stat_p90: 'P90',
+        stat_p95: 'P95',
+        stat_p99: 'P99',
+        unit_proportional: '按指标比例，一次最多',
+        helpUnit:
+          '“个副本”“% 的副本”是每次固定调多少；“按指标比例”按指标算：当前副本数 × 指标值 ÷ 阈值（要求阈值大于 0），数量一栏是一次最多变动几个副本。例：阈值 80、指标 90，10 个副本算出 12 个，数量填 1 时这次只加 1 个。',
+        proportionalThreshold: '触发策略「{name}」按指标比例算，阈值要大于 0',
+        proportionalWhole: '触发策略「{name}」按指标比例算，一次最多变动的副本数要是整数',
         op_gt: '大于',
         op_gte: '大于等于',
         op_lt: '小于',
@@ -2343,24 +2394,94 @@ const local = {
           e_predict_mode_fixed: '固定算法',
           e_predict_mode_dynamic: '动态算法'
         },
-        groupStrategy: '模块策略',
-        groupStrategyDesc: '预测模式、时间周期、指标触发和固定副本数。几个策略同时生效时怎么合并，见本组最后一节。',
+        sectionDecision: '决策方式',
+        descDecision:
+          '模块的副本数和资源由哪一种方式决定，同一时间只启用一种。三种策略（时间周期、指标触发、固定副本数）的优先级高于算法预测和推荐模式：算法预测和推荐模式只能在三种策略全部停用时启用，三种策略最多启用一种。',
+        decisionRules:
+          '规则：1. 三种策略最多启用一种。2. 算法预测和推荐模式只能在三种策略全部停用时启用，两者也不能同时启用。3. 要换一种方式，先停用正在启用的，再启用新的；平台保存时按同样的规则检查。',
+        decisionStrategyTag: '策略',
+        decisionBlocked: '先停用「{mode}」才能启用',
+        decision_algorithm: '算法预测',
+        decision_recommend: '推荐模式',
+        decision_periods: '时间周期策略',
+        decision_triggers: '指标触发策略',
+        decision_fixed: '固定副本数策略',
+        decision_none: '都不启用',
+        colDecision: '决策方式',
+        decisionHint:
+          '这个模块的副本数和资源由哪一种方式决定：算法预测、推荐模式（固定公式）、三种策略之一，或都不启用（只采集数据，保持降级默认值）。',
+        decisionDesc_algorithm: '用预测算法预测负载，按预测结果给出 CPU、内存和副本数。',
+        decisionDesc_recommend:
+          '按固定公式和 P90、P95、P99、MAX 等实际使用量，算出 CPU、内存 Requests / Limits 和副本数；后台定时计算，结果存库。',
+        decisionDesc_periods: '按时间段设置副本数（固定、至少、至多）和 CPU、内存。',
+        decisionDesc_triggers: '某个指标在一段时间内越过阈值，就扩容、缩容或设定副本数。',
+        decisionDesc_fixed: '副本数一直保持指定数量，不自动扩缩容。',
+        decisionHint_algorithm:
+          '启用后只展示和使用预测的参数：数据与预测周期、容量与副本、预测方式、最低评分。预测结果由后台预测任务定时计算。',
+        decisionHint_recommend:
+          '启用后只展示和使用固定公式的参数：计算系数（P90、P95、P99 的目标占比、余量、Limits 倍数）和资源保底封顶。与算法预测分开计算、分开保存，不混合。',
+        decisionHint_periods:
+          '启用后副本数按启用的时间段决定；没有时间段生效时副本数不变。CPU、内存用时间段里填的值，没有就用降级默认值。',
+        decisionHint_triggers:
+          '启用后副本数只由触发策略决定：没有触发时副本数不变；触发后每次最多变动设定的数量，再受最小、最大副本数和调整节奏限制。',
+        decisionHint_fixed: '启用后副本数一直是填写的数量，预测、触发、时间周期都不改它；最小、最大副本数照样限制。',
+        decisionNow_algorithm: '现在由算法预测决定：副本数、CPU、内存按预测结果给出。',
+        decisionNow_recommend:
+          '现在由推荐模式决定：按固定公式用 P90、P95、P99 的实际使用量计算 CPU、内存 Requests / Limits 和副本数，后台定时计算并存库。',
+        decisionNow_periods: '现在由时间周期策略决定：时间段给出副本数，没有时间段生效时副本数不变。',
+        decisionNow_triggers:
+          '现在由指标触发策略决定：触发时按设定的量扩缩容，没有触发时副本数不变；每个检测周期按当时运行的副本数重新计算。',
+        decisionNow_fixed: '现在由固定副本数策略决定：副本数一直保持下面填写的数量，不自动扩缩容。',
+        decisionNow_none: '现在没有启用任何方式：模块只采集数据，副本数和资源保持降级默认值，不做自动决策。',
+        modeHelp_observe: '仅观察：只收集数据，不给出推荐，也不改任何东西。',
+        modeHelp_recommend: '仅推荐：给出推荐的 CPU、内存、副本数和节点池，只展示，不改集群。',
+        modeHelp_admission:
+          '准入：新建或更新工作负载时，由准入（Kyverno）按推荐设置 CPU、内存 Requests / Limits 和节点池的 Node Selector；不调整正在运行的副本。',
+        modeHelp_auto:
+          '自动：在准入的基础上，Operator 还会调整副本数；Operator 以 --adjust-pod-spec 启动时，也会改工作负载的 CPU、内存 Requests / Limits 和节点池。',
+        sectionRecommend: '推荐模式',
+        descRecommend:
+          '推荐模式按固定公式计算，不用预测算法。后台任务定时用实际使用量（P90、P95、P99、MAX）算出结果存进数据库，Operator 和准入直接读它，不用等人打开资源大盘。',
+        recommendTitle: '计算过程',
+        recommendStep1: '读取模块最近一段时间的实际 CPU、内存使用量，取 P90、P95、P99 和最大值。',
+        recommendStep2:
+          '按“计算系数”里的目标占比和余量，算出单个 Pod 的 CPU、内存 Requests；Limits 由使用量乘以倍数得出。',
+        recommendStep3: '全部 Pod 的总使用量除以单个 Pod 的 Requests，得出推荐副本数，以及比现在增加或减少多少。',
+        recommendStep4: '数据不够时标记为“不确定”，Operator 不会照它调整；结果和依据在“推荐与执行 → 资源推荐”里看。',
+        triggerRulesTitle: '触发策略怎么算',
+        triggerRule1:
+          '每个检测周期，把每条触发策略在“最近 N 分钟”的指标按统计方式（最新值、平均值、最大值、最小值，或 P90、P95、P99）归成一个数，和阈值比较；用的是哪个指标、什么口径、什么阈值，都写在每一条的“当……就……”里。',
+        triggerRule2:
+          '一次调多少有三种：加减固定个数、加减当前副本的百分比，或“按指标比例”——当前副本数 × 指标值 ÷ 阈值，一次最多变动设定的个数（阈值 80%、内存使用率 90% 时，10 个副本需要 12 个）。',
+        triggerRule3:
+          '连续触发：下一个周期指标仍越过阈值，会在当时运行的副本数上再算一次、再调一次，直到指标回落或到达最大、最小副本数；两次动作的间隔由“副本调整节奏”的冷却时间控制，没有设冷却时间就每个周期都动。',
+        triggerRule4:
+          '扩容和缩容同时触发时，按“权重 × 超过阈值的程度”计分，大的一方决定方向；OOM、JVM 堆压力期间缩容退出比较。',
+        triggerRule5: '结果落在最小、最大副本数之间，再受单次最大步长和冷却时间限制；每次决策的依据都记在推荐详情里。',
+        sectionFixed: '固定副本数策略',
+        descFixed:
+          '启用后副本数一直保持这个数量，预测、触发、时间周期都不改它，也不自动扩缩容；最小、最大副本数照样限制。',
+        sectionNodePool: '节点池',
+        descNodePool:
+          '按这个模块单个 Pod 的 CPU、内存推荐适合的节点池（在“节点池管理”里配置），和 CPU、内存、副本数的推荐一起展示。',
+        nodePoolEnabled: '推荐节点池',
+        nodePoolEnabledHint:
+          '启用后，推荐会带上最适合这个模块 Pod 的节点池：Pod 放进这个池子的节点后，剩下的 CPU 和内存最少。例如 200m CPU、4Gi 内存的 Pod 更适合内存密集型的池子。',
+        nodePoolNote_observe: '运行模式是“仅观察”：不给出推荐，也就没有节点池推荐。',
+        nodePoolNote_recommend: '运行模式是“仅推荐”：只展示推荐的节点池，不改工作负载。',
+        nodePoolNote_admission:
+          '运行模式是“准入”：新建或更新工作负载时，准入把推荐节点池的 Node Selector 加到 Pod 上。',
+        nodePoolNote_auto:
+          '运行模式是“自动”：除了准入，Operator 以 --adjust-pod-spec 启动时还会把推荐节点池的 Node Selector 写到工作负载上，会滚动更新 Pod。',
+        groupStrategy: '决策方式与策略',
+        groupStrategyDesc:
+          '选一种方式决定副本数和资源：算法预测、推荐模式，或时间周期、指标触发、固定副本数三种策略之一。',
         sectionPredict: '预测模式',
         descPredict:
           '模块要不要预测、怎么预测：固定算法、动态算法，或者不预测。它与上面的运行模式（观察、推荐、准入、自动）是两回事。',
         sectionTriggers: '指标触发策略',
         descTriggers:
           '不靠预测，直接看监控指标：指标在最近一段时间里越过阈值，就扩容、缩容或设定副本数。可以添加多条，每条有自己的指标、阈值、动作和生效时间。',
-        sectionOrder: '固定副本数与策略的合并顺序',
-        descOrder:
-          '固定副本数把副本数写死成一个常数：不想让算法、预测、指标触发改副本数的工作负载（比如固定 3 副本的有状态服务）开启它。开关开启并填了副本数以后，预测模式只管 CPU、内存；关闭或没有填，它不参与任何计算，其他策略照常。它和预测、时间周期、指标触发不是重复的配置，而是合并时“最优先、不再被后面的策略改动”的那一档（只有旁路和时间周期里的“固定”比它更高）。几个策略同时给出不同的副本数时，按下面的顺序合并；最后一步的边界对所有策略生效。',
-        orderTitle: '合并顺序',
-        order1: '管理员固定的值最优先：旁路、时间周期里“固定”的副本数、上面开启的固定副本数。之后的策略不改它们。',
-        order2: '其余的副本数先由预测得出（预测模式为“不预测”或预测不可用时，用降级默认值）。',
-        order3:
-          '指标触发策略：设定副本数的取优先级最高的（同级取较大的）；扩容的取增量最大的，它不会被设定、预测或缩容压低；缩容只在没有扩容或设定、没有 OOM 和 JVM 压力、预测不要求更多副本时才生效，多条缩容取减得最少的。',
-        order4: '时间周期里“至少”的抬高、“至多”的压低；多个周期按优先级处理。',
-        order5: '副本边界（最小、最大副本数）对最终结果生效，永远在最后；副本调整节奏再限制一次动作增减多少、隔多久。',
         orderFixedReplicas: '固定副本数',
         replicaOrderTitle: '副本数的生效顺序',
         replicaOrder1:
@@ -2554,33 +2675,11 @@ const local = {
         jvmEffectOn:
           '配置（两个指标都有，阈值大于 0）：用堆已用 ÷ 堆上限，不看 JVM Committed（Committed 只是 JVM 向系统预留的内存，高不等于缺内存）。超过阈值时有三处生效：动态约束里多一项“JVM 堆”副本约束；指标触发的缩容退出比较（OOM 和堆压力保护期间不缩容）；指标触发里可以直接选“JVM 堆占用率”作为指标。',
         jvmEffectWhere: '每次推荐的详情里“JVM 堆压力”一行写明这次读到的堆占用率、阈值和有没有生效。',
-        strategyTitle: '当前生效的副本策略',
-        strategy_bypass: '旁路',
-        strategy_fixedCount: '固定副本数',
-        strategy_source_algorithm: '预测',
-        strategy_source_rule: '固定公式',
-        strategy_source_fallback: '降级默认值',
-        strategy_triggers: '指标触发',
-        strategy_periods: '时间周期',
-        strategyState_active: '生效',
-        strategyState_off: '未启用',
-        strategyState_overridden: '被覆盖，不改变副本数',
-        strategyDecides_bypass: '旁路：副本数交还给集群，Operator 和准入都不动这个模块。',
-        strategyDecides_fixedCount:
-          '固定副本数 {n}：副本数保持 {n}，预测、指标触发和时间周期的“至少 / 至多”都不改变它（只有旁路和“固定”方式的时间周期比它优先）；最小、最大副本数照样限制。',
-        strategyDecides_rule:
-          '固定公式给出副本数，再由指标触发（{triggers} 条）调整、时间周期（{periods} 条）限制，最后受最小、最大副本数限制。',
-        strategyDecides_forecast:
-          '预测给出副本数，再由指标触发（{triggers} 条）调整、时间周期（{periods} 条）限制，最后受最小、最大副本数限制。',
-        strategyDecides_fallback:
-          '预测没有开启，也没有选固定公式：没有来源给出副本数，用降级默认值（没填则保持现状）；指标触发（{triggers} 条）和时间周期（{periods} 条）照常调整。',
         strategyMode: '运行模式“{mode}”：{effect}',
         strategyMode_observe: '只记录和显示，不产生推荐，也不写集群。',
         strategyMode_recommend: '产生推荐并显示，不写集群。',
         strategyMode_admission: '推荐的 CPU、内存在 Pod 创建或更新时写入（准入），副本数不动。',
         strategyMode_auto: '副本数由 Operator 按推荐执行，Pod 的 CPU、内存在准入时写入。',
-        heldByFixed:
-          '固定副本数已开启：这一节的设置不改变副本数（只有“固定”方式的时间周期比固定副本数优先），平台也不再计算它们。',
         sectionBasic: '基本信息',
         sectionSafety: '推荐值的保底与封顶',
         sectionSafetyHint:
@@ -2655,19 +2754,7 @@ const local = {
         scaleUpCooldownHint: '距上一次扩容动作至少间隔多少秒才再次扩容。0 不限制。',
         scaleDownCooldown: '缩容冷却（秒）',
         scaleDownCooldownHint: '距上一次缩容动作至少间隔多少秒才再次缩容，防止负载抖动时来回增减。0 不限制。',
-        fixedReplicasEnabled: '启用固定副本数',
-        fixedReplicasEnabledHint:
-          '开启后副本数保持“固定副本数”的值；关闭后它只保存，不参与任何计算，其他策略照常决定副本数。没有填固定副本数时，开启没有效果。',
         fixedReplicasRequired: '开启固定副本数时，请填写大于 0 的副本数',
-        decisionSource: '决策来源',
-        decisionSourceHint:
-          '模块的副本数和单个 Pod 的 CPU、内存 Requests 跟随哪一个来源：算法预测（用模块指标预测，默认），或固定公式（用 P90、P95、P99 的实际使用量按公式计算，不含预测）。只跟随一个，另一个仍会计算和显示，但不参与决策。固定公式的计算结果（资源评估）见“资源分析 → 资源评估（固定公式）”。',
-        decisionSource_algorithm: '算法预测',
-        decisionSource_rule: '固定公式（P90 / P95 / P99）',
-        decisionSourceNote_rule:
-          '跟随固定公式：副本数和 Pod 的 CPU、内存 Requests 取公式最近一次可信的计算（每 10 分钟计算一次，超过 30 分钟没有新结果或结果不确定时由算法预测决定）；旁路、时间周期里的“固定”和固定副本数优先于它，之后最小 / 最大副本数、时间周期、指标触发和副本调整节奏照常限制，运行模式决定能做到哪一步。',
-        decisionSourceNote_algorithm:
-          '跟随算法预测：副本数和 Pod 的 CPU、内存 Requests 由模块的预测算法决定；固定公式的结果只作对照。',
         fixedNoteOn:
           '已开启：副本数保持 {n} 个，预测和指标触发不改变它；时间周期里的“固定”优先，“至少 / 至多”仍会抬高或压低它；最小、最大副本数最后限制。',
         fixedNoteOffKept: '已关闭：固定副本数 {n} 只保存，不参与计算，副本数由预测、时间周期、指标触发决定。',
@@ -2733,12 +2820,6 @@ const local = {
         weekday_4: '周四',
         weekday_5: '周五',
         weekday_6: '周六',
-        bypassTitle: '旁路模块',
-        bypassHint: '旁路后模块保持所有原始资源与副本，准入与扩缩容控制器都不再改动，直到恢复。',
-        bypassReason: '旁路原因(必填，会被审计)',
-        bypassReasonRequired: '请填写旁路原因',
-        bypassOn: '已旁路',
-        bypassOff: '已恢复',
         step_collect: '采集历史',
         step_predict: '生成预测',
         step_backtest: '滚动回测',
@@ -2809,7 +2890,6 @@ const local = {
         predictMode_dynamic_short: '动态算法',
         predictFixedTag: '固定：{algorithm}',
         predictOff: '未启用',
-        colPredict: '预测',
         predictAlgorithm: '预测算法',
         predictAlgorithmHint:
           '只运行这个算法。它被平台关闭时也照常为这个模块运行；非基线算法要先通过回测晋升才会被采用。',

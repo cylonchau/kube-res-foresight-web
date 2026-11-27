@@ -58,11 +58,11 @@ declare module "@elegant-router/types" {
     "monitoring": "/monitoring";
     "monitoring_curves": "/monitoring/curves";
     "monitoring_datasets": "/monitoring/datasets";
+    "node-pool": "/node-pool";
     "resource-analysis": "/resource-analysis";
     "resource-analysis_cluster-dashboard": "/resource-analysis/cluster-dashboard";
     "resource-analysis_overprovision": "/resource-analysis/overprovision";
     "resource-analysis_overprovision-detail": "/resource-analysis/overprovision-detail";
-    "resource-analysis_rules": "/resource-analysis/rules";
     "system": "/system";
     "system_config": "/system/config";
     "system_diagnostics": "/system/diagnostics";
@@ -118,6 +118,7 @@ declare module "@elegant-router/types" {
     | "iframe-page"
     | "login"
     | "monitoring"
+    | "node-pool"
     | "resource-analysis"
     | "system"
     | "task-center"
@@ -171,10 +172,10 @@ declare module "@elegant-router/types" {
     | "forecast_score-records"
     | "monitoring_curves"
     | "monitoring_datasets"
+    | "node-pool"
     | "resource-analysis_cluster-dashboard"
     | "resource-analysis_overprovision-detail"
     | "resource-analysis_overprovision"
-    | "resource-analysis_rules"
     | "system_config"
     | "system_diagnostics"
     | "system_login-log"

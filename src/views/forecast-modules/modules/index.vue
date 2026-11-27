@@ -40,7 +40,6 @@ import DurationInput from '@/components/advanced/duration-input.vue';
 import { useTableColumnConfig } from '@/hooks/business/use-table-column-config';
 import {
   fetchBatchModules,
-  fetchBypassModule,
   fetchCopyModuleConfig,
   fetchGetForecastModule,
   fetchCreateForecastModule,
@@ -56,7 +55,6 @@ import {
   fetchGetModuleSources,
   fetchGetPeriods,
   fetchGetTriggers,
-  fetchResumeModule,
   fetchUpdateForecastModule
 } from '@/service/api';
 import SvgIcon from '@/components/custom/svg-icon.vue';
@@ -74,7 +72,14 @@ import {
   res as resToken
 } from '@/utils/formula';
 import { type DocForm, type ParamId, paramDoc } from '@/utils/param-docs';
-import { type StrategyRow, type StrategyState, strategySummary } from '@/utils/strategy-summary';
+import {
+  DECISION_MODES,
+  STRATEGY_MODES,
+  type DecisionMode,
+  decisionModeOf,
+  flagsOfMode,
+  modeBlocking
+} from '@/utils/decision-mode';
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
 import { EMPTY_SYSTEM, type SystemParams } from '@/utils/module-params';
@@ -117,9 +122,6 @@ const modeOptions = computed(() =>
     label: t(`page.forecast.modules.mode_${value}`),
     value
   }))
-);
-const decisionSourceOptions = computed(() =>
-  (['algorithm', 'rule'] as const).map(value => ({ label: t(`page.forecast.modules.decisionSource_${value}`), value }))
 );
 const predictModeOptions = computed(() =>
   (['dynamic', 'fixed', 'none'] as const).map(value => ({
@@ -244,6 +246,9 @@ function emptyForm() {
     fallback_replicas: 0,
     fixed_replicas: 0,
     fixed_replicas_enabled: false,
+    periods_enabled: false,
+    triggers_enabled: false,
+    node_pool_enabled: false,
     decision_source: 'algorithm' as 'algorithm' | 'rule',
     headroom_ratio: 1,
     limit_cpu_ratio: 0,
@@ -289,7 +294,6 @@ const jvmMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const metricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const oomMetricsEditor = ref<InstanceType<typeof ModuleMetrics>>();
 const boardMetricsEditor = ref<InstanceType<typeof ModuleDisplayMetrics>>();
-const bypassTarget = ref<Api.Forecast.Module>();
 /** the module whose need (replicas, CPU, memory) is being read, before it is configured to act */
 const needTarget = ref<Api.Forecast.Module>();
 const paramsTarget = ref<Api.Forecast.Module | null>(null);
@@ -562,47 +566,30 @@ const replicaFlow = computed(() => {
   return lines;
 });
 
-/** the strategies of the module in force now, in the order they decide: the one that gives the replicas, and what changes or cannot change them */
-const strategy = computed(() => {
-  const periods = periodEditor.value?.summary() ?? { total: 0, fixing: 0, bounding: 0 };
-  const triggers = triggerEditor.value?.summary() ?? { total: 0 };
-  return strategySummary({
-    bypass: Boolean(editing.value?.bypass),
-    fixedEnabled: form.fixed_replicas_enabled,
-    fixedReplicas: form.fixed_replicas,
-    predicts: form.predict_enabled && form.predict_mode !== 'none',
-    decisionSource: form.decision_source === 'rule' ? 'rule' : 'algorithm',
-    triggers: triggers.total,
-    periods: periods.total,
-    periodsFixing: periods.fixing,
-    periodsBounding: periods.bounding
-  });
-});
-/** the forecast is part of the module only while it predicts: the data it trains on and the score that holds an algorithm back are for it alone */
-const predicts = computed(() => form.predict_enabled && form.predict_mode !== 'none');
-
-/** a fixed count is on: it keeps exactly its replicas, so the triggers and the floors and caps of the periods change nothing */
-const fixedHolds = computed(() => form.fixed_replicas_enabled && form.fixed_replicas > 0);
-const strategyTagType = (state: StrategyState) =>
-  state === 'active' ? 'success' : state === 'overridden' ? 'warning' : 'default';
-/** the name of a strategy, the source of the replicas being the forecast, the fixed formula or the default the platform falls back to */
-function strategyLabel(row: StrategyRow) {
-  const m = (key: string) => t(`page.forecast.modules.${key}`);
-  if (row.key !== 'source') return m(`strategy_${row.key}`);
-  if (form.decision_source === 'rule') return m('strategy_source_rule');
-  return m(predicts.value ? 'strategy_source_algorithm' : 'strategy_source_fallback');
+/** what decides the module now: one mode at a time (the forecast, the recommendation mode, or one of the three strategies), or nothing */
+const modeKey = computed<DecisionMode>(() => decisionModeOf(form));
+/** the forecast is part of the module only while it decides: the data it trains on and the score that holds an algorithm back are for it alone */
+const predicts = computed(() => modeKey.value === 'algorithm' && form.predict_mode !== 'none');
+/** the modes in the order they are listed, each with whether it is on and what has to be switched off before it can be */
+const decisionRows = computed(() =>
+  DECISION_MODES.map(key => {
+    const blocking = modeBlocking(modeKey.value, key);
+    return {
+      key,
+      on: modeKey.value === key,
+      strategy: STRATEGY_MODES.includes(key),
+      blockedBy: blocking ? t(`page.forecast.modules.decision_${blocking}`) : ''
+    };
+  })
+);
+/** switches a mode on (the others are off by then: a mode that conflicts cannot be switched on) or off (nothing decides) */
+function setMode(key: DecisionMode, on: boolean) {
+  if (on && modeBlocking(modeKey.value, key)) return;
+  Object.assign(form, flagsOfMode(on ? key : 'none'));
+  if (on && key === 'algorithm' && form.predict_mode === 'none') form.predict_mode = 'dynamic';
 }
-/** the sentence that says which strategy gives the replicas now and what the others can do to them */
-const strategyText = computed(() => {
-  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
-  const named = {
-    n: form.fixed_replicas,
-    triggers: strategy.value.rows.find(row => row.key === 'triggers')?.count ?? 0,
-    periods: strategy.value.rows.find(row => row.key === 'periods')?.count ?? 0
-  };
-  return m(`strategyDecides_${strategy.value.decides}`, named);
-});
-/** what the run mode lets the decision do to the cluster */
+/** the sentence that says what decides now, and what the run mode lets the decision do to the cluster */
+const decisionText = computed(() => t(`page.forecast.modules.decisionNow_${modeKey.value}`));
 const modeText = computed(() => {
   const label = modeOptions.value.find(option => option.value === form.mode)?.label ?? form.mode;
   return t('page.forecast.modules.strategyMode', {
@@ -845,6 +832,8 @@ function open(row?: Api.Forecast.Module) {
       max_memory_mib: row.max_memory_bytes / MIB,
       fallback_memory_mib: row.fallback_memory_bytes / MIB
     });
+    // a stored module with two modes on (an upgrade leaves none, an old API could) is shown as what really decides it
+    Object.assign(form, flagsOfMode(decisionModeOf(form)));
   }
   visible.value = true;
   loadCapacity(row?.id);
@@ -913,6 +902,9 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     fallback_replicas: form.fallback_replicas,
     fixed_replicas: form.fixed_replicas,
     fixed_replicas_enabled: form.fixed_replicas_enabled,
+    periods_enabled: form.periods_enabled,
+    triggers_enabled: form.triggers_enabled,
+    node_pool_enabled: form.node_pool_enabled,
     decision_source: form.decision_source,
     headroom_ratio: form.headroom_ratio,
     limit_cpu_ratio: form.limit_cpu_ratio,
@@ -1103,33 +1095,6 @@ async function remove(id: number) {
   }
 }
 
-// ---- bypass
-const bypassReason = ref('');
-
-async function confirmBypass() {
-  const target = bypassTarget.value;
-  if (!target) return;
-  if (!bypassReason.value.trim()) {
-    message.warning(t('page.forecast.modules.bypassReasonRequired'));
-    return;
-  }
-  const { error } = await fetchBypassModule(target.id, bypassReason.value.trim());
-  if (!error) {
-    bypassTarget.value = undefined;
-    bypassReason.value = '';
-    message.success(t('page.forecast.modules.bypassOn'));
-    await load();
-  }
-}
-
-async function resume(row: Api.Forecast.Module) {
-  const { error } = await fetchResumeModule(row.id);
-  if (!error) {
-    message.success(t('page.forecast.modules.bypassOff'));
-    await load();
-  }
-}
-
 // ---- table
 
 /**
@@ -1209,30 +1174,12 @@ const columnMap: Record<string, any> = {
             )
           : chip({ type: 'default', icon: 'carbon:subtract-alt' }, t('common.disable'))
   },
-  bypass: {
-    title: t('page.forecast.modules.bypass'),
-    key: 'bypass',
-    width: 110,
-    align: 'center',
-    render: (row: Api.Forecast.Module) =>
-      row.bypass
-        ? h(
-            NTag,
-            { type: 'warning', bordered: false, title: row.bypass_reason },
-            { default: () => t('page.forecast.modules.bypassing') }
-          )
-        : '-'
-  },
   status: {
     title: t('page.forecast.modules.runState'),
     key: 'status',
     width: 200,
     render: (row: Api.Forecast.Module) => {
       const tags: ReturnType<typeof h>[] = [];
-      if (row.bypass)
-        tags.push(
-          chip({ type: 'warning', icon: 'carbon:warning-alt' }, t('page.forecast.modules.bypassing'), row.bypass_reason)
-        );
       if (row.summary?.degraded)
         tags.push(
           chip(
@@ -1286,21 +1233,20 @@ const columnMap: Record<string, any> = {
     render: (row: Api.Forecast.Module) => formatResource('replicas', row.summary?.actual_replicas)
   },
   predict: {
-    title: () => helpTitle(t('page.forecast.modules.colPredict'), t('page.forecast.modules.predictEnabledHint')),
+    title: () => helpTitle(t('page.forecast.modules.colDecision'), t('page.forecast.modules.decisionHint')),
     key: 'predict',
-    width: 130,
+    width: 150,
     align: 'center',
     render: (row: Api.Forecast.Module) => {
-      if (!row.predict_enabled)
-        return h(NTag, { bordered: false, size: 'small' }, () => t('page.forecast.modules.predictOff'));
-      if (row.predict_mode === 'none')
-        return h(NTag, { bordered: false, size: 'small' }, () => t('page.forecast.modules.predictMode_none_short'));
-      if (row.predict_mode === 'fixed')
-        return h(NTag, { type: 'info', bordered: false, size: 'small' }, () =>
-          t('page.forecast.modules.predictFixedTag', { algorithm: row.predict_algorithm })
-        );
-      return h(NTag, { type: 'success', bordered: false, size: 'small' }, () =>
-        t('page.forecast.modules.predictMode_dynamic_short')
+      const mode = decisionModeOf(row);
+      const label = t(`page.forecast.modules.decision_${mode}`);
+      if (mode === 'none') return h(NTag, { bordered: false, size: 'small' }, () => label);
+      if (mode === 'algorithm' && row.predict_mode === 'fixed')
+        return h(NTag, { type: 'info', bordered: false, size: 'small' }, () => `${label} · ${row.predict_algorithm}`);
+      return h(
+        NTag,
+        { type: STRATEGY_MODES.includes(mode) ? 'warning' : 'success', bordered: false, size: 'small' },
+        () => label
       );
     }
   },
@@ -1354,8 +1300,7 @@ const columnMap: Record<string, any> = {
       t('common.delete'),
       t('page.forecast.modules.clone'),
       t('page.forecast.modules.need'),
-      t('page.forecast.modules.paramsView.button'),
-      t('page.forecast.modules.resume')
+      t('page.forecast.modules.paramsView.button')
     ]),
     fixed: 'right',
     align: 'center',
@@ -1378,25 +1323,18 @@ const columnMap: Record<string, any> = {
         ),
         h(NButton, { size: 'tiny', ...operateProps('view'), onClick: () => openParams(row) }, () =>
           t('page.forecast.modules.paramsView.button')
-        ),
-        row.bypass
-          ? h(NButton, { size: 'tiny', ...operateProps('enable'), onClick: () => resume(row) }, () =>
-              t('page.forecast.modules.resume')
-            )
-          : h(NButton, { size: 'tiny', ...operateProps('pause'), onClick: () => (bypassTarget.value = row) }, () =>
-              t('page.forecast.modules.bypass')
-            )
+        )
       ])
   }
 };
 const defaultColumnKeys = [
   '__selection__',
   'name',
-  'workload_kind',
   'workload',
   'mode',
-  'enabled',
   'predict',
+  'enabled',
+  'workload_kind',
   'status',
   'replicas',
   'cpu',
@@ -1574,23 +1512,27 @@ onMounted(() => {
                 :placeholder="t('common.inputField', { field: t('page.forecast.modules.name') })"
               />
             </NFormItem>
-            <NFormItem :label="t('page.forecast.modules.mode')">
-              <NSelect v-model:value="form.mode" :options="modeOptions" />
-            </NFormItem>
             <NFormItem>
               <template #label>
                 <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.decisionSource') }}
+                  {{ t('page.forecast.modules.mode') }}
                   <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.decisionSourceHint') }}</div>
+                    <div class="mode-help">
+                      <div
+                        v-for="value in ['observe', 'recommend', 'admission', 'auto']"
+                        :key="value"
+                        class="mode-help-row"
+                      >
+                        <b>{{ t(`page.forecast.modules.mode_${value}`) }}</b>
+                        {{ t(`page.forecast.modules.modeHelp_${value}`) }}
+                      </div>
+                    </div>
                   </IconTooltip>
                 </span>
               </template>
-              <NSelect v-model:value="form.decision_source" :options="decisionSourceOptions" />
+              <NSelect v-model:value="form.mode" :options="modeOptions" />
             </NFormItem>
-            <div class="live-note form-note">
-              {{ t(`page.forecast.modules.decisionSourceNote_${form.decision_source}`) }}
-            </div>
+            <div class="live-note form-note">{{ t(`page.forecast.modules.modeHelp_${form.mode}`) }}</div>
             <NFormItem v-if="clusters.length > 1">
               <template #label>
                 <span class="inline-flex items-center gap-4px">
@@ -1878,7 +1820,7 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="mod-sec">
+        <section v-if="modeKey === 'algorithm' || modeKey === 'recommend'" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionCoeff') }}</span>
           </div>
@@ -2282,7 +2224,7 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="mod-sec">
+        <section v-if="modeKey !== 'fixed' && modeKey !== 'none'" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionPace') }}</span>
             <IconTooltip icon="mdi-help-circle" placement="top">
@@ -2392,23 +2334,48 @@ onMounted(() => {
           <div class="mod-group-title">{{ t('page.forecast.modules.groupStrategy') }}</div>
           <div class="mod-group-desc">{{ t('page.forecast.modules.groupStrategyDesc') }}</div>
         </div>
-        <section class="mod-sec strategy-box">
-          <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.strategyTitle') }}</span>
-          </div>
-          <div class="strategy-tags">
-            <span v-for="row in strategy.rows" :key="row.key" class="strategy-tag">
-              <NTag size="small" :bordered="false" :type="strategyTagType(row.state)">
-                {{ strategyLabel(row) }}
-                <template v-if="row.count">· {{ row.count }}</template>
-              </NTag>
-              <span class="strategy-state">{{ t(`page.forecast.modules.strategyState_${row.state}`) }}</span>
-            </span>
-          </div>
-          <div class="live-note">{{ strategyText }}</div>
-          <div class="live-note">{{ modeText }}</div>
-        </section>
         <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionDecision') }}</span>
+            <IconTooltip icon="mdi-help-circle" placement="top">
+              <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.decisionRules') }}</div>
+            </IconTooltip>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descDecision') }}</div>
+          <div class="decision-list">
+            <div v-for="row in decisionRows" :key="row.key" class="decision-row" :class="{ on: row.on }">
+              <div class="decision-text">
+                <div class="decision-name">
+                  {{ t(`page.forecast.modules.decision_${row.key}`) }}
+                  <NTag v-if="row.strategy" size="tiny" :bordered="false" type="warning">
+                    {{ t('page.forecast.modules.decisionStrategyTag') }}
+                  </NTag>
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-420px leading-22px">{{ t(`page.forecast.modules.decisionHint_${row.key}`) }}</div>
+                  </IconTooltip>
+                </div>
+                <div class="decision-desc">{{ t(`page.forecast.modules.decisionDesc_${row.key}`) }}</div>
+                <div v-if="row.blockedBy" class="decision-blocked">
+                  {{ t('page.forecast.modules.decisionBlocked', { mode: row.blockedBy }) }}
+                </div>
+              </div>
+              <StatusSelect
+                :value="row.on"
+                :disabled="Boolean(row.blockedBy)"
+                @update:value="on => setMode(row.key, on)"
+              />
+            </div>
+          </div>
+          <div class="live-note">{{ decisionText }}</div>
+          <div class="live-note">{{ modeText }}</div>
+          <NForm v-if="modeKey === 'periods' || modeKey === 'triggers'" :model="form" label-placement="top">
+            <NFormItem :label="t('page.forecast.modules.timezone')">
+              <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
+            </NFormItem>
+          </NForm>
+        </section>
+
+        <section v-if="modeKey === 'algorithm'" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionPredict') }}</span>
           </div>
@@ -2417,42 +2384,42 @@ onMounted(() => {
             <NFormItem>
               <template #label>
                 <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.predictEnabled') }}
+                  {{ t('page.forecast.modules.predictMode') }}
                   <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictEnabledHint') }}</div>
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictModeHint') }}</div>
                   </IconTooltip>
                 </span>
               </template>
-              <StatusSelect v-model:value="form.predict_enabled" />
+              <NSelect v-model:value="form.predict_mode" :options="predictModeOptions" />
             </NFormItem>
-            <template v-if="form.predict_enabled">
-              <NFormItem>
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.predictMode') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictModeHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NSelect v-model:value="form.predict_mode" :options="predictModeOptions" />
-              </NFormItem>
-              <NFormItem v-if="form.predict_mode === 'fixed'">
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.predictAlgorithm') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictAlgorithmHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NSelect v-model:value="form.predict_algorithm" filterable :options="algorithmOptions" />
-              </NFormItem>
-            </template>
+            <NFormItem v-if="form.predict_mode === 'fixed'">
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.predictAlgorithm') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.predictAlgorithmHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NSelect v-model:value="form.predict_algorithm" filterable :options="algorithmOptions" />
+            </NFormItem>
           </NForm>
         </section>
 
-        <section class="mod-sec" :class="{ dim: fixedHolds }">
+        <section v-if="modeKey === 'recommend'" class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionRecommend') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descRecommend') }}</div>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.recommendTitle') }}</div>
+            <ol>
+              <li v-for="n in 4" :key="n">{{ t(`page.forecast.modules.recommendStep${n}`) }}</li>
+            </ol>
+          </div>
+        </section>
+
+        <section v-show="modeKey === 'periods'" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionPeriodsStrategy') }}</span>
             <IconTooltip icon="mdi-help-circle" placement="top">
@@ -2460,43 +2427,29 @@ onMounted(() => {
             </IconTooltip>
           </div>
           <div class="mod-sec-desc">{{ t('page.forecast.modules.descPeriodsStrategy') }}</div>
-          <div v-if="fixedHolds" class="live-note">{{ t('page.forecast.modules.heldByFixed') }}</div>
-          <NForm :model="form" label-placement="top">
-            <NFormItem :label="t('page.forecast.modules.timezone')">
-              <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
-            </NFormItem>
-          </NForm>
           <PeriodEditor ref="periodEditor" />
         </section>
 
-        <section class="mod-sec" :class="{ dim: fixedHolds }">
+        <section v-show="modeKey === 'triggers'" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionTriggers') }}</span>
           </div>
           <div class="mod-sec-desc">{{ t('page.forecast.modules.descTriggers') }}</div>
-          <div v-if="fixedHolds" class="live-note">{{ t('page.forecast.modules.heldByFixed') }}</div>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.triggerRulesTitle') }}</div>
+            <ol>
+              <li v-for="n in 5" :key="n">{{ t(`page.forecast.modules.triggerRule${n}`) }}</li>
+            </ol>
+          </div>
           <TriggerEditor ref="triggerEditor" />
         </section>
 
-        <section class="mod-sec">
+        <section v-if="modeKey === 'fixed'" class="mod-sec">
           <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.sectionOrder') }}</span>
+            <span>{{ t('page.forecast.modules.sectionFixed') }}</span>
           </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.descOrder') }}</div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descFixed') }}</div>
           <NForm :model="form" label-placement="top">
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.fixedReplicasEnabled') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">
-                      {{ t('page.forecast.modules.fixedReplicasEnabledHint') }}
-                    </div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <StatusSelect v-model:value="form.fixed_replicas_enabled" />
-            </NFormItem>
             <NFormItem>
               <template #label>
                 <span class="inline-flex items-center gap-4px">
@@ -2506,22 +2459,31 @@ onMounted(() => {
                   </IconTooltip>
                 </span>
               </template>
-              <NInputNumber
-                v-model:value="form.fixed_replicas"
-                :min="0"
-                :precision="0"
-                :disabled="!form.fixed_replicas_enabled"
-                class="w-full"
-              />
+              <NInputNumber v-model:value="form.fixed_replicas" :min="1" :precision="0" class="w-full" />
             </NFormItem>
           </NForm>
           <div class="live-note">{{ fixedNote }}</div>
-          <div class="order-box">
-            <div class="order-title">{{ t('page.forecast.modules.orderTitle') }}</div>
-            <ol>
-              <li v-for="n in 5" :key="n">{{ t(`page.forecast.modules.order${n}`) }}</li>
-            </ol>
+        </section>
+
+        <section class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.sectionNodePool') }}</span>
           </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.descNodePool') }}</div>
+          <NForm :model="form" label-placement="top">
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.nodePoolEnabled') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.nodePoolEnabledHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <StatusSelect v-model:value="form.node_pool_enabled" />
+            </NFormItem>
+          </NForm>
+          <div class="live-note">{{ t(`page.forecast.modules.nodePoolNote_${form.mode}`) }}</div>
         </section>
       </div>
       <template #footer>
@@ -2558,24 +2520,6 @@ onMounted(() => {
         <NSpace justify="end">
           <NButton @click="pickVisible = false">{{ t('common.cancel') }}</NButton>
           <NButton type="primary" @click="runPreview">{{ t('page.forecast.modules.previewMetric') }}</NButton>
-        </NSpace>
-      </template>
-    </NModal>
-
-    <!-- bypass reason -->
-    <NModal
-      :show="Boolean(bypassTarget)"
-      preset="card"
-      :title="t('page.forecast.modules.bypassTitle')"
-      class="w-520px max-w-90vw"
-      @update:show="value => !value && (bypassTarget = undefined)"
-    >
-      <div class="mb-8px text-13px opacity-80">{{ t('page.forecast.modules.bypassHint') }}</div>
-      <NInput v-model:value="bypassReason" type="textarea" :placeholder="t('page.forecast.modules.bypassReason')" />
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="bypassTarget = undefined">{{ t('common.cancel') }}</NButton>
-          <NButton type="warning" @click="confirmBypass">{{ t('common.confirm') }}</NButton>
         </NSpace>
       </template>
     </NModal>
@@ -2702,27 +2646,46 @@ onMounted(() => {
   opacity: 0.8;
 }
 
-.dim :deep(.trigger-editor),
-.dim :deep(.period-editor) {
-  opacity: 0.5;
-}
-.form-note {
-  margin: -8px 0 12px;
-}
-.strategy-tags {
+.decision-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-bottom: 6px;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.strategy-tag {
-  display: inline-flex;
+.decision-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  border-radius: 8px;
+}
+.decision-row.on {
+  border-color: var(--n-color-target, #18a058);
+  background: rgba(24, 160, 88, 0.06);
+}
+.decision-name {
+  display: flex;
   gap: 6px;
   align-items: center;
+  font-weight: 600;
 }
-.strategy-state {
+.decision-desc {
   font-size: 12px;
-  opacity: 0.7;
+  line-height: 20px;
+  opacity: 0.75;
+}
+.decision-blocked {
+  font-size: 12px;
+  color: #f0a020;
+}
+.mode-help {
+  max-width: 460px;
+  line-height: 22px;
+}
+.mode-help-row + .mode-help-row {
+  margin-top: 4px;
 }
 .flow-list {
   margin: 0;

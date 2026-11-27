@@ -306,6 +306,11 @@ declare namespace Api {
       fixed_replicas: number;
       /** whether the fixed count takes part: off, it is kept in the form and does not hold the replicas */
       fixed_replicas_enabled: boolean;
+      /** the time period strategy and the metric trigger strategy are on (with the fixed count, at most one of the three is) */
+      periods_enabled: boolean;
+      triggers_enabled: boolean;
+      /** the platform recommends a node pool for the Pod of the module */
+      node_pool_enabled: boolean;
       /** what the replicas and the Pod spec follow: the algorithm forecasts (the default) or the fixed formula of the resource analysis */
       decision_source: 'algorithm' | 'rule';
       headroom_ratio: number;
@@ -904,12 +909,13 @@ declare namespace Api {
       weight: number;
       /** the key of a metric source of the module, or jvm_heap_pressure */
       metric: string;
-      stat: 'last' | 'avg' | 'max' | 'min';
+      stat: 'last' | 'avg' | 'max' | 'min' | 'p90' | 'p95' | 'p99';
       window_minutes: number;
       operator: 'gt' | 'gte' | 'lt' | 'lte';
       threshold: number;
       action: 'scale_up' | 'scale_down' | 'set';
-      unit: 'replicas' | 'percent';
+      /** replicas / percent of the replicas that run / proportional: the count is worked out of the metric (running x value / threshold), at most `amount` replicas away */
+      unit: 'replicas' | 'percent' | 'proportional';
       amount: number;
       /** the days (a bit mask, 0 = every day) and the minutes of the day the trigger is in force; equal minutes = all day */
       weekdays: number;
@@ -1209,6 +1215,9 @@ declare namespace Api {
       /** kept as history (the first, every change, one an hour at least) and why */
       snapshot: boolean;
       snapshot_reason: string;
+      /** the node pool recommended for the Pod (0 and empty = none) */
+      node_pool_id: number;
+      node_pool: string;
     }
 
     type SnapshotState = 'pending' | 'applied' | 'failed' | 'expired' | 'advisory';
