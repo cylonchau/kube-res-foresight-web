@@ -121,6 +121,9 @@ const modeOptions = computed(() =>
     value
   }))
 );
+const decisionSourceOptions = computed(() =>
+  (['algorithm', 'rule'] as const).map(value => ({ label: t(`page.forecast.modules.decisionSource_${value}`), value }))
+);
 const predictModeOptions = computed(() =>
   (['dynamic', 'fixed', 'none'] as const).map(value => ({
     label: t(`page.forecast.modules.predictMode_${value}`),
@@ -250,6 +253,7 @@ function emptyForm() {
     fallback_replicas: 0,
     fixed_replicas: 0,
     fixed_replicas_enabled: false,
+    decision_source: 'algorithm' as 'algorithm' | 'rule',
     headroom_ratio: 1,
     limit_cpu_ratio: 0,
     limit_memory_ratio: 0,
@@ -941,6 +945,7 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     fallback_replicas: form.fallback_replicas,
     fixed_replicas: form.fixed_replicas,
     fixed_replicas_enabled: form.fixed_replicas_enabled,
+    decision_source: form.decision_source,
     headroom_ratio: form.headroom_ratio,
     limit_cpu_ratio: form.limit_cpu_ratio,
     limit_memory_ratio: form.limit_memory_ratio,
@@ -1629,6 +1634,20 @@ onMounted(() => {
             </NFormItem>
             <NFormItem :label="t('page.forecast.modules.mode')">
               <NSelect v-model:value="form.mode" :options="modeOptions" />
+            </NFormItem>
+            <NFormItem>
+              <template #label>
+                <span class="inline-flex items-center gap-4px">
+                  {{ t('page.forecast.modules.decisionSource') }}
+                  <IconTooltip icon="mdi-help-circle" placement="top">
+                    <div class="max-w-420px leading-22px">{{ t('page.forecast.modules.decisionSourceHint') }}</div>
+                  </IconTooltip>
+                </span>
+              </template>
+              <NSelect v-model:value="form.decision_source" :options="decisionSourceOptions" />
+              <div class="live-note w-full">
+                {{ t(`page.forecast.modules.decisionSourceNote_${form.decision_source}`) }}
+              </div>
             </NFormItem>
             <NFormItem v-if="clusters.length > 1">
               <template #label>

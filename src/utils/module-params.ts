@@ -140,6 +140,7 @@ const GROUPS: Array<{ key: string; rows: Descriptor[] }> = [
   {
     key: 'replicas',
     rows: [
+      { field: 'decision_source', kind: 'text', enumField: true },
       { field: 'replica_mode', kind: 'text', enumField: true },
       { field: 'fixed_replicas_enabled', kind: 'bool' },
       { field: 'fixed_replicas', kind: 'count' },

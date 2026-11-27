@@ -439,6 +439,15 @@ export const generatedRoutes: GeneratedRoute[] = [
           title: 'resource-analysis_overprovision-detail',
           i18nKey: 'route.resource-analysis_overprovision-detail'
         }
+      },
+      {
+        name: 'resource-analysis_rules',
+        path: '/resource-analysis/rules',
+        component: 'view.resource-analysis_rules',
+        meta: {
+          title: 'resource-analysis_rules',
+          i18nKey: 'route.resource-analysis_rules'
+        }
       }
     ]
   },

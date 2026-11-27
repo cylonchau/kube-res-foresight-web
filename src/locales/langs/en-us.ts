@@ -390,6 +390,7 @@ const local = {
     'forecast-results_effect': 'Effect report',
     'forecast-results_leaderboard': 'Measured leaderboard',
     'resource-analysis_overprovision': 'Resource dashboard',
+    'resource-analysis_rules': 'Fixed formula results',
     'resource-analysis_overprovision-detail': 'Module resource analysis',
     'resource-analysis_cluster-dashboard': 'Cluster dashboard',
     'forecast-actions': 'Recommendations and execution',
@@ -559,6 +560,103 @@ const local = {
       lastError: 'Last failure',
       failuresInRow: '{n} in a row',
       openEffect: 'Effect report'
+    },
+    rule: {
+      listTitle: 'Fixed formula results',
+      listHelp:
+        'The replicas each module needs and the CPU and memory Requests of one Pod, worked out by a fixed formula from the P90, P95 and P99 of the real use, with no forecast in it. It is a source of its own next to the algorithm forecasts, and each module follows one of the two. Each module has its newest calculation, the source it follows and how far the decision has gone.',
+      keyword: 'Search module, namespace, workload',
+      empty: 'No modules',
+      retry: 'Retry',
+      loadFailed: 'Could not be read',
+      disabled: 'disabled',
+      detail: 'Dispatch detail',
+      colName: 'Module',
+      colSource: 'Decision source',
+      colReplicas: 'Replicas (now → needed)',
+      colCertain: 'Confidence',
+      colPeriod: 'Period',
+      colChecked: 'Last calculated',
+      certain: 'Usable',
+      uncertain: 'Not certain',
+      mode: 'Mode',
+      state: 'Decision progress',
+      cpuRequest: 'CPU Requests',
+      memoryRequest: 'Memory Requests',
+      colCpu: 'CPU Requests (now → needed)',
+      colMemory: 'Memory Requests (now → needed)',
+      replicasOutranked:
+        'The replicas did not take the result of the formula: a source that ranks higher decides them ({source}: a fixed count, a fixed period, the bypass). The CPU and memory Requests of a Pod are not affected.',
+      source_algorithm: 'Algorithm forecast',
+      source_rule: 'Fixed formula',
+      mode_observe: 'Observe',
+      mode_recommend: 'Recommend',
+      mode_admission: 'Admission',
+      mode_auto: 'Auto',
+      state_not_followed: 'Formula not followed',
+      state_observe_only: 'Observe only',
+      state_unavailable: 'No usable calculation',
+      state_pending: 'Waiting to be taken',
+      state_recommended: 'Recommended',
+      state_admission: 'Applied at admission',
+      state_waiting_operator: 'Waiting for the Operator',
+      state_executed: 'Done by the Operator',
+      stateNote_not_followed:
+        'The module follows the algorithm forecasts; the result of the formula is shown for comparison and decides nothing.',
+      stateNote_observe_only:
+        'The module is in observe mode: the formula is calculated and shown, nothing is recommended and the cluster is not touched.',
+      stateNote_unavailable:
+        'The module follows the formula but there is no calculation it can take (none yet, too old or not certain); the algorithm forecasts decide.',
+      stateNote_pending: 'The calculation is made; the next run of the module takes it into a recommendation.',
+      stateNote_recommended:
+        'The recommendation took the result of the formula; in the recommend mode it is only shown and nothing is written to the cluster.',
+      stateNote_admission:
+        'The recommendation took the result of the formula; the CPU and memory of a Pod are written when the Pod is admitted, and the platform does not scale the replicas.',
+      stateNote_waiting_operator:
+        'The recommendation took the result of the formula; the Operator will scale to it and has not reported an action on it yet.',
+      stateNote_executed: 'The recommendation took the result of the formula and the Operator acted on it.',
+      modeEffect_observe: 'Observe: calculates and records; nothing is recommended and the cluster is not touched.',
+      modeEffect_recommend:
+        'Recommend: a recommendation is made and shown, nothing is written to the cluster; a person decides whether to apply it to the module.',
+      modeEffect_admission:
+        'Admission: the CPU and memory Requests of a Pod are written at admission as recommended; the replicas are not changed by the platform.',
+      modeEffect_auto:
+        'Auto: the Operator scales the replicas to the recommendation; the Requests of a Pod are still written at admission.',
+      dispatchTitle: 'Dispatch detail',
+      secSource: 'Decision source and mode',
+      secCompare: 'What the two sources say',
+      secPath: 'From calculation to execution',
+      module: 'Module',
+      followsSource: 'Follows',
+      now: 'Now',
+      difference: 'Difference',
+      replicas: 'Replicas',
+      basis:
+        'Basis: the use of one Pod over {period}, CPU P90 {p90}, P95 {p95}, P99 {p99}; memory P90 {m90}, P95 {m95}, P99 {m99}; calculated at {at}.',
+      notCertain: 'This calculation is not certain ({why}) and is not taken by the module.',
+      noCalculation: 'Nothing has been calculated yet: press Calculate now, or wait for the scheduled calculation.',
+      step_calculated: 'Formula calculated',
+      step_taken: 'Recommendation took it',
+      step_mode: 'Mode writes it to the cluster',
+      step_executed: 'Operator acted',
+      recommendation: 'Newest recommendation',
+      tookRule: 'took calculation #{id}',
+      noRecommendation: 'This module has no recommendation yet.',
+      executions: 'Actions of the Operator',
+      noExecutions: 'The Operator has not reported an action on a recommendation that took this calculation.',
+      time: 'Time',
+      action: 'Action',
+      fromTo: 'Replicas',
+      result: 'Result',
+      reason: 'Reason',
+      calculate: 'Calculate now',
+      switchToRule: 'Follow the fixed formula',
+      switchToAlgorithm: 'Follow the algorithm forecasts',
+      switchConfirmRule:
+        'From now on the replicas and the CPU and memory Requests of a Pod are those of the fixed formula (the mode {mode} says how far it goes, and the bounds on the replicas hold as before). Change it?',
+      switchConfirmAlgorithm:
+        'From now on the replicas and the CPU and memory Requests of a Pod are decided by the algorithm forecasts. Change it?',
+      switched: 'The module now follows {source}'
     },
     overprovision: {
       basisRaw1: 'raw {v}',
@@ -2186,6 +2284,9 @@ const local = {
           d_summary_memory_bytes: 'The memory Requests the newest recommendation snapshot sets.',
           f_summary_replicas: 'Replicas of the newest snapshot',
           d_summary_replicas: 'The replicas the newest recommendation snapshot sets.',
+          f_decision_source: 'Decision source',
+          d_decision_source:
+            'Whether the replicas and the CPU and memory Requests of a Pod follow the algorithm forecasts or the fixed formula of the P90, P95 and P99; one only.',
           f_replica_mode: 'Replica mode',
           d_replica_mode:
             'Fixed: the ceiling is the most replicas; dynamic: the ceiling may rise when the forecast needs more, up to the hard ceiling.',
@@ -2348,6 +2449,8 @@ const local = {
           d_max_fill_steps: 'The most steps a gap is filled for.',
           f_timezone: 'Time zone',
           d_timezone: 'The time zone of the periods and of the analysis by the hour.',
+          e_decision_source_algorithm: 'Algorithm forecast',
+          e_decision_source_rule: 'Fixed formula',
           e_replica_mode_fixed: 'Fixed',
           e_replica_mode_dynamic: 'Dynamic',
           e_max_replicas_mode_fixed: 'Fixed',
@@ -2674,6 +2777,15 @@ const local = {
         fixedReplicasEnabledHint:
           'On, the replicas stay at the fixed count; off, it is only stored and takes no part in any calculation, and the other strategies decide the replicas as usual. With no fixed count entered, switching on has no effect.',
         fixedReplicasRequired: 'With the fixed replicas on, enter a count above 0',
+        decisionSource: 'Decision source',
+        decisionSourceHint:
+          'Which source the replicas and the CPU and memory Requests of one Pod follow: the algorithm forecasts (from the metrics of the module, the default) or the fixed formula (worked out from the P90, P95 and P99 of the real use, with no forecast). The module follows one; the other is still calculated and shown and decides nothing. The calculations of the formula are in Resource analysis > Fixed formula results.',
+        decisionSource_algorithm: 'Algorithm forecast',
+        decisionSource_rule: 'Fixed formula (P90 / P95 / P99)',
+        decisionSourceNote_rule:
+          'Follows the fixed formula: the replicas and the Pod Requests are those of the newest certain calculation (made every 10 minutes; when it is older than 30 minutes or not certain the algorithm forecasts decide). The bypass, a fixed period and the fixed replicas rank above it; then the minimum and maximum replicas, the periods, the triggers and the pace of the scaling bound it, and the mode says how far it goes.',
+        decisionSourceNote_algorithm:
+          'Follows the algorithm forecasts: the replicas and the Pod Requests are decided by the prediction algorithms of the module; the fixed formula is shown for comparison.',
         fixedNoteOn:
           'On: the replicas stay at {n}; the forecast and the triggers do not change it; a fixed count in a period comes first, "at least" and "at most" windows still raise or lower it; the least and most replicas limit it last.',
         fixedNoteOffKept:

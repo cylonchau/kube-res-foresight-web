@@ -51,6 +51,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "resource-analysis_cluster-dashboard": () => import("@/views/resource-analysis/cluster-dashboard/index.vue"),
   "resource-analysis_overprovision-detail": () => import("@/views/resource-analysis/overprovision-detail/index.vue"),
   "resource-analysis_overprovision": () => import("@/views/resource-analysis/overprovision/index.vue"),
+  "resource-analysis_rules": () => import("@/views/resource-analysis/rules/index.vue"),
   system_config: () => import("@/views/system/config/index.vue"),
   system_diagnostics: () => import("@/views/system/diagnostics/index.vue"),
   "system_login-log": () => import("@/views/system/login-log/index.vue"),

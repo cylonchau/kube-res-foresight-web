@@ -208,6 +208,7 @@ const routeMap: RouteMap = {
   "resource-analysis_cluster-dashboard": "/resource-analysis/cluster-dashboard",
   "resource-analysis_overprovision": "/resource-analysis/overprovision",
   "resource-analysis_overprovision-detail": "/resource-analysis/overprovision-detail",
+  "resource-analysis_rules": "/resource-analysis/rules",
   "system": "/system",
   "system_config": "/system/config",
   "system_diagnostics": "/system/diagnostics",

@@ -306,6 +306,8 @@ declare namespace Api {
       fixed_replicas: number;
       /** whether the fixed count takes part: off, it is kept in the form and does not hold the replicas */
       fixed_replicas_enabled: boolean;
+      /** what the replicas and the Pod spec follow: the algorithm forecasts (the default) or the fixed formula of the resource analysis */
+      decision_source: 'algorithm' | 'rule';
       headroom_ratio: number;
       pod_capacity_rps: number;
       timezone: string;
