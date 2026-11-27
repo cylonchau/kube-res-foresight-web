@@ -332,9 +332,6 @@ declare namespace Api {
       max_shortfall: number;
       /** the lowest score an algorithm instance may have for its forecast to be used */
       min_score: number;
-      max_replicas_mode: MaxReplicasMode;
-      hard_max_replicas: number;
-      expand_step_ratio: number;
       min_gpu: number;
       max_gpu: number;
       fallback_gpu: number;
@@ -903,6 +900,8 @@ declare namespace Api {
       name: string;
       enabled: boolean;
       priority: number;
+      /** how much the trigger counts when triggers that scale out and triggers that scale in fire together (1 = one) */
+      weight: number;
       /** the key of a metric source of the module, or jvm_heap_pressure */
       metric: string;
       stat: 'last' | 'avg' | 'max' | 'min';

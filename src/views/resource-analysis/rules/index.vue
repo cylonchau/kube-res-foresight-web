@@ -98,11 +98,23 @@ function openDetail(row: Api.Rule.Row) {
 
 const dash = '-';
 const rule = (row: Api.Rule.Row) => row.rule;
-const replicasText = (row: Api.Rule.Row) => {
+const replicasNowText = (row: Api.Rule.Row) => {
+  const d = rule(row);
+  return d?.replicas_set && d.current_replicas ? String(d.current_replicas) : dash;
+};
+/** the replicas the formula needs, and how many more or fewer than now (the figures of the CPU and memory are in the detail) */
+const replicasNeedCell = (row: Api.Rule.Row) => {
   const d = rule(row);
   if (!d?.replicas_set) return dash;
-  const change = d.current_replicas ? ` (${d.replicas_delta > 0 ? '+' : ''}${d.replicas_delta})` : '';
-  return `${d.current_replicas || dash} → ${d.recommended_replicas}${change}`;
+  if (!d.current_replicas || d.replicas_delta === 0) return String(d.recommended_replicas);
+  return h('span', { class: 'inline-flex items-center gap-6px' }, [
+    String(d.recommended_replicas),
+    h(
+      NTag,
+      { size: 'tiny', bordered: false, type: d.replicas_delta > 0 ? 'warning' : 'info' },
+      () => `${d.replicas_delta > 0 ? '+' : ''}${d.replicas_delta}`
+    )
+  ]);
 };
 const cpuText = (row: Api.Rule.Row) => {
   const d = rule(row);
@@ -151,7 +163,8 @@ const columnMap: Record<string, any> = {
         r(`state_${row.state}`)
       )
   },
-  replicas: { title: r('colReplicas'), key: 'replicas', minWidth: 150, render: replicasText },
+  replicasNow: { title: r('colReplicasNow'), key: 'replicasNow', width: 110, render: replicasNowText },
+  replicasNeed: { title: r('colReplicasNeed'), key: 'replicasNeed', width: 130, render: replicasNeedCell },
   cpu: { title: r('colCpu'), key: 'cpu', minWidth: 150, render: cpuText },
   memory: { title: r('colMemory'), key: 'memory', minWidth: 150, render: memoryText },
   certain: {
@@ -188,7 +201,8 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'resource_analysis_rules',
   columnMap,
-  defaultKeys: ['name', 'source', 'mode', 'state', 'replicas', 'cpu', 'memory', 'certain', 'checked', 'operate'],
+  // the CPU and memory figures are in the detail of a module; they can be added to the list from the column settings
+  defaultKeys: ['name', 'source', 'mode', 'state', 'replicasNow', 'replicasNeed', 'certain', 'checked', 'operate'],
   columnMinWidths: { operate: 70 }
 });
 

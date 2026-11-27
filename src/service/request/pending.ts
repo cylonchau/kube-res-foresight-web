@@ -23,6 +23,16 @@ export function isPending(value: unknown): value is PendingBody {
   return Boolean(value) && typeof value === 'object' && (value as { pending?: unknown }).pending === true;
 }
 
+/**
+ * A gateway that gave up before the platform answered (502, 503, 504 with no message of the platform's own): the platform goes on with the read by itself and keeps its answer,
+ * so the read is asked again instead of being shown as a failure.
+ */
+export function isGatewayCut(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; data?: { msg?: string } } } | null)?.response;
+  const status = response?.status;
+  return (status === 502 || status === 503 || status === 504) && !response?.data?.msg;
+}
+
 export interface UntilAnsweredOptions {
   /** the most it waits in all; the platform works for at most 5 minutes by default (http.background_read_seconds) */
   maxWaitMs?: number;
@@ -32,6 +42,8 @@ export interface UntilAnsweredOptions {
   cancelled?: () => boolean;
   /** how long to wait between two asks when the platform does not say */
   defaultDelayMs?: number;
+  /** a gateway cut is treated like "still being worked out" (for the reads the platform goes on with by itself) */
+  retryGatewayCut?: boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -49,12 +61,19 @@ export async function untilAnswered<R extends { data: unknown; error: unknown }>
   call: () => Promise<R>,
   options: UntilAnsweredOptions = {}
 ): Promise<R> {
-  const { maxWaitMs = DEFAULT_MAX_WAIT_MS, onWait, cancelled, defaultDelayMs = 3000 } = options;
+  const {
+    maxWaitMs = DEFAULT_MAX_WAIT_MS,
+    onWait,
+    cancelled,
+    defaultDelayMs = 3000,
+    retryGatewayCut = false
+  } = options;
   const sleep = options.sleep ?? sleepFor;
   const now = options.now ?? Date.now;
   const started = now();
   let result = await call();
-  while (isPending(result.data)) {
+  const stillWorking = (r: R) => isPending(r.data) || (retryGatewayCut && isGatewayCut(r.error));
+  while (stillWorking(result)) {
     if (cancelled?.()) return result;
     const waited = now() - started;
     if (waited >= maxWaitMs) {
@@ -64,8 +83,9 @@ export async function untilAnswered<R extends { data: unknown; error: unknown }>
         error: new Error('The platform is still reading from Prometheus; try again in a moment.')
       };
     }
-    onWait?.(Math.round(waited / 1000), result.data.progress);
-    const delay = (result.data.retry_after_seconds ?? 0) * 1000 || defaultDelayMs;
+    const body = isPending(result.data) ? result.data : null;
+    onWait?.(Math.round(waited / 1000), body?.progress);
+    const delay = (body?.retry_after_seconds ?? 0) * 1000 || defaultDelayMs;
     await sleep(delay);
     if (cancelled?.()) return result;
     result = await call();

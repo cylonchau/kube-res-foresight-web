@@ -15,6 +15,7 @@ import { useRouterPush } from '@/hooks/common/router';
 import { fetchGetGrafanaSettings, fetchGetModuleOverprovision } from '@/service/api';
 import { useTabStore } from '@/store/modules/tab';
 import { buildAnalysisQuestion } from '@/utils/overprovision-ai';
+import { type ApplyCaliber, type ApplyScheme } from '@/utils/overprovision-apply';
 import { progressParams } from '@/utils/pending-text';
 import { DEFAULT_WINDOW_LABEL, rangeOfLabel, windowOf } from '@/utils/overprovision-window';
 import { grafanaUrl } from '@/utils/resource-links';
@@ -63,6 +64,13 @@ function reasonOf(error: unknown) {
 
 /** the recommendations put in the module (its parameters change, so the analysis is read again) */
 const applyShow = ref(false);
+const applyScheme = ref<ApplyScheme>('replicas');
+const applyCaliber = ref<ApplyCaliber>('all');
+function openApply(scheme: ApplyScheme, caliber: ApplyCaliber) {
+  applyScheme.value = scheme;
+  applyCaliber.value = caliber;
+  applyShow.value = true;
+}
 let detailSeq = 0;
 /** how many seconds the platform has been reading from Prometheus for this page, 0 when it answered at once */
 const waitedSeconds = ref(0);
@@ -182,9 +190,6 @@ onMounted(() => {
             }}
           </span>
           <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
-          <NButton size="small" type="primary" secondary :disabled="!detail || detailLoading" @click="applyShow = true">
-            {{ p('applyButton') }}
-          </NButton>
           <NButton size="small" secondary :loading="detailLoading" @click="loadDetail">{{ p('reload') }}</NButton>
         </div>
       </div>
@@ -198,6 +203,7 @@ onMounted(() => {
           :basis="opts.basis"
           :error="detailError"
           @retry="loadDetail"
+          @apply="openApply"
         />
       </NCard>
     </div>
@@ -206,6 +212,8 @@ onMounted(() => {
       v-model:show="applyShow"
       :module-id="moduleId"
       :detail="detail"
+      :scheme="applyScheme"
+      :caliber="applyCaliber"
       @applied="loadDetail"
     />
 

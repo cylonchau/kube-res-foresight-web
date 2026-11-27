@@ -101,3 +101,33 @@ test('what the platform says of how far its work has come is handed on with the 
     [0, undefined]
   ]);
 });
+
+test('a gateway that cut the read is asked again, only when the caller says the platform goes on by itself', async () => {
+  const cut = { data: null, error: { response: { status: 504, data: {} } } };
+  const answers = [cut, cut, done({ rows: 1 })];
+  let calls = 0;
+  const result = await untilAnswered(async () => answers[calls++], { retryGatewayCut: true, sleep: async () => {} });
+  assert.deepEqual(result.data, { rows: 1 });
+  assert.equal(calls, 3);
+
+  // not asked for: the failure is returned as it is
+  calls = 0;
+  const plain = await untilAnswered(async () => {
+    calls += 1;
+    return cut;
+  });
+  assert.equal(calls, 1);
+  assert.equal(plain.error, cut.error);
+
+  // an answer of the platform itself (it has a message) is a real failure, never asked again
+  calls = 0;
+  const own = { data: null, error: { response: { status: 504, data: { msg: 'read timed out: narrow the window' } } } };
+  await untilAnswered(
+    async () => {
+      calls += 1;
+      return own;
+    },
+    { retryGatewayCut: true, sleep: async () => {} }
+  );
+  assert.equal(calls, 1);
+});

@@ -26,6 +26,7 @@ interface Row {
   name: string;
   enabled: boolean;
   priority: number;
+  weight: number;
   metric: string;
   stat: Trigger['stat'];
   window: number;
@@ -46,6 +47,7 @@ const original = ref<number[]>([]);
 const sources = ref<Api.Forecast.DatasetSource[]>([]);
 
 const JVM_HEAP = 'jvm_heap_pressure';
+const RULE_GAP = 'rule_replicas_gap';
 
 const metricOptions = computed(() => [
   ...sources.value
@@ -55,7 +57,8 @@ const metricOptions = computed(() => [
       label: `${item.name} · ${$t(`page.datasource.mappings.metric_${item.kind}` as any, item.kind)}`,
       value: item.key
     })),
-  { label: $t('page.forecast.triggers.jvmHeapPressure'), value: JVM_HEAP }
+  { label: $t('page.forecast.triggers.jvmHeapPressure'), value: JVM_HEAP },
+  { label: $t('page.forecast.triggers.ruleGap'), value: RULE_GAP }
 ]);
 const statOptions = computed(() =>
   (['last', 'avg', 'max', 'min'] as const).map(value => ({ label: $t(`page.forecast.triggers.stat_${value}`), value }))
@@ -78,6 +81,7 @@ const dayOptions = computed(() =>
 
 const unitOf = (row: Row) => {
   if (row.metric === JVM_HEAP) return 'ratio 0-1';
+  if (row.metric === RULE_GAP) return $t('page.forecast.triggers.ruleGapUnit');
   return sources.value.find(item => item.key === row.metric)?.unit ?? '';
 };
 
@@ -96,6 +100,7 @@ function fromTrigger(t: Trigger): Row {
     name: t.name,
     enabled: t.enabled,
     priority: t.priority,
+    weight: t.weight || 1,
     metric: t.metric,
     stat: t.stat,
     window: t.window_minutes,
@@ -135,6 +140,7 @@ function add() {
     name: $t('page.forecast.triggers.defaultName', { n: rows.value.length + 1 }),
     enabled: true,
     priority: 0,
+    weight: 1,
     metric: sources.value[0]?.key ?? JVM_HEAP,
     stat: 'avg',
     window: 15,
@@ -171,6 +177,7 @@ function payload(row: Row): Api.Forecast.TriggerPayload {
     name: row.name.trim(),
     enabled: row.enabled,
     priority: Math.round(row.priority || 0),
+    weight: row.weight > 0 ? row.weight : 1,
     metric: row.metric,
     stat: row.stat,
     window_minutes: Math.round(row.window),
@@ -207,7 +214,10 @@ async function save(id: number): Promise<boolean> {
 /** the rows as they are, for a copy of the module */
 const current = () => rows.value.map(payload);
 
-defineExpose({ load, save, problem, refreshSources, current });
+/** how many triggers are switched on (for the summary of the strategies of the module) */
+const summary = () => ({ total: rows.value.filter(row => row.enabled).length });
+
+defineExpose({ load, save, problem, refreshSources, current, summary });
 </script>
 
 <template>
@@ -230,6 +240,13 @@ defineExpose({ load, save, problem, refreshSources, current });
           :show-button="false"
           class="trigger-num"
         />
+        <span class="inline-flex items-center gap-4px text-12px opacity-80">
+          {{ $t('page.forecast.triggers.weight') }}
+          <IconTooltip icon="mdi-help-circle" placement="top">
+            <div class="max-w-360px leading-22px">{{ $t('page.forecast.triggers.helpWeight') }}</div>
+          </IconTooltip>
+        </span>
+        <NInputNumber v-model:value="row.weight" size="small" :min="0.1" :max="100" :step="0.5" class="trigger-num" />
         <NButton size="small" quaternary type="error" @click="rows.splice(index, 1)">{{ $t('common.delete') }}</NButton>
       </div>
       <div class="trigger-line">
@@ -295,6 +312,7 @@ defineExpose({ load, save, problem, refreshSources, current });
         </template>
       </div>
     </div>
+    <div v-if="rows.length > 1" class="vote-note">{{ $t('page.forecast.triggers.voteRule') }}</div>
     <NButton size="small" dashed class="mt-6px" :disabled="!moduleId" @click="add">
       {{ $t('page.forecast.triggers.add') }}
     </NButton>
@@ -302,6 +320,13 @@ defineExpose({ load, save, problem, refreshSources, current });
 </template>
 
 <style scoped>
+.vote-note {
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  opacity: 0.75;
+}
+
 .trigger-card {
   display: grid;
   gap: 6px;

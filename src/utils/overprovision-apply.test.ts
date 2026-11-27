@@ -83,3 +83,36 @@ test('the form keeps the memory in MiB and everything else as the module does', 
   assert.deepEqual(formField({ field: 'min_replicas', value: 3 }), { key: 'min_replicas', value: 3 });
   assert.deepEqual(formField({ field: 'limit_cpu_ratio', value: 1.5 }), { key: 'limit_cpu_ratio', value: 1.5 });
 });
+
+test('the replicas and the Pod are two ways, each with its own items', () => {
+  assert.deepEqual(
+    applyItems(detail, 'replicas').map(item => item.key),
+    ['replicas', 'normalReplicas', 'peakReplicas']
+  );
+  assert.deepEqual(
+    applyItems(detail, 'config').map(item => item.key),
+    ['cpuRequests', 'cpuLimits', 'memoryRequests', 'memoryLimits']
+  );
+});
+
+test('a caliber takes the figures of that percentile alone, not the largest of the three', () => {
+  const withCaliber = {
+    recommend: {
+      cpu: {
+        suggested: 4.45,
+        suggested_limit: 8.9,
+        candidates: [
+          { name: 'P90', suggested: 3, suggested_limit: 6 },
+          { name: 'P99', suggested: 4.45, suggested_limit: 8.9 }
+        ]
+      },
+      memory: null,
+      replica_plan: { needed: 13, by_caliber: { P90: { needed: 9 } } }
+    },
+    windows: []
+  } as unknown as Api.Overprovision.Detail;
+  assert.equal(applyItems(withCaliber, 'config', 'P90')[0].targets[0].value, 3000);
+  assert.equal(applyItems(withCaliber, 'config', 'all')[0].targets[0].value, 4450);
+  assert.equal(applyItems(withCaliber, 'replicas', 'P90')[0].recommended, 9);
+  assert.deepEqual(applyItems(withCaliber, 'config', 'P95'), [], 'a percentile with no figure offers nothing');
+});

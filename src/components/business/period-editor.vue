@@ -208,7 +208,14 @@ async function save(moduleId: number): Promise<boolean> {
   return ok;
 }
 
-defineExpose({ load, save, problem });
+/** how many periods are in force and how they act on the replicas: a "fixed" one gives the count, a floor or a cap only bounds it (for the summary of the strategies of the module) */
+const summary = () => {
+  const on = rows.value.filter(row => row.enabled);
+  const fixing = on.filter(row => row.mode === 'fixed' && row.replicas > 0).length;
+  return { total: on.length, fixing, bounding: on.filter(row => row.mode !== 'fixed' && row.replicas > 0).length };
+};
+
+defineExpose({ load, save, problem, summary });
 </script>
 
 <template>

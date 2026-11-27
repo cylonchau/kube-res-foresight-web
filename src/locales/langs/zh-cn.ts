@@ -385,7 +385,7 @@ const local = {
     'forecast-results_evaluations': '实测评估记录',
     'forecast-results_leaderboard': '实测排行榜',
     'resource-analysis_overprovision': '资源大盘',
-    'resource-analysis_rules': '固定公式结果',
+    'resource-analysis_rules': '资源评估（固定公式）',
     'resource-analysis_overprovision-detail': '模块资源分析',
     'resource-analysis_cluster-dashboard': '集群大盘',
     'forecast-actions': '推荐与执行',
@@ -564,7 +564,8 @@ const local = {
       detail: '调度详情',
       colName: '模块',
       colSource: '决策来源',
-      colReplicas: '副本数（现在 → 需要）',
+      colReplicasNow: '当前副本',
+      colReplicasNeed: '需要副本',
       colCertain: '可信度',
       colPeriod: '计算周期',
       colChecked: '最近计算',
@@ -699,8 +700,8 @@ const local = {
       oomScoreHelp:
         '100 × (1 − OOM 次数 × {weight})，最低 0。它是预测算法的内存评分：OOM 会扣算法的评分，影响平台跟随哪个算法，不改这个页面的推荐 Requests 和副本数。改推荐值的是“OOM 保护下限”卡片。',
       caliberLabel: '计算口径',
-      caliberAll: '综合',
-      caliberAllColumn: '综合',
+      caliberAll: 'MAX',
+      caliberAllColumn: 'MAX',
       colByPercentile: '按 {c} 推荐',
       adviceTitle: 'AI 建议',
       adviceHelp:
@@ -725,7 +726,7 @@ const local = {
       basisCandidateLineNoMargin:
         '{c}：使用量 {use} ÷ 目标占比 {target} = 需要 {need}（目标占比不低于 100%，不留余量；短时超出 Requests 的部分由 Limits 承担）→ 推荐 {rec}{decides}',
       basisCandidateDecides: '（三者中最大，由它决定）',
-      basisRequestsFinal: '综合：取 P90、P95、P99 里最大的，再按模块的边界调整 → {rec}',
+      basisRequestsFinal: 'MAX：取 P90、P95、P99 各自算出的需求里最大的一个，再按模块的边界调整 → {rec}',
       basisLimitCandidate: '{c}：按它的峰值算的 Limits = {limit}',
       requestBasisAll: '取 P90、P95、P99 各自算出的 Requests 里最大的，再加余量；点“计算依据”看每一步。',
       requestBasisOne: '按 {c}：使用量 {use} ÷ 目标占比 {target} = {need}',
@@ -782,9 +783,9 @@ const local = {
         '按时段调整（常态 + 高峰时段加到最忙的数量），比全天保持 {peak} 个副本，副本小时约少 {saved}。扩缩容要有提前量和冷却，实际省的会少一些。',
       profileFlat:
         '各小时需要的副本数相近（或高于常态的时段省不了多少），没有按时段调整的空间；这时全天的副本数由最忙的那个资源决定，比如内存常驻、CPU 有高峰。',
-      caliberAllName: '综合',
+      caliberAllName: 'MAX',
       caliberHelp:
-        '推荐值可以按哪个百分位算：P90、P95、P99 各算一个，“综合”是三个里需求最大的那个（平台的推荐值就是它，再经过模块的边界）。选了某个口径，“调整”一列和计算依据都按它更新；上面每一列是各口径单独算的结果。',
+        '推荐值可以按哪个百分位算：P90、P95、P99 各算一个，MAX 是这三个结果里取最大的那个（对副本数是最大的副本数，对 CPU、内存是最大的 Requests；平台的推荐值就是它，再经过模块的边界）。选了某个口径，“调整”一列、计算依据和“应用到模块”都按它；表里每一列是各口径单独算的结果。',
       repCount: '{n} 个副本',
       replicasNeedBy: '按{r}算需要',
       repRecommendedRow: '推荐副本数',
@@ -1415,9 +1416,17 @@ const local = {
       clusterAllocatable: '可分配',
       clusterMissing: '{n} 个集群指标没有在「指标模板」里声明（指标类型选“集群指标”），所以没有查它：',
       applyButton: '应用到模块',
+      applyReplicas: '应用到模块',
+      applyConfig: '应用到模块',
       applyTitle: '把资源大盘的推荐应用到模块',
+      applyTitleReplicas: '调整副本数：应用到模块（{caliber}）',
+      applyTitleConfig: '调整单 Pod 配置：应用到模块（{caliber}）',
       applyDesc:
         '勾选要应用的推荐，每一项放到模块的哪个参数可以选；应用后改的是模块的参数，集群里的工作负载不会被改动。',
+      applyDescReplicas:
+        '只应用副本数：单个 Pod 的 CPU、内存 Requests 和 Limits 不动。数字按页面上选的计算口径（{caliber}）。',
+      applyDescConfig:
+        '只应用单个 Pod 的 CPU、内存 Requests 和 Limits 比例：副本数不动。数字按页面上选的计算口径（{caliber}）。',
       applyEnabled: '这个模块已启用，改动保存后会马上参与计算。',
       applyEmpty: '资源大盘还没有可应用的推荐（还没读到使用量，或数据不够）。',
       applyNone: '至少勾选一项',
@@ -1448,8 +1457,9 @@ const local = {
       applyField_max_replicas: '最大副本数',
       applyField_fallback_replicas: '降级默认副本数',
       applyField_fixed_replicas: '固定副本数（同时开启）',
-      slowRead: 'Prometheus 读取较慢，平台在后台继续读，已等待 {n} 秒',
-      slowReadProgress: 'Prometheus 读取较慢，平台在后台继续读：{stage} 已完成 {done}/{total}，已等待 {n} 秒',
+      slowRead: 'Prometheus 读取较慢，平台在后台继续读，读完自动显示，已等待 {n} 秒',
+      slowReadProgress:
+        'Prometheus 读取较慢，平台在后台继续读，读完自动显示：{stage} 已完成 {done}/{total}，已等待 {n} 秒',
       readStage_metrics: '指标查询',
       readStage_modules: '模块',
       reload: '刷新',
@@ -2000,6 +2010,13 @@ const local = {
         saveFirst: '触发策略读取模块自己的指标。先保存模块并添加指标，再回来添加触发策略。',
         add: '添加触发策略',
         defaultName: '触发策略 {n}',
+        voteResult:
+          '扩容和缩容的触发策略同时触发，计分（权重 × 超过阈值的程度）：扩容 {up}，缩容 {down}，大的一方决定方向。',
+        weight: '权重',
+        helpWeight:
+          '扩容和缩容的触发策略同时触发时，每条按“权重 × 超过阈值的程度”计分（刚越过阈值算 1 倍，越过阈值一倍以上算 2 倍），分数合计大的一方决定方向，分数相同按扩容。更相信哪个指标，就把它的权重调大。例：容器内存使用率高（权重 3，扩容）和 JVM 已用堆很低（权重 1，缩容）同时触发，扩容获胜；JVM Committed 高但 Used 低只说明 JVM 预留了内存，不是缺内存，给它缩容或不设扩容即可，不要让它单独触发扩容。',
+        voteRule:
+          '几条触发策略同时触发时：扩容和缩容各自合计“权重 × 超过阈值的程度”，大的一方决定方向，相同按扩容；设定副本数的按优先级；OOM、JVM 堆压力等保护会让缩容退出比较。',
         priority: '优先级',
         helpPriority:
           '几条触发策略同时要求不同的副本数时，优先级高的先算（设定副本数的取优先级最高的，同级取较大的）。数字越大优先级越高。',
@@ -2010,6 +2027,8 @@ const local = {
         replicasWord: '个副本',
         inForce: '生效时间',
         always: '每天全天',
+        ruleGap: '资源评估的副本数差（需要的副本数 − 现在运行的副本数）',
+        ruleGapUnit: '个副本，正数是资源评估要更多',
         jvmHeapPressure: 'JVM 堆占用率（堆已用 ÷ 堆上限）',
         stat_last: '最新值',
         stat_avg: '平均值',
@@ -2081,15 +2100,6 @@ const local = {
         copyNotCopied:
           "不会复制：名称、描述、集群、命名空间、工作负载、服务、容器（模块是谁）；启用状态、模式、旁路；Operator 读到的 Pod 规格；预测是否开启。指标来源只复制写了 {'{{namespace}}'} 或 {'{{workload}}'} 的模板，查询里写死了某个工作负载的会跳过并说明；同名的来源和时间周期保持原样。",
         copyRun: '复制',
-        recommendTitle: '按资源大盘的推荐填写',
-        recommendDesc:
-          '读取这个模块在资源大盘上的推荐（Requests、Limits 系数、副本数），勾选后填进下面的表单；填入后可以再改，保存后才生效。',
-        recommendRead: '读取资源大盘的推荐',
-        recommendFill: '填入表单（{n} 项）',
-        recommendFilled: '已填入 {n} 项，保存后生效',
-        recommendWaiting: 'Prometheus 读取较慢，已等待 {n} 秒',
-        recommendWaitingProgress: 'Prometheus 读取较慢：{stage} 已完成 {done}/{total}，已等待 {n} 秒',
-        recommendFailed: '读不到资源大盘的数据',
         batchCopy: '复制配置到所选模块',
         batchCopyTitle: '把一个模块的配置复制到所选的 {n} 个模块',
         batchCopyDesc:
@@ -2187,12 +2197,6 @@ const local = {
           d_min_replicas: '副本数不会低于它（硬下限）。',
           f_max_replicas: '最大副本数',
           d_max_replicas: '平时副本数不会高于它。',
-          f_max_replicas_mode: '最大副本数模式',
-          d_max_replicas_mode: '固定：最大副本数就是上限；动态：预测需要更多时上限可以抬高。',
-          f_hard_max_replicas: '硬上限',
-          d_hard_max_replicas: '动态扩展下，任何情况都不会超过的副本数。',
-          f_expand_step_ratio: '上限扩展速度',
-          d_expand_step_ratio: '动态扩展下，上限每个周期最多抬高当前上限的这个比例。',
           f_min_cpu_milli: 'CPU 下限',
           d_min_cpu_milli: '推荐的 CPU Requests 不会低于它。',
           f_max_cpu_milli: 'CPU 上限',
@@ -2324,8 +2328,6 @@ const local = {
           e_decision_source_rule: '固定公式',
           e_replica_mode_fixed: '固定',
           e_replica_mode_dynamic: '动态',
-          e_max_replicas_mode_fixed: '固定',
-          e_max_replicas_mode_dynamic: '动态',
           e_capacity_mode_manual: '手动',
           e_capacity_mode_estimate: '估算',
           e_predict_mode_none: '不预测',
@@ -2354,20 +2356,17 @@ const local = {
         replicaOrderTitle: '副本数的生效顺序',
         replicaOrder1:
           '各来源先给出目标副本数：旁路、时间周期里“固定”的副本数、固定副本数（开关开启时）最优先；其余由预测（预测不可用时用降级默认值）得出，再由指标触发、时间周期里的“至少 / 至多”调整。',
-        replicaOrder2: '最小副本数是下限，最大副本数是日常上限。',
+        replicaOrder2: '最小副本数是下限，最大副本数是允许扩容的上限：模块只有这一个最大值。',
         replicaOrder3:
-          '“动态扩展”：预测需要的副本数超过最大副本数、且算法评分不低于最低综合分时，上限每个周期最多抬高到 ⌈当前上限 × (1 + 上限扩展速度)⌉，不超过硬上限；预测回落，上限回到最大副本数。硬上限是任何情况都不能越过的绝对上限，只在“动态扩展”下存在。',
-        replicaOrder4: 'Operator 再核对平台给出的硬下限和硬上限；副本数在最小、最大范围之外会被直接纠正，不等冷却。',
+          '最大副本数是任何情况下都不能越过的上限，扩容到它为止；没有第二个“硬上限”，也没有会自己抬高的上限。',
+        replicaOrder4: 'Operator 再核对平台当前给出的最小、最大副本数；副本数在这个范围之外会被直接纠正，不等冷却。',
         replicaOrder5: '缩容前所有副本必须 Ready；然后看冷却，距上一次同方向动作不够久，这次就不动。',
         replicaOrder6:
           '最后限制步长：一次最多增减“单次最大步长”个，剩下的下个周期继续；实测负载高于预测的紧急扩容不受冷却和步长限制。',
         sectionBounds: '副本边界',
         descBounds:
           '最小、最大副本数同时约束正常扩缩容和降级：预测、时间周期、指标触发、降级默认值给出的结果都不会越过它们。',
-        boundsFixed:
-          '当前设置：副本数在 {min} 到 {max} 之间，最多不超过 {max}。硬上限和上限扩展速度只在“动态扩展”下使用，现在不生效。',
-        boundsDynamic:
-          '当前设置：平时最多 {max} 个副本；预测需要更多时，上限每个周期最多抬高 {step} 个（当前上限的 {ratio}），最高到硬上限 {hard}，副本数永远不会超过硬上限。',
+        boundsFixed: '当前设置：副本数在 {min} 到 {max} 之间，扩容最多到 {max}。',
         boundsMissing: '当前设置：{what}还没有填，副本数没有{side}限制。',
         boundsMissingMin: '最小副本数',
         boundsMissingMax: '最大副本数',
@@ -2376,15 +2375,7 @@ const local = {
         minReplicasHint:
           '最小副本数：预测、时间周期、指标触发和降级默认值给出的结果都不会低于它，缩容的底线。0 不限制。',
         maxReplicasHint:
-          '日常最大副本数：任何来源的结果都不会高于它。“固定”方式下它就是最终上限；“动态扩展”下它是起点，上限可以逐周期抬高到硬上限。0 不限制。',
-        maxReplicasModeHint:
-          '固定：最大副本数就是上限。动态扩展：预测需要的副本数超过最大副本数时，上限可以逐周期抬高，但永远不超过硬上限。',
-        hardMaxReplicas: '硬上限副本数',
-        hardMaxReplicasHint:
-          '只在“动态扩展”下使用：上限被抬高后绝对不能超过的副本数，必须不低于最大副本数。例：最多 15、硬上限 25，平时最多 15 个，预测要更多时逐周期抬高，最高 25。方式是“固定”时它不起作用，也不显示。',
-        expandStepRatio: '上限扩展速度（每周期）',
-        expandStepRatioHint:
-          '动态扩展时每个周期把上限最多抬高当前上限的这个比例（0.25 = 25%），例如 15 → 19 → 24 → 25。它抬高的是“允许的最大副本数”，不是副本数本身；每次实际增减几个副本由“副本调整节奏”限制，两者管的不是同一件事。',
+          '最大副本数：允许扩容到的上限，任何来源（预测、固定公式、时间周期、指标触发、降级默认值）的结果都不会高于它；固定副本数模式下也不能超过它。0 不限制。',
         paceUp: '扩容',
         paceDown: '缩容',
         paceBoth: '{dir}：每次最多 {step} 个，两次至少隔 {sec} 秒，所以最快每小时 {hour} 个。',
@@ -2409,7 +2400,6 @@ const local = {
           '预测或平台不可用（模型故障、数据不足、推荐过期、平台失联）时才使用的默认值。降级给出的副本数同样受“副本边界”约束，并且只增不减；预测恢复后要连续正常几个周期才切回。',
         sectionApply: '推荐的有效期与评分',
         capNew: '保存模块、采集到历史数据后，这里才会算出单 Pod 的容量和总容量；现在不显示没有依据的数字。',
-        capUnsavedEstimate: '改成“从历史估计”后保存，才会按历史算出。',
         capCardUtil: '单 Pod 请求利用率',
         capCardPod: '单 Pod 安全容量',
         capCardMin: '最小安全总容量',
@@ -2418,26 +2408,17 @@ const local = {
         capUtilNotSet: '没有填容量保留系数，按 100% 计算（不保留余量）',
         capPodManualSub: '你填的值，单位 RPS（每秒请求数）',
         capPodNotSet: '“单 Pod 安全容量”没有填',
-        capPodEstimateSub: '{used} 个忙碌时刻 / {samples} 个样本，最近 {days} 天',
-        capPodInsufficientSub: '只有 {used} 个忙碌时刻，至少需要 {min} 个',
         capTotalSub: '{replicas} 个副本 × {rps} RPS',
         capTotalNoReplicas: '{what}没有填，算不出总容量',
         capTotalNoPod: '单 Pod 安全容量还没有，总容量算不出',
-        capTotalHard: '动态扩展最高到硬上限 {hard} 个副本，即 {total} RPS',
         capMeaningUtil: 'Pod 的请求量里最多允许被使用到的比例，也就是你在“计算系数”里填的容量保留系数。',
         capSourceUtil: '配置值（计算系数里的容量保留系数），不是测出来的；没填就没有数字，不用没有依据的默认值。',
         capFormulaUtil: '单 Pod 请求利用率',
         capPeriodUtil: '不统计周期：它是配置值，改了以后下一次推荐就用新值。',
         capMeaningPod: '一个就绪 Pod 能安全承载的每秒请求数（RPS，Requests Per Second）。',
         capSourcePodManual: '你在“单 Pod 安全容量（RPS）”里填的值，应当来自压测或受控观测。',
-        capSourcePodEstimate:
-          '从 Prometheus 采集到的历史估计：每个时刻的请求量、就绪副本数和 CPU 用量（需要这三个指标，并填了每个 Pod 的 CPU 请求值）。',
         capFormulaPodManual: '单 Pod 安全容量',
-        capFormulaPodEstimate: '单 Pod 安全容量',
-        capRuleEstimate: 'P50（请求量 ÷ 副本数 × 容量保留系数 ÷ Pod CPU 饱和度）',
         capPeriodPodManual: '不统计周期：它是配置值。',
-        capPeriodPodEstimate:
-          '最近 {days} 天的历史；只取 Pod CPU 用到“容量保留系数 × 请求值”的 {busy} 以上的忙碌时刻，至少 {min} 个才估计，不够就说明缺什么，不编数。',
         capMeaningTotal: '这些副本一起能安全承载的每秒请求数。',
         capSourceTotal: '副本边界里的最小、最大副本数，乘以单 Pod 安全容量。',
         capFormulaMin: '最小安全总容量',
@@ -2537,6 +2518,60 @@ const local = {
         addTitle: '新增预测模块',
         editTitle: '编辑预测模块',
         required: '请填写名称、命名空间和工作负载',
+        guideTitle: '先填这几项',
+        guide_workload: '命名空间和工作负载：模块管的是哪一个工作负载',
+        guide_podRequests: '单个 Pod 的 CPU、内存 Requests：副本数和资源的计算都以它为基础',
+        guide_replicaBounds: '最小、最大副本数：最大副本数是允许扩容的上限，必须填',
+        capPodReference: '历史推断约 {rps} RPS（只供参考，不参与计算）',
+        flowTitle: '副本数怎么算（按现在的设置）',
+        flowFixed: '固定容量公式：副本数 = ⌈预测峰值 RPS × 推荐值系数 {headroom} ÷ 单 Pod 安全容量 {cap}⌉',
+        flowFixedOff: '固定容量公式：单 Pod 安全容量没填，算不出副本数，副本数由降级默认值决定',
+        flowThroughputOn: '吞吐：⌈预测峰值 RPS × {headroom} ÷ {cap} RPS⌉（需要模块有 RPS 指标）',
+        flowThroughputOff: '吞吐：不参与（没填单 Pod 安全容量）',
+        flowCpuOn: 'CPU：⌈预测 CPU 峰值 × {headroom} ÷（单 Pod CPU Requests {request} 毫核 × 目标利用率）⌉',
+        flowCpuOff: 'CPU：不参与（没填单 Pod 的 CPU Requests）',
+        flowMemoryOn: '内存：⌈预测内存峰值 × {headroom} ÷（单 Pod 内存 Requests {request} MiB × 目标利用率）⌉',
+        flowMemoryOff: '内存：不参与（没填单 Pod 的内存 Requests）',
+        flowJvmOn:
+          'JVM 堆：堆已用 ÷ 堆上限超过 {threshold} 时，副本数按 压力 ÷ 阈值 的比例上调（需要 jvm_heap_used 和 jvm_heap_max 两个指标）',
+        flowJvmOff: 'JVM 堆：不参与（阈值是 0）',
+        flowResult:
+          '取参与的几项里最大的，再放进最小 {min}、最大 {max} 个副本之内；一项都没有参与时，副本数由降级默认值决定。',
+        flowRps:
+          'RPS 的来源：模块指标里类型为 RPS 的指标来源（Prometheus），用的是预测的峰值，不是现在的值；没有 RPS 指标，吞吐一项就不参与。',
+        jvmEffectTitle: '配置和不配置 JVM 指标的区别',
+        jvmEffectNone:
+          '不配置（没有 jvm_heap_used 和 jvm_heap_max，或阈值是 0）：JVM 规则不起作用，副本数只看容器的 CPU、内存和请求量。',
+        jvmEffectOn:
+          '配置（两个指标都有，阈值大于 0）：用堆已用 ÷ 堆上限，不看 JVM Committed（Committed 只是 JVM 向系统预留的内存，高不等于缺内存）。超过阈值时有三处生效：动态约束里多一项“JVM 堆”副本约束；指标触发的缩容退出比较（OOM 和堆压力保护期间不缩容）；指标触发里可以直接选“JVM 堆占用率”作为指标。',
+        jvmEffectWhere: '每次推荐的详情里“JVM 堆压力”一行写明这次读到的堆占用率、阈值和有没有生效。',
+        strategyTitle: '当前生效的副本策略',
+        strategy_bypass: '旁路',
+        strategy_fixedCount: '固定副本数',
+        strategy_source_algorithm: '预测',
+        strategy_source_rule: '固定公式',
+        strategy_source_fallback: '降级默认值',
+        strategy_triggers: '指标触发',
+        strategy_periods: '时间周期',
+        strategyState_active: '生效',
+        strategyState_off: '未启用',
+        strategyState_overridden: '被覆盖，不改变副本数',
+        strategyDecides_bypass: '旁路：副本数交还给集群，Operator 和准入都不动这个模块。',
+        strategyDecides_fixedCount:
+          '固定副本数 {n}：副本数保持 {n}，预测、指标触发和时间周期的“至少 / 至多”都不改变它（只有旁路和“固定”方式的时间周期比它优先）；最小、最大副本数照样限制。',
+        strategyDecides_rule:
+          '固定公式给出副本数，再由指标触发（{triggers} 条）调整、时间周期（{periods} 条）限制，最后受最小、最大副本数限制。',
+        strategyDecides_forecast:
+          '预测给出副本数，再由指标触发（{triggers} 条）调整、时间周期（{periods} 条）限制，最后受最小、最大副本数限制。',
+        strategyDecides_fallback:
+          '预测没有开启，也没有选固定公式：没有来源给出副本数，用降级默认值（没填则保持现状）；指标触发（{triggers} 条）和时间周期（{periods} 条）照常调整。',
+        strategyMode: '运行模式“{mode}”：{effect}',
+        strategyMode_observe: '只记录和显示，不产生推荐，也不写集群。',
+        strategyMode_recommend: '产生推荐并显示，不写集群。',
+        strategyMode_admission: '推荐的 CPU、内存在 Pod 创建或更新时写入（准入），副本数不动。',
+        strategyMode_auto: '副本数由 Operator 按推荐执行，Pod 的 CPU、内存在准入时写入。',
+        heldByFixed:
+          '固定副本数已开启：这一节的设置不改变副本数（只有“固定”方式的时间周期比固定副本数优先），平台也不再计算它们。',
         sectionBasic: '基本信息',
         sectionSafety: '推荐值的保底与封顶',
         sectionSafetyHint:
@@ -2567,7 +2602,7 @@ const local = {
         descBoard: '只用来展示的监控指标（资源大盘上的图表和卡片），不参与算法。',
         descPeriods: '统计用的时区和固定时间段：某些时段可以固定资源或副本数。',
         descCapacity:
-          '先选副本数的算法，再写一个 Pod 的安全容量（RPS，每秒请求数）。下面四张卡片按已有的数据算出，每张卡片的“?”说明它的含义、数据来源、公式和统计周期；没有依据的数字不显示，只说明缺什么。',
+          '副本数怎么算、用到哪些数据，见下面“副本数怎么算”。单 Pod 安全容量只用你填写、并经压测或受控观测验证过的数字；从历史推断出来的数字只在卡片里作参考，不参与计算。',
         descApply: '推荐的有效时间，以及算法综合分低到多少就不再采用；过期或不采用之后怎么处理，见各项旁边的“?”。',
         descPace:
           '副本每次增减的步长和同方向动作的间隔，对完整的运行周期（正常扩缩容和降级）都生效，不分时间段；0 不限制。它限制动作的快慢，副本边界限制数量的上下限，两者不重复。',
@@ -2617,7 +2652,7 @@ const local = {
         fixedReplicasRequired: '开启固定副本数时，请填写大于 0 的副本数',
         decisionSource: '决策来源',
         decisionSourceHint:
-          '模块的副本数和单个 Pod 的 CPU、内存 Requests 跟随哪一个来源：算法预测（用模块指标预测，默认），或固定公式（用 P90、P95、P99 的实际使用量按公式计算，不含预测）。只跟随一个，另一个仍会计算和显示，但不参与决策。固定公式的计算结果见“资源分析 → 固定公式结果”。',
+          '模块的副本数和单个 Pod 的 CPU、内存 Requests 跟随哪一个来源：算法预测（用模块指标预测，默认），或固定公式（用 P90、P95、P99 的实际使用量按公式计算，不含预测）。只跟随一个，另一个仍会计算和显示，但不参与决策。固定公式的计算结果（资源评估）见“资源分析 → 资源评估（固定公式）”。',
         decisionSource_algorithm: '算法预测',
         decisionSource_rule: '固定公式（P90 / P95 / P99）',
         decisionSourceNote_rule:
@@ -2640,7 +2675,7 @@ const local = {
           '预测峰值要乘的倍数（不小于 1，最大 10）：CPU、内存推荐值 = 预测峰值 × 推荐值系数 ÷ 容量保留系数，副本数 = 预测峰值 × 推荐值系数 ÷ 单 Pod 安全容量。1 表示不额外留余量。没有实测的预测偏差时，这个倍数就是副本数用的安全余量。',
         podCapacity: '单 Pod 安全容量（RPS）',
         podCapacityHint:
-          'RPS 是 Requests Per Second，每秒请求数。这里填经压测或受控观测验证的、单个就绪 Pod 能安全承载的每秒请求数；副本数 = ⌈预测峰值 RPS × 推荐值系数 ÷ 这个值⌉。为 0 时不根据预测推荐副本数。',
+          'RPS 是每秒请求数。填经压测或受控观测验证的、单个就绪 Pod 能安全承载的每秒请求数。它只在“固定容量公式”和“动态约束”的吞吐一项里起作用，并且模块要有 RPS 指标（类型为 RPS 的指标来源，数据来自 Prometheus）。填 0，或者没有 RPS 指标时，吞吐一项不参与，副本数不会按请求量算。',
         timezone: '周期时区',
         algorithm: '算法',
         priority: '优先级',
@@ -2703,14 +2738,9 @@ const local = {
         sectionReplicas: '副本数求解',
         replicaMode: '副本数计算',
         replicaModeHint:
-          '固定：峰值 × 余量系数 ÷ 固定容量。动态：对吞吐、CPU、内存分别求所需副本，用各算法近期实测的峰值低估分位修正，取最大值，并对每个算法分别给出结果。',
-        replicaMode_fixed: '固定容量公式',
-        replicaMode_dynamic: '动态多约束求解',
-        capacityMode: '单 Pod 容量来源',
-        capacityModeHint:
-          '手填：使用「单 Pod 安全容量」。从历史估计：用 RPS、Ready 副本数和 CPU 历史，在 CPU 接近饱和的时段估计；样本不足时拒绝估计并说明缺什么。',
-        capacityMode_manual: '手填',
-        capacityMode_estimate: '从历史估计',
+          '固定容量公式：⌈预测峰值 RPS × 推荐值系数 ÷ 单 Pod 安全容量⌉，只看请求量。动态约束：吞吐（RPS ÷ 单 Pod 安全容量）、CPU、内存、JVM 堆各求一个所需副本数，取最大的，没有数据的一项不参与。两种方式的结果都在最小、最大副本数之内。',
+        replicaMode_fixed: '固定容量公式（只按请求量）',
+        replicaMode_dynamic: '动态约束（吞吐、CPU、内存、JVM 取最大）',
         podCpuRequest: '每个 Pod 的 CPU 请求值（毫核）',
         podMemoryRequest: '每个 Pod 的内存请求值（MiB）',
         targetUtilization: '目标利用率',
@@ -2794,8 +2824,6 @@ const local = {
         auxHint_k8s_mem_requests: 'Pod 内存请求值，用于对照推荐值。',
         auxHint_k8s_mem_limits: 'Pod 内存上限；OOM 地板以它为基准之一。',
         auxHint_k8s_cpu_throttle: 'CPU 被限流时长，限流常使观测到的 CPU 偏低。',
-        maxMode_fixed: '固定上限',
-        maxMode_dynamic: '动态扩展（受硬上限约束）',
         step_score: '评分并排名',
         sources: '数据集',
         resource_cpu: 'CPU',
@@ -2805,7 +2833,6 @@ const local = {
         resource_signal: '仅压力信号',
         minScore: '最低综合分（0-100）',
         fallbackGpu: '降级默认 GPU 数',
-        maxReplicasMode: '最大副本数方式',
         minGpu: 'GPU 保底数',
         maxGpu: 'GPU 封顶数',
         workloadKind: '工作负载类型',
@@ -4465,7 +4492,8 @@ const local = {
         '同步会禁用目录中已删除、已禁用或不再属于任何映射组的账号并结束其会话；目录不可达时不会改动任何账号。管理员手动禁用的账号不会被同步重新启用。',
       title: 'LDAP 认证',
       localFirst: '本地账号始终本地认证',
-      mappingsHint: '目录组到平台角色的映射。用户属于多个组时取所有映射角色；没有任何映射时使用默认角色。'
+      mappingsHint:
+        '目录组到平台角色的映射。用户属于多个组时取所有映射角色；没有任何映射时使用默认角色。映射只给还没有角色的账号（首次登录）授权，之后的角色由管理员在用户管理里修改，登录不再覆盖。'
     },
     datasource: {
       clusters: {

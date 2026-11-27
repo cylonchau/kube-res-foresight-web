@@ -390,7 +390,7 @@ const local = {
     'forecast-results_effect': 'Effect report',
     'forecast-results_leaderboard': 'Measured leaderboard',
     'resource-analysis_overprovision': 'Resource dashboard',
-    'resource-analysis_rules': 'Fixed formula results',
+    'resource-analysis_rules': 'Resource Assessment',
     'resource-analysis_overprovision-detail': 'Module resource analysis',
     'resource-analysis_cluster-dashboard': 'Cluster dashboard',
     'forecast-actions': 'Recommendations and execution',
@@ -573,7 +573,8 @@ const local = {
       detail: 'Dispatch detail',
       colName: 'Module',
       colSource: 'Decision source',
-      colReplicas: 'Replicas (now → needed)',
+      colReplicasNow: 'Replicas now',
+      colReplicasNeed: 'Replicas needed',
       colCertain: 'Confidence',
       colPeriod: 'Period',
       colChecked: 'Last calculated',
@@ -717,8 +718,8 @@ const local = {
       oomScoreHelp:
         '100 x (1 - kills x {weight}), at least 0. It is the memory score of a forecasting algorithm: a kill takes from the score of an algorithm and so changes which algorithm the platform follows; it does not change the recommended Requests or replicas of this page. What changes them is the OOM protection floor card.',
       caliberLabel: 'Caliber',
-      caliberAll: 'Together',
-      caliberAllColumn: 'Together',
+      caliberAll: 'MAX',
+      caliberAllColumn: 'MAX',
       colByPercentile: 'By {c}',
       adviceTitle: 'AI advice',
       adviceHelp:
@@ -744,7 +745,8 @@ const local = {
       basisCandidateLineNoMargin:
         '{c}: use {use} / target share {target} = needs {need} (a share of 100% or more leaves no margin; what goes over the Requests for a moment is the part of the Limits) -> recommends {rec}{decides}',
       basisCandidateDecides: ' (the largest of the three: it decides)',
-      basisRequestsFinal: 'Together: the largest of P90, P95 and P99, then the bounds of the module -> {rec}',
+      basisRequestsFinal:
+        'MAX: the largest of what P90, P95 and P99 each ask for, then the bounds of the module -> {rec}',
       basisLimitCandidate: '{c}: the Limits from its peak = {limit}',
       requestBasisAll:
         'The largest of the Requests that P90, P95 and P99 each ask for, plus the margin; open the basis to see every step.',
@@ -803,9 +805,9 @@ const local = {
         'A count that follows the hours (normal, and the busiest count in the busy hours) runs about {saved} fewer replica-hours than {peak} replicas all day. A scale-out needs lead time and a cooldown, so less is saved in practice.',
       profileFlat:
         'The hours ask for about the same count (or the busy hours save little): there is no room for a count that follows the hours, and the replicas of the whole day are set by the busiest resource, for example a memory that stays and a CPU that peaks.',
-      caliberAllName: 'Together',
+      caliberAllName: 'MAX',
       caliberHelp:
-        'Which percentile the recommendation is made of: P90, P95 and P99 are each worked out, and "together" is the one that needs the most (it is what the platform recommends, after the bounds of the module). The caliber chosen updates the adjustment column and the basis; every column above is the result of that caliber alone.',
+        'Which percentile the recommendation is made of: P90, P95 and P99 are each worked out, and MAX is the largest of the three (the most replicas, or the largest Requests; it is what the platform recommends, after the bounds of the module). The caliber chosen is the one the adjustment column, the basis and "Apply to the module" use; every column of the table is the result of one caliber alone.',
       repCount: '{n} replicas',
       replicasNeedBy: 'Needed by the {r}',
       repRecommendedRow: 'Recommended replicas',
@@ -1487,7 +1489,15 @@ const local = {
       clusterMissing:
         '{n} cluster metrics are not declared in the metric templates (metric type: cluster metric), so they are not asked:',
       applyButton: 'Apply to the module',
+      applyReplicas: 'Apply to the module',
+      applyConfig: 'Apply to the module',
       applyTitle: 'Put the recommendations of the resource dashboard in the module',
+      applyTitleReplicas: 'Change the replicas: apply to the module ({caliber})',
+      applyTitleConfig: 'Change the Pod: apply to the module ({caliber})',
+      applyDescReplicas:
+        'Only the replicas are applied: the CPU and memory Requests and Limits of a Pod stay. The figures are those of the caliber chosen on the page ({caliber}).',
+      applyDescConfig:
+        'Only the CPU and memory Requests and the Limits ratio of a Pod are applied: the replicas stay. The figures are those of the caliber chosen on the page ({caliber}).',
       applyDesc:
         'Tick what to apply, and choose which parameter of the module each one goes in. What changes is the parameters of the module; the workload in the cluster is not touched.',
       applyEnabled: 'This module is switched on: the change takes part in the calculation as soon as it is saved.',
@@ -2103,6 +2113,13 @@ const local = {
           'A trigger reads the metrics of the module itself. Save the module and add its metrics first, then come back to add triggers.',
         add: 'Add trigger',
         defaultName: 'Trigger {n}',
+        voteResult:
+          'Triggers that scale out and triggers that scale in fired together; their scores (weight x how far past the threshold): scale out {up}, scale in {down}; the larger side decides the direction.',
+        weight: 'Weight',
+        helpWeight:
+          'When triggers that scale out and triggers that scale in fire together, each counts its weight times how far its metric is past its threshold (just past it counts once, as far past it again as the threshold itself, or more, counts twice); the side with the larger total decides the direction, and a tie goes to scaling out. Give the metric you trust more a larger weight. Example: a container whose memory is high (weight 3, scale out) and a JVM that has used little of its heap (weight 1, scale in) fire together: scaling out wins. A high JVM Committed with a low Used only means the JVM reserved memory, not that it is short of it: use it to scale in, or not to scale out, and do not let it trigger a scale-out on its own.',
+        voteRule:
+          'When several triggers fire together: the scale-outs and the scale-ins each add up weight x how far past the threshold, the larger side decides and a tie goes to scaling out; a trigger that sets a count goes by priority; a protection (an OOM kill, the JVM heap under pressure) takes the scale-ins out of the comparison.',
         priority: 'Priority',
         helpPriority:
           'When several triggers ask for different replica counts the higher priority is worked out first (of those that set a count the highest priority wins, equal priorities: the larger). A larger number is a higher priority.',
@@ -2113,6 +2130,8 @@ const local = {
         replicasWord: 'replicas',
         inForce: 'in force',
         always: 'every day, all day',
+        ruleGap: 'Resource Assessment replica gap (replicas needed - replicas running)',
+        ruleGapUnit: 'replicas; positive when the assessment wants more',
         jvmHeapPressure: 'JVM heap share (heap used / heap maximum)',
         stat_last: 'last value',
         stat_avg: 'average',
@@ -2186,15 +2205,6 @@ const local = {
         copyNotCopied:
           "Not copied: the name, description, cluster, namespace, workload, service and container (who the module is); enabled, mode and bypass; the Pod spec the operator read; whether it predicts. A source is copied only when its template has {'{{namespace}}'} or {'{{workload}}'}; one that names a workload in its query is skipped and said so; a source or period of the same name stays as it is.",
         copyRun: 'Copy',
-        recommendTitle: 'Fill in from the resource dashboard',
-        recommendDesc:
-          'Reads what the resource dashboard recommends for this module (the Requests, the Limits factors, the replicas) and puts the ticked ones in the form below; you can change them, and they take effect when you save.',
-        recommendRead: 'Read the recommendations of the resource dashboard',
-        recommendFill: 'Put in the form ({n})',
-        recommendFilled: '{n} put in the form: they take effect when you save',
-        recommendWaiting: 'Prometheus is slow: {n} s so far',
-        recommendWaitingProgress: 'Prometheus is slow: {stage} {done}/{total} answered, {n} s so far',
-        recommendFailed: 'The resource dashboard could not be read',
         batchCopy: 'Copy the configuration to the selected modules',
         batchCopyTitle: 'Copy the configuration of a module to the {n} selected modules',
         batchCopyDesc:
@@ -2300,14 +2310,6 @@ const local = {
           d_min_replicas: 'The replicas never go below it (a hard floor).',
           f_max_replicas: 'Most replicas',
           d_max_replicas: 'The replicas do not go above it in normal times.',
-          f_max_replicas_mode: 'Most-replicas mode',
-          d_max_replicas_mode:
-            'Fixed: the most replicas is the ceiling; dynamic: the ceiling may rise when the forecast needs more.',
-          f_hard_max_replicas: 'Hard ceiling',
-          d_hard_max_replicas: 'With a dynamic ceiling, the replicas nothing may exceed.',
-          f_expand_step_ratio: 'Ceiling expansion',
-          d_expand_step_ratio:
-            'With a dynamic ceiling, the most a ceiling rises in one cycle, as a share of the ceiling now.',
           f_min_cpu_milli: 'Least CPU',
           d_min_cpu_milli: 'The recommended CPU Requests is not below it.',
           f_max_cpu_milli: 'Most CPU',
@@ -2453,8 +2455,6 @@ const local = {
           e_decision_source_rule: 'Fixed formula',
           e_replica_mode_fixed: 'Fixed',
           e_replica_mode_dynamic: 'Dynamic',
-          e_max_replicas_mode_fixed: 'Fixed',
-          e_max_replicas_mode_dynamic: 'Dynamic',
           e_capacity_mode_manual: 'Manual',
           e_capacity_mode_estimate: 'Estimate',
           e_predict_mode_none: 'None',
@@ -2487,11 +2487,12 @@ const local = {
         replicaOrderTitle: 'How the replicas are worked out, in order',
         replicaOrder1:
           'The sources give a target first: bypass, a fixed count in a period and the fixed replicas (switched on) come first; the rest comes from the forecast (the fallback when it is unavailable), then the metric triggers and the "at least" / "at most" windows adjust it.',
-        replicaOrder2: 'The least replicas is the floor and the most replicas the everyday ceiling.',
+        replicaOrder2:
+          'The least replicas is the floor and the most replicas the ceiling of scaling out: a module has this one maximum.',
         replicaOrder3:
-          'Dynamic expansion: when the forecast needs more than the most replicas and the algorithm scored at least the minimum score, the ceiling rises each cycle by at most to ceil(ceiling now x (1 + expansion speed)), never above the hard maximum; when the forecast falls it returns to the most replicas. The hard maximum is the absolute ceiling and exists under dynamic expansion only.',
+          'The most replicas is the ceiling nothing passes; scaling out stops there. There is no second hard maximum and no ceiling that raises itself.',
         replicaOrder4:
-          'The operator checks the hard floor and ceiling the platform gives; a count outside the least and most replicas is corrected at once, without waiting for the cooldown.',
+          'The operator checks the minimum and maximum the platform gives now; a count outside them is corrected at once, without waiting for the cooldown.',
         replicaOrder5:
           'A scale-down needs every replica Ready; then the cooldown: if not enough time passed since the last action of that direction, nothing moves this time.',
         replicaOrder6:
@@ -2499,10 +2500,7 @@ const local = {
         sectionBounds: 'Replica bounds',
         descBounds:
           'The least and most replicas bound normal scaling and the fallback alike: what the forecast, the periods, the triggers and the fallback default give never goes past them.',
-        boundsFixed:
-          'Now: the replicas stay between {min} and {max}, never above {max}. The hard maximum and the expansion speed apply to "dynamic expansion" only and do nothing now.',
-        boundsDynamic:
-          'Now: at most {max} replicas as a rule; when the forecast needs more, the ceiling rises by at most {step} per cycle ({ratio} of the ceiling now), up to the hard maximum {hard}, which the replicas never exceed.',
+        boundsFixed: 'Now: the replicas stay between {min} and {max}; scaling out stops at {max}.',
         boundsMissing: 'Now: the {what} is not set, so the replicas have no {side} bound.',
         boundsMissingMin: 'least replicas',
         boundsMissingMax: 'most replicas',
@@ -2511,15 +2509,7 @@ const local = {
         minReplicasHint:
           'The least replicas: what the forecast, the periods, the triggers and the fallback default give is never below it, the floor of scaling in. 0 = no bound.',
         maxReplicasHint:
-          'The usual most replicas: the result of any strategy is never above it. With "fixed" it is the final ceiling; with "dynamic expansion" it is the start and the ceiling may rise to the hard maximum cycle by cycle. 0 = no bound.',
-        maxReplicasModeHint:
-          'Fixed: the most replicas is the ceiling. Dynamic expansion: when the forecast needs more than the most replicas the ceiling may rise cycle by cycle, never above the hard maximum.',
-        hardMaxReplicas: 'Hard maximum replicas',
-        hardMaxReplicasHint:
-          'Used with "dynamic expansion" only: the count the raised ceiling can never pass, not below the most replicas. Example: most 15, hard maximum 25: 15 as a rule, raised cycle by cycle when the forecast needs more, 25 at the most. It does nothing, and is not shown, with "fixed".',
-        expandStepRatio: 'Ceiling expansion speed (per cycle)',
-        expandStepRatioHint:
-          'With dynamic expansion each cycle raises the ceiling by at most this share of the ceiling now (0.25 = 25%), for example 15 -> 19 -> 24 -> 25. It raises the most replicas allowed, not the replicas; how many replicas one action adds or removes is limited by the pace, and the two are not the same thing.',
+          'The most replicas: the ceiling of scaling out. The result of any source (the forecast, the fixed formula, the periods, the triggers, the fallback default) is never above it, and the fixed count may not pass it. 0 = no bound.',
         paceUp: 'Scale-up',
         paceDown: 'Scale-down',
         paceBoth: '{dir}: at most {step} per action and at least {sec} s between two, so at most {hour} per hour.',
@@ -2548,7 +2538,6 @@ const local = {
         sectionApply: 'Recommendation validity and score',
         capNew:
           'Once the module is saved and history is collected, the capacity of one Pod and the total capacity are worked out here; no number without a basis is shown now.',
-        capUnsavedEstimate: 'Save with "from history" for the figure to be worked out from the history.',
         capCardUtil: 'Request utilization of one Pod',
         capCardPod: 'Safe capacity of one Pod',
         capCardMin: 'Least safe total capacity',
@@ -2557,12 +2546,9 @@ const local = {
         capUtilNotSet: 'No capacity reserve coefficient is set: counted as 100% (nothing held back)',
         capPodManualSub: 'The value you entered, in RPS (requests per second)',
         capPodNotSet: 'The safe capacity of one Pod is not entered',
-        capPodEstimateSub: '{used} busy moments of {samples} samples, last {days} days',
-        capPodInsufficientSub: 'Only {used} busy moments; at least {min} are needed',
         capTotalSub: '{replicas} replicas x {rps} RPS',
         capTotalNoReplicas: 'The {what} is not set, so the total cannot be worked out',
         capTotalNoPod: 'There is no safe capacity of one Pod yet, so the total cannot be worked out',
-        capTotalHard: 'With dynamic expansion up to the hard maximum of {hard} replicas: {total} RPS',
         capMeaningUtil:
           'The most of the request of a Pod that may be used: the capacity reserve coefficient you set under the coefficients.',
         capSourceUtil:
@@ -2572,14 +2558,8 @@ const local = {
         capMeaningPod: 'The requests per second (RPS) one ready Pod can carry safely.',
         capSourcePodManual:
           'The value you entered as the safe capacity of one Pod (RPS); it should come from a load test or a controlled observation.',
-        capSourcePodEstimate:
-          'Estimated from the history collected from Prometheus: the request rate, the ready replicas and the CPU of each moment (it needs these three metrics and the CPU request of a Pod).',
         capFormulaPodManual: 'Safe capacity of one Pod',
-        capFormulaPodEstimate: 'Safe capacity of one Pod',
-        capRuleEstimate: 'P50 (requests / replicas x capacity reserve coefficient / CPU saturation of the Pod)',
         capPeriodPodManual: 'No period: it is a setting.',
-        capPeriodPodEstimate:
-          'The last {days} days of history; only the busy moments count, when the Pod CPU is at least {busy} of "capacity reserve coefficient x request", and at least {min} of them are needed. With fewer the card says what is missing and makes up no number.',
         capMeaningTotal: 'The requests per second these replicas can carry safely together.',
         capSourceTotal: 'The least or most replicas of the replica bounds times the safe capacity of one Pod.',
         capFormulaMin: 'Least safe total capacity',
@@ -2690,6 +2670,70 @@ const local = {
         addTitle: 'Add forecast module',
         editTitle: 'Edit forecast module',
         required: 'Name, namespace and workload are required',
+        guideTitle: 'Fill these first',
+        guide_workload: 'The namespace and the workload: which workload the module manages',
+        guide_podRequests:
+          'The CPU and memory Requests of one Pod: the replicas and the resources are worked out from them',
+        guide_replicaBounds: 'The least and most replicas: the most is the ceiling of scaling out and must be set',
+        capPodReference: 'about {rps} RPS inferred from the history (a reference only, not used)',
+        flowTitle: 'How the replicas are worked out (with the settings now)',
+        flowFixed:
+          'Fixed capacity formula: replicas = ceil(forecast peak RPS x headroom coefficient {headroom} / safe capacity of a Pod {cap})',
+        flowFixedOff:
+          'Fixed capacity formula: the safe capacity of a Pod is not entered, so the replicas cannot be worked out and the fallback default decides them',
+        flowThroughputOn:
+          'Throughput: ceil(forecast peak RPS x {headroom} / {cap} RPS) (the module needs an RPS metric)',
+        flowThroughputOff: 'Throughput: takes no part (the safe capacity of a Pod is not entered)',
+        flowCpuOn:
+          'CPU: ceil(forecast CPU peak x {headroom} / (CPU Requests of a Pod {request} m x target utilization))',
+        flowCpuOff: 'CPU: takes no part (the CPU Requests of a Pod are not entered)',
+        flowMemoryOn:
+          'Memory: ceil(forecast memory peak x {headroom} / (memory Requests of a Pod {request} MiB x target utilization))',
+        flowMemoryOff: 'Memory: takes no part (the memory Requests of a Pod are not entered)',
+        flowJvmOn:
+          'JVM heap: when the heap used / the heap maximum is above {threshold}, the replicas are raised in proportion to pressure / threshold (needs the metrics jvm_heap_used and jvm_heap_max)',
+        flowJvmOff: 'JVM heap: takes no part (the threshold is 0)',
+        flowResult:
+          'The largest of the items that take part, then kept between the least {min} and the most {max} replicas; when none takes part the fallback default decides.',
+        flowRps:
+          'Where RPS comes from: the metric source of the type RPS of the module (Prometheus), as the forecast peak and not the value now; without an RPS metric the throughput item takes no part.',
+        jvmEffectTitle: 'With and without JVM metrics',
+        jvmEffectNone:
+          'Without them (no jvm_heap_used and jvm_heap_max, or a threshold of 0): the JVM rule does nothing and the replicas follow the CPU, the memory and the request rate of the container only.',
+        jvmEffectOn:
+          'With them (both metrics present, a threshold above 0): the heap used / the heap maximum is read, and JVM Committed is not (Committed is only what the JVM reserved from the system; a high value does not mean a shortage). Above the threshold it acts in three places: the dynamic constraints get a "JVM heap" item for the replicas; the scale-ins of the triggers leave the comparison (no scaling in during an OOM kill or a heap under pressure); and a trigger can read the "JVM heap occupancy" as its metric.',
+        jvmEffectWhere:
+          'The detail of every recommendation has a "JVM heap pressure" line with the occupancy read, the threshold and whether it acted.',
+        strategyTitle: 'Strategies in force',
+        strategy_bypass: 'Bypass',
+        strategy_fixedCount: 'Fixed replicas',
+        strategy_source_algorithm: 'Forecast',
+        strategy_source_rule: 'Fixed formula',
+        strategy_source_fallback: 'Fallback default',
+        strategy_triggers: 'Metric triggers',
+        strategy_periods: 'Periods',
+        strategyState_active: 'in force',
+        strategyState_off: 'not used',
+        strategyState_overridden: 'overridden, changes no replicas',
+        strategyDecides_bypass:
+          'Bypass: the replicas are left to the cluster; neither the operator nor admission touches this module.',
+        strategyDecides_fixedCount:
+          'Fixed replicas {n}: the replicas stay {n}; the forecast, the triggers and the "at least / at most" of the periods do not change them (only a bypass and a period of the "fixed" kind rank above it); the least and most replicas still bound them.',
+        strategyDecides_rule:
+          'The fixed formula gives the replicas, the triggers ({triggers}) adjust them, the periods ({periods}) bound them, and the least and most replicas come last.',
+        strategyDecides_forecast:
+          'The forecast gives the replicas, the triggers ({triggers}) adjust them, the periods ({periods}) bound them, and the least and most replicas come last.',
+        strategyDecides_fallback:
+          'The forecast is off and the fixed formula is not chosen: nothing gives the replicas, so the fallback default applies (the replicas stay as they are when none is set); the triggers ({triggers}) and the periods ({periods}) still adjust them.',
+        strategyMode: 'Run mode "{mode}": {effect}',
+        strategyMode_observe: 'It records and shows, makes no recommendation and writes nothing to the cluster.',
+        strategyMode_recommend: 'It makes and shows a recommendation and writes nothing to the cluster.',
+        strategyMode_admission:
+          'The recommended CPU and memory are written when a Pod is created or updated (admission); the replicas are not touched.',
+        strategyMode_auto:
+          'The operator carries out the replicas of the recommendation, and the CPU and memory of a Pod are written at admission.',
+        heldByFixed:
+          'A fixed count is on: the settings of this section change no replicas (only a period of the "fixed" kind ranks above a fixed count), and the platform does not work them out any more.',
         sectionBasic: 'Basics',
         sectionSafety: 'Floor and cap of the recommendation',
         sectionSafetyHint:
@@ -2725,7 +2769,7 @@ const local = {
         descPeriods:
           'The time zone of the statistics and the fixed periods: in some hours the resources or the replicas can be fixed.',
         descCapacity:
-          'Choose how the replicas are worked out, then enter the safe capacity of one Pod (RPS, requests per second). The four cards below are worked out from what exists; the "?" of each says what it means, where the data comes from, its formula and its period. A number without a basis is not shown: the card says what is missing.',
+          'How the replicas are worked out and which data they use is written under "How the replicas are worked out". The safe capacity of a Pod is only the figure you enter and have verified by a load test or a controlled observation; a figure inferred from the history is shown on the card as a reference and takes no part in the calculation.',
         descApply:
           'How long a recommendation is valid and the algorithm score below which it is no longer taken; what happens after it expires or is not taken is in the "?" of each.',
         descPace:
@@ -2803,7 +2847,7 @@ const local = {
           'What the predicted peak is multiplied by (at least 1, at most 10): the CPU and memory recommended = predicted peak x recommendation coefficient / capacity reserve coefficient, and the replicas = predicted peak x recommendation coefficient / safe load of one Pod. 1 leaves no extra margin. Where no measured shortfall of the forecast exists, this is the safety margin of the replicas.',
         podCapacity: 'Safe load of one Pod (RPS)',
         podCapacityHint:
-          'RPS is Requests Per Second. The requests per second one ready Pod can safely carry, verified by a load test or controlled observation; replicas = the ceiling of (predicted peak RPS x recommendation coefficient / this value). At 0 the replicas are not recommended from the forecast.',
+          'RPS is requests per second. Enter the requests per second one ready Pod can carry safely, verified by a load test or a controlled observation. It works only in the fixed capacity formula and in the throughput item of the dynamic constraints, and only when the module has an RPS metric (a metric source of the type RPS, read from Prometheus). With 0, or without an RPS metric, the throughput item takes no part and the replicas are not worked out from the request rate.',
         timezone: 'Period time zone',
         algorithm: 'Algorithm',
         priority: 'Priority',
@@ -2869,14 +2913,9 @@ const local = {
         sectionReplicas: 'Replica solving',
         replicaMode: 'Replica calculation',
         replicaModeHint:
-          "Fixed: peak x headroom / fixed capacity. Dynamic: solve throughput, CPU and memory separately, correct each with the algorithm's recent measured peak shortfall, take the largest, and show a result per algorithm.",
-        replicaMode_fixed: 'Fixed capacity formula',
-        replicaMode_dynamic: 'Dynamic multi-constraint',
-        capacityMode: 'Pod capacity source',
-        capacityModeHint:
-          'Manual: use the pod safe capacity. Estimate: derive it from the rps, ready-replica and CPU history at moments when CPU was near saturation; it refuses, and says what is missing, when samples are too few.',
-        capacityMode_manual: 'Manual',
-        capacityMode_estimate: 'Estimate from history',
+          'Fixed capacity formula: ceil(forecast peak RPS x headroom coefficient / safe capacity of a Pod), the request rate only. Dynamic constraints: throughput (RPS / safe capacity of a Pod), CPU, memory and the JVM heap each give the replicas they need and the largest wins; an item with no data takes no part. Either way the result stays between the least and the most replicas.',
+        replicaMode_fixed: 'Fixed capacity formula (request rate only)',
+        replicaMode_dynamic: 'Dynamic constraints (throughput, CPU, memory, JVM: the largest)',
         podCpuRequest: 'CPU requests per pod (m)',
         podMemoryRequest: 'Memory requests per pod (MiB)',
         targetUtilization: 'Target utilization',
@@ -2968,8 +3007,6 @@ const local = {
         auxHint_k8s_mem_requests: 'Pod memory requests, to compare with the recommendation.',
         auxHint_k8s_mem_limits: 'Pod memory limits; one basis of the OOM floor.',
         auxHint_k8s_cpu_throttle: 'CPU throttled time; throttling makes the observed CPU read low.',
-        maxMode_fixed: 'Fixed ceiling',
-        maxMode_dynamic: 'Dynamic expansion (bounded by a hard ceiling)',
         step_score: 'Score and rank',
         sources: 'Dataset',
         resource_cpu: 'CPU',
@@ -2979,7 +3016,6 @@ const local = {
         resource_signal: 'Pressure signal only',
         minScore: 'Minimum score (0-100)',
         fallbackGpu: 'Degraded default GPU count',
-        maxReplicasMode: 'Maximum replicas mode',
         minGpu: 'GPU floor',
         maxGpu: 'GPU cap',
         workloadKind: 'Workload kind',
@@ -4723,7 +4759,7 @@ const local = {
       title: 'LDAP authentication',
       localFirst: 'Local accounts always sign in locally',
       mappingsHint:
-        'Maps directory groups to platform roles. A user in several groups gets every mapped role; with no mapping the default role applies.'
+        'Maps directory groups to platform roles. A user in several groups gets every mapped role; with no mapping the default role applies. The mapping only gives roles to an account that has none (the first sign-in); after that an administrator changes them under Users and a sign-in does not overwrite them.'
     },
     datasource: {
       clusters: {

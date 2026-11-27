@@ -19,7 +19,7 @@ export function fetchGetModuleOverprovision(
         params,
         headers: { 'X-Silent-Error': '1' }
       }),
-    wait
+    { retryGatewayCut: true, ...wait }
   );
 }
 
@@ -34,7 +34,7 @@ export function fetchGetOverprovisionCluster(datasourceId?: number, wait?: Until
         params: { datasource_id: datasourceId },
         headers: { 'X-Silent-Error': '1' }
       }),
-    wait
+    { retryGatewayCut: true, ...wait }
   );
 }
 
@@ -56,7 +56,7 @@ export function fetchGetOverprovisionResources(wait?: UntilAnsweredOptions) {
         method: 'get',
         headers: { 'X-Silent-Error': '1' }
       }),
-    wait
+    { retryGatewayCut: true, ...wait }
   );
 }
 

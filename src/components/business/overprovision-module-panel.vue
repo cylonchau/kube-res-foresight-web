@@ -47,7 +47,7 @@ interface Props {
   error: string;
 }
 const props = defineProps<Props>();
-const emit = defineEmits<{ retry: [] }>();
+const emit = defineEmits<{ retry: []; apply: [scheme: 'replicas' | 'config', caliber: Caliber] }>();
 const { t } = useI18n();
 const p = (key: string, named?: Record<string, unknown>) => t(`page.overprovision.${key}`, named ?? {});
 
@@ -1003,16 +1003,20 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
                     : p('schemeByConfigNote', { n: replicas || '-' })
                 }}
               </span>
-              <NButton
-                v-if="way === 'config' || basisAvailable"
-                size="tiny"
-                quaternary
-                type="primary"
-                class="ml-auto"
-                @click="openBasis(way)"
-              >
-                {{ p('basisOpen') }}
-              </NButton>
+              <span class="plan-actions">
+                <NButton
+                  v-if="way === 'config' || basisAvailable"
+                  size="tiny"
+                  quaternary
+                  type="info"
+                  @click="openBasis(way)"
+                >
+                  {{ p('basisOpen') }}
+                </NButton>
+                <NButton size="tiny" type="primary" secondary @click="emit('apply', way, caliber)">
+                  {{ way === 'replicas' ? p('applyReplicas') : p('applyConfig') }}
+                </NButton>
+              </span>
             </div>
             <div class="table-scroll">
               <NTable size="small" :bordered="true" :single-line="false" class="rec plan text-12px">
@@ -1216,6 +1220,12 @@ const failed = computed(() => (props.detail?.queries ?? []).filter(q => q.error 
   flex-wrap: wrap;
   gap: 6px 8px;
   align-items: center;
+}
+
+.plan-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .plan-note {

@@ -85,6 +85,7 @@ interface Detail {
     name: string;
     enabled: boolean;
     priority: number;
+    weight?: number;
     metric: string;
     stat: string;
     window_minutes: number;
@@ -104,7 +105,18 @@ interface Detail {
     current: number;
     result: number;
     rule: string;
-    steps: Array<{ name: string; action: string; priority: number; proposed: number; used: boolean; why?: string }>;
+    up_score?: number;
+    down_score?: number;
+    steps: Array<{
+      name: string;
+      action: string;
+      priority: number;
+      proposed: number;
+      used: boolean;
+      why?: string;
+      weight?: number;
+      score?: number;
+    }>;
   };
   /** how the Pod CPU and memory of the snapshot were decided apart from the replicas */
   resource_spec?: {
@@ -199,6 +211,12 @@ const triggerColumns = computed(() => [
         amount: row.amount,
         unit: row.action === 'set' ? '' : t(`page.forecast.triggers.unit_${row.unit}`)
       })
+  },
+  {
+    title: t('page.forecast.triggers.weight'),
+    key: 'weight',
+    width: 70,
+    render: (row: NonNullable<Detail['triggers']>[number]) => row.weight ?? 1
   },
   {
     title: t('page.forecast.triggers.col_value'),
@@ -522,6 +540,17 @@ const sourceColumns = computed(() => [
             current: parsed.trigger_outcome.current,
             result: parsed.trigger_outcome.result,
             rule: parsed.trigger_outcome.rule
+          })
+        }}
+      </div>
+      <div
+        v-if="parsed.trigger_outcome?.up_score && parsed.trigger_outcome?.down_score"
+        class="text-12px leading-20px opacity-80"
+      >
+        {{
+          t('page.forecast.triggers.voteResult', {
+            up: parsed.trigger_outcome.up_score.toFixed(2),
+            down: parsed.trigger_outcome.down_score.toFixed(2)
           })
         }}
       </div>

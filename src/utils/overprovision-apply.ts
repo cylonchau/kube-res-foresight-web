@@ -49,13 +49,35 @@ function resultOf(window: Api.Overprovision.Window | null | undefined, resource:
   return result && result.suggested > 0 ? result : null;
 }
 
-/** the recommendations of the analysis of a module, as items; none when the dashboard recommends nothing yet */
-export function applyItems(detail: Api.Overprovision.Detail | null | undefined): ApplyItem[] {
+/** the two ways to a recommendation: the replicas change (the Pod stays), or the Pod changes (the replicas stay); each is applied on its own */
+export type ApplyScheme = 'replicas' | 'config';
+
+/** the caliber of a recommendation: the largest of the three percentiles (MAX), or one of them alone */
+export type ApplyCaliber = 'all' | 'P90' | 'P95' | 'P99';
+
+/**
+ * the recommendations of the analysis of a module, as items; none when the dashboard recommends nothing yet. `scheme` keeps the ones of one way only, `caliber` takes the figures
+ * of one percentile instead of the largest of the three.
+ */
+export function applyItems(
+  detail: Api.Overprovision.Detail | null | undefined,
+  scheme?: ApplyScheme,
+  caliber: ApplyCaliber = 'all'
+): ApplyItem[] {
   const window = detail?.recommend ?? detail?.windows?.[0];
   if (!window) return [];
   const items: ApplyItem[] = [];
+  // the figures of one resource at the caliber asked for: MAX is the result itself, a percentile alone is its candidate
+  const figures = (resource: 'cpu' | 'memory') => {
+    const result = resultOf(window, resource);
+    if (!result || caliber === 'all') return result;
+    const one = result.candidates?.find(candidate => candidate.name === caliber);
+    return one && one.suggested > 0
+      ? { ...result, suggested: one.suggested, suggested_limit: one.suggested_limit }
+      : null;
+  };
 
-  const c = resultOf(window, 'cpu');
+  const c = scheme === 'replicas' ? null : figures('cpu');
   if (c) {
     const milli = cpu(c.suggested);
     items.push({
@@ -77,7 +99,7 @@ export function applyItems(detail: Api.Overprovision.Detail | null | undefined):
     }
   }
 
-  const m = resultOf(window, 'memory');
+  const m = scheme === 'replicas' ? null : figures('memory');
   if (m) {
     const bytes = memory(m.suggested);
     items.push({
@@ -99,7 +121,8 @@ export function applyItems(detail: Api.Overprovision.Detail | null | undefined):
     }
   }
 
-  const plan = window.replica_plan;
+  if (scheme === 'config') return items;
+  const plan = caliber === 'all' ? window.replica_plan : window.replica_plan?.by_caliber?.[caliber];
   if (plan && plan.needed > 0) {
     const n = Math.round(plan.needed);
     items.push({

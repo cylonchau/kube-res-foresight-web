@@ -30,7 +30,6 @@ import CapacityCard, { type CapacityCardData } from '@/components/business/capac
 import TriggerEditor from '@/components/business/trigger-editor.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
 import ModuleBatchCopyModal from '@/components/business/module-batch-copy-modal.vue';
-import OverprovisionApplyTable from '@/components/business/overprovision-apply-table.vue';
 import ModuleNeedModal from '@/components/business/module-need-modal.vue';
 import RegistrationTombstonesModal from '@/components/business/registration-tombstones-modal.vue';
 import ModuleParamsModal from '@/components/business/module-params-modal.vue';
@@ -54,7 +53,6 @@ import {
   fetchGetConfig,
   fetchGetForecastModules,
   fetchGetModuleCapacity,
-  fetchGetModuleOverprovision,
   fetchGetModuleSources,
   fetchGetPeriods,
   fetchGetTriggers,
@@ -65,7 +63,6 @@ import SvgIcon from '@/components/custom/svg-icon.vue';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { copyCell } from '@/utils/copy-cell';
-import { progressParams } from '@/utils/pending-text';
 import { formatResource } from '@/utils/format';
 import {
   type CoefficientForm,
@@ -73,12 +70,11 @@ import {
   moduleFormulaLines,
   coef as coefToken,
   name as nameToken,
-  num as numToken,
   op as opToken,
   res as resToken
 } from '@/utils/formula';
 import { type DocForm, type ParamId, paramDoc } from '@/utils/param-docs';
-import { type ApplyField, type ApplyTarget, applyItems, formField } from '@/utils/overprovision-apply';
+import { type StrategyRow, type StrategyState, strategySummary } from '@/utils/strategy-summary';
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
 import { EMPTY_SYSTEM, type SystemParams } from '@/utils/module-params';
@@ -139,13 +135,7 @@ async function loadAlgorithms() {
 const replicaModeOptions = computed(() =>
   (['fixed', 'dynamic'] as const).map(value => ({ label: t(`page.forecast.modules.replicaMode_${value}`), value }))
 );
-const maxModeOptions = computed(() =>
-  (['fixed', 'dynamic'] as const).map(value => ({ label: t(`page.forecast.modules.maxMode_${value}`), value }))
-);
 const kindOptions = WORKLOAD_KINDS.map(value => ({ label: value, value }));
-const capacityModeOptions = computed(() =>
-  (['manual', 'estimate'] as const).map(value => ({ label: t(`page.forecast.modules.capacityMode_${value}`), value }))
-);
 const enabledOptions = computed(() => [
   { label: t('common.enable'), value: 'true' },
   { label: t('common.disable'), value: 'false' }
@@ -264,9 +254,6 @@ function emptyForm() {
     pod_capacity_rps: 0,
     timezone: 'Asia/Shanghai',
     min_score: 0,
-    max_replicas_mode: 'fixed' as Api.Forecast.MaxReplicasMode,
-    hard_max_replicas: 0,
-    expand_step_ratio: 0.25,
     min_gpu: 0,
     max_gpu: 0,
     fallback_gpu: 0,
@@ -422,16 +409,6 @@ const docOf = (id: ParamId) =>
 
 const formatNumber = (v: number) => String(Number(v.toFixed(2)));
 
-/** a state of the report as the card says it: a missing source and a missing history are both "no history" */
-const STATE_OF: Record<Api.Forecast.CapacityState, CapacityCardData['state']> = {
-  ready: 'ready',
-  not_set: 'not_set',
-  no_source: 'no_history',
-  no_history: 'no_history',
-  insufficient: 'insufficient',
-  error: 'error'
-};
-
 /** the capacity of one Pod as the platform reads it (the entered figure and what the history says), for the module being edited; none for a module that is not saved */
 const capacityReport = ref<Api.Forecast.CapacityReport | null>(null);
 async function loadCapacity(id?: number) {
@@ -452,31 +429,11 @@ const capacityCards = computed<CapacityCardData[]>(() => {
   const fmtPct = (v: number) => `${formatNumber(v * 100)}%`;
   const line = (label: string, ...tokens: FormulaLine['tokens']): FormulaLine[] => [{ label, tokens }];
   const report = capacityReport.value;
-  const saved = Boolean(editing.value?.id);
   const reserveSet = form.target_utilization > 0 && form.target_utilization <= 1;
-  const estimate = form.replica_mode === 'dynamic' && form.capacity_mode === 'estimate';
 
-  // the safe load of one Pod: the entered figure, or what the history gives
+  // the safe load of one Pod: the figure that was entered; what the history says of it is only shown beside it (see the capacity cards)
   let pod: Pick<CapacityCardData, 'state' | 'value' | 'sub'> & { number: number };
-  if (estimate) {
-    if (!saved || !report || report.mode !== 'estimate')
-      pod = { state: 'unsaved', value: '', sub: saved ? m('capUnsavedEstimate') : m('capNew'), number: 0 };
-    else if (report.state === 'ready')
-      pod = {
-        state: 'ready',
-        value: `${fx(report.value)} RPS`,
-        sub: m('capPodEstimateSub', { used: report.used, samples: report.samples, days: report.lookback_days }),
-        number: report.value
-      };
-    else if (report.state === 'insufficient')
-      pod = {
-        state: 'insufficient',
-        value: '',
-        sub: m('capPodInsufficientSub', { used: report.used, min: report.min_samples }),
-        number: 0
-      };
-    else pod = { state: STATE_OF[report.state], value: '', sub: report.estimate_note || report.note || '', number: 0 };
-  } else if (form.pod_capacity_rps > 0) {
+  if (form.pod_capacity_rps > 0) {
     pod = {
       state: 'ready',
       value: `${fx(form.pod_capacity_rps)} RPS`,
@@ -487,24 +444,17 @@ const capacityCards = computed<CapacityCardData[]>(() => {
     pod = { state: 'not_set', value: '', sub: m('capPodNotSet'), number: 0 };
   }
 
-  const total = (replicas: number, what: string, hard?: number): Pick<CapacityCardData, 'state' | 'value' | 'sub'> => {
+  const total = (replicas: number, what: string): Pick<CapacityCardData, 'state' | 'value' | 'sub'> => {
     if (!(replicas > 0)) return { state: 'not_set', value: '', sub: m('capTotalNoReplicas', { what }) };
     if (pod.state !== 'ready') return { state: pod.state, value: '', sub: m('capTotalNoPod') };
-    const extra = hard && hard > replicas ? ` · ${m('capTotalHard', { hard, total: fx(pod.number * hard) })}` : '';
     return {
       state: 'ready',
       value: `${fx(pod.number * replicas)} RPS`,
-      sub: `${m('capTotalSub', { replicas, rps: fx(pod.number) })}${extra}`
+      sub: m('capTotalSub', { replicas, rps: fx(pod.number) })
     };
   };
   const minTotal = total(form.min_replicas, m('capReplicasMin'));
-  const maxTotal = total(
-    form.max_replicas,
-    m('capReplicasMax'),
-    form.max_replicas_mode === 'dynamic' ? form.hard_max_replicas : 0
-  );
-  const days = report?.lookback_days ?? 7;
-  const busy = fmtPct(report?.busy_share ?? 0.7);
+  const maxTotal = total(form.max_replicas, m('capReplicasMax'));
   return [
     {
       key: 'util',
@@ -521,19 +471,21 @@ const capacityCards = computed<CapacityCardData[]>(() => {
       key: 'pod',
       label: m('capCardPod'),
       ...pod,
+      // what the history says is a figure inferred from the load: shown beside the entered capacity, never used as it
+      sub:
+        pod.sub +
+        (report?.estimate_state === 'ready' && report.estimate > 0
+          ? ` · ${m('capPodReference', { rps: fx(report.estimate) })}`
+          : ''),
       meaning: m('capMeaningPod'),
-      source: estimate ? m('capSourcePodEstimate') : m('capSourcePodManual'),
-      formula: estimate
-        ? line(
-            m('capFormulaPodEstimate'),
-            nameToken(m('capFormulaPodEstimate')),
-            opToken('='),
-            numToken(m('capRuleEstimate'))
-          )
-        : line(m('capFormulaPodManual'), nameToken(m('capFormulaPodManual')), opToken('='), resToken(m('podCapacity'))),
-      period: estimate
-        ? m('capPeriodPodEstimate', { days, busy, min: report?.min_samples ?? 30 })
-        : m('capPeriodPodManual')
+      source: m('capSourcePodManual'),
+      formula: line(
+        m('capFormulaPodManual'),
+        nameToken(m('capFormulaPodManual')),
+        opToken('='),
+        resToken(m('podCapacity'))
+      ),
+      period: m('capPeriodPodManual')
     },
     {
       key: 'min',
@@ -570,20 +522,99 @@ const capacityCards = computed<CapacityCardData[]>(() => {
   ];
 });
 
+/** how the replicas are worked out with the settings of the form: which items take part and which lack what they need, then the largest of them inside the bounds */
+const replicaFlow = computed(() => {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  const headroom = formatNumber(form.headroom_ratio || 1);
+  const cap = form.pod_capacity_rps;
+  const lines: Array<{ on: boolean; text: string }> = [];
+  if (form.replica_mode === 'fixed') {
+    lines.push(
+      cap > 0
+        ? { on: true, text: m('flowFixed', { headroom, cap: formatNumber(cap) }) }
+        : { on: false, text: m('flowFixedOff') }
+    );
+  } else {
+    lines.push(
+      cap > 0
+        ? { on: true, text: m('flowThroughputOn', { headroom, cap: formatNumber(cap) }) }
+        : { on: false, text: m('flowThroughputOff') }
+    );
+    lines.push(
+      form.pod_cpu_request_milli > 0
+        ? { on: true, text: m('flowCpuOn', { headroom, request: form.pod_cpu_request_milli }) }
+        : { on: false, text: m('flowCpuOff') }
+    );
+    lines.push(
+      form.pod_memory_request_mib > 0
+        ? { on: true, text: m('flowMemoryOn', { headroom, request: formatNumber(form.pod_memory_request_mib) }) }
+        : { on: false, text: m('flowMemoryOff') }
+    );
+    lines.push(
+      form.jvm_heap_pressure > 0
+        ? { on: true, text: m('flowJvmOn', { threshold: formatNumber(form.jvm_heap_pressure) }) }
+        : { on: false, text: m('flowJvmOff') }
+    );
+    lines.push({ on: true, text: m('flowResult', { min: form.min_replicas || '-', max: form.max_replicas || '-' }) });
+  }
+  lines.push({ on: true, text: m('flowRps') });
+  return lines;
+});
+
+/** the strategies of the module in force now, in the order they decide: the one that gives the replicas, and what changes or cannot change them */
+const strategy = computed(() => {
+  const periods = periodEditor.value?.summary() ?? { total: 0, fixing: 0, bounding: 0 };
+  const triggers = triggerEditor.value?.summary() ?? { total: 0 };
+  return strategySummary({
+    bypass: Boolean(editing.value?.bypass),
+    fixedEnabled: form.fixed_replicas_enabled,
+    fixedReplicas: form.fixed_replicas,
+    predicts: form.predict_enabled && form.predict_mode !== 'none',
+    decisionSource: form.decision_source === 'rule' ? 'rule' : 'algorithm',
+    triggers: triggers.total,
+    periods: periods.total,
+    periodsFixing: periods.fixing,
+    periodsBounding: periods.bounding
+  });
+});
+/** the forecast is part of the module only while it predicts: the data it trains on and the score that holds an algorithm back are for it alone */
+const predicts = computed(() => form.predict_enabled && form.predict_mode !== 'none');
+
+/** a fixed count is on: it keeps exactly its replicas, so the triggers and the floors and caps of the periods change nothing */
+const fixedHolds = computed(() => form.fixed_replicas_enabled && form.fixed_replicas > 0);
+const strategyTagType = (state: StrategyState) =>
+  state === 'active' ? 'success' : state === 'overridden' ? 'warning' : 'default';
+/** the name of a strategy, the source of the replicas being the forecast, the fixed formula or the default the platform falls back to */
+function strategyLabel(row: StrategyRow) {
+  const m = (key: string) => t(`page.forecast.modules.${key}`);
+  if (row.key !== 'source') return m(`strategy_${row.key}`);
+  if (form.decision_source === 'rule') return m('strategy_source_rule');
+  return m(predicts.value ? 'strategy_source_algorithm' : 'strategy_source_fallback');
+}
+/** the sentence that says which strategy gives the replicas now and what the others can do to them */
+const strategyText = computed(() => {
+  const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
+  const named = {
+    n: form.fixed_replicas,
+    triggers: strategy.value.rows.find(row => row.key === 'triggers')?.count ?? 0,
+    periods: strategy.value.rows.find(row => row.key === 'periods')?.count ?? 0
+  };
+  return m(`strategyDecides_${strategy.value.decides}`, named);
+});
+/** what the run mode lets the decision do to the cluster */
+const modeText = computed(() => {
+  const label = modeOptions.value.find(option => option.value === form.mode)?.label ?? form.mode;
+  return t('page.forecast.modules.strategyMode', {
+    mode: label,
+    effect: t(`page.forecast.modules.strategyMode_${form.mode}`)
+  });
+});
+
 /** the replica bounds in one sentence with the figures of the form: what the ceiling is now and what the hard maximum and the expansion speed do (or that they do nothing) */
 const boundsNote = computed(() => {
   const m = (key: string, named?: Record<string, unknown>) => t(`page.forecast.modules.${key}`, named ?? {});
   const { min_replicas: min, max_replicas: max } = form;
   if (!(max > 0)) return m('boundsMissing', { what: m('boundsMissingMax'), side: m('boundsSideMax') });
-  if (form.max_replicas_mode === 'dynamic') {
-    const step = Math.max(1, Math.ceil(max * form.expand_step_ratio));
-    return m('boundsDynamic', {
-      max,
-      step,
-      ratio: `${formatNumber(form.expand_step_ratio * 100)}%`,
-      hard: form.hard_max_replicas || '-'
-    });
-  }
   if (!(min > 0)) return `${m('boundsFixed', { min: 0, max })}`;
   return m('boundsFixed', { min, max });
 });
@@ -734,80 +765,17 @@ function blockersText(codes?: string[] | null) {
   return (codes ?? []).map(code => t(`page.forecast.modules.blocker_${code}`)).join('；');
 }
 
-// ---- what the resource dashboard recommends for this module, put in the form (not saved: the person reads, changes and saves)
-const recommendDetail = ref<Api.Overprovision.Detail | null>(null);
-const recommendLoading = ref(false);
-const recommendWaited = ref(0);
-const recommendProgress = ref<ReturnType<typeof progressParams>>(null);
-const recommendFailure = ref('');
-const recommendChosen = ref<ApplyTarget[]>([]);
-const recommendItems = computed(() => applyItems(recommendDetail.value));
-/** what the form holds now in each field a recommendation can go in, in the unit of the module (the memory is typed in MiB) */
-const recommendCurrent = computed(() => {
-  const out: Partial<Record<ApplyField, number>> = {
-    pod_cpu_request_milli: form.pod_cpu_request_milli,
-    min_cpu_milli: form.min_cpu_milli,
-    max_cpu_milli: form.max_cpu_milli,
-    fallback_cpu_milli: form.fallback_cpu_milli,
-    pod_memory_request_bytes: form.pod_memory_request_mib * MIB,
-    min_memory_bytes: form.min_memory_mib * MIB,
-    max_memory_bytes: form.max_memory_mib * MIB,
-    fallback_memory_bytes: form.fallback_memory_mib * MIB,
-    limit_cpu_ratio: form.limit_cpu_ratio,
-    limit_memory_ratio: form.limit_memory_ratio,
-    min_replicas: form.min_replicas,
-    max_replicas: form.max_replicas,
-    fallback_replicas: form.fallback_replicas,
-    fixed_replicas: form.fixed_replicas_enabled ? form.fixed_replicas : 0
-  };
-  return out;
-});
-let recommendSeq = 0;
-
-async function readRecommendation() {
-  const target = editing.value;
-  if (!target) return;
-  recommendSeq += 1;
-  const seq = recommendSeq;
-  recommendLoading.value = true;
-  recommendFailure.value = '';
-  recommendWaited.value = 0;
-  recommendProgress.value = null;
-  try {
-    const { data, error } = await fetchGetModuleOverprovision(
-      target.id,
-      {},
-      {
-        onWait: (seconds, progress) => {
-          recommendWaited.value = seconds;
-          recommendProgress.value = progressParams(progress, stage => t(`page.overprovision.readStage_${stage}`));
-        },
-        cancelled: () => seq !== recommendSeq
-      }
-    );
-    if (seq !== recommendSeq) return;
-    recommendDetail.value = data ?? null;
-    if (!data) {
-      const response = (error as { response?: { data?: { msg?: string } } } | null)?.response;
-      recommendFailure.value =
-        response?.data?.msg ||
-        (error as { message?: string } | null)?.message ||
-        t('page.forecast.modules.recommendFailed');
-    }
-  } finally {
-    if (seq === recommendSeq) recommendLoading.value = false;
-  }
+// ---- what a module needs before it can do anything: the person is guided to the few parameters to fill, not to a recommendation of the dashboard (a new module has no analysis to read)
+interface GuideItem {
+  key: string;
+  done: boolean;
 }
-
-/** the ticked recommendations go in the form: the fields are the ones the person edits below, and nothing is saved */
-function fillRecommendation() {
-  for (const target of recommendChosen.value) {
-    const { key, value } = formField(target);
-    (form as Record<string, unknown>)[key] = value;
-    if (target.field === 'fixed_replicas') form.fixed_replicas_enabled = true;
-  }
-  message.success(t('page.forecast.modules.recommendFilled', { n: recommendChosen.value.length }));
-}
+const guide = computed<GuideItem[]>(() => [
+  { key: 'workload', done: Boolean(form.namespace.trim() && form.workload.trim()) },
+  { key: 'podRequests', done: form.pod_cpu_request_milli > 0 && form.pod_memory_request_mib > 0 },
+  { key: 'replicaBounds', done: form.max_replicas > 0 && form.max_replicas >= form.min_replicas }
+]);
+const guideOpen = computed(() => guide.value.some(item => !item.done));
 
 // ---- the parameters of another module onto this one (a module is switched off to take them; it is one step, and the form is then edited as usual)
 const copyFrom = ref<number | null>(null);
@@ -874,8 +842,7 @@ function open(row?: Api.Forecast.Module) {
       max_shortfall: row.max_shortfall || 0.5,
       min_memory_mib: row.min_memory_bytes / MIB,
       max_memory_mib: row.max_memory_bytes / MIB,
-      fallback_memory_mib: row.fallback_memory_bytes / MIB,
-      expand_step_ratio: row.expand_step_ratio || 0.25
+      fallback_memory_mib: row.fallback_memory_bytes / MIB
     });
   }
   visible.value = true;
@@ -956,9 +923,6 @@ function payloadFromForm(): Api.Forecast.ModulePayload {
     pod_capacity_rps: form.pod_capacity_rps,
     timezone: form.timezone.trim() || 'Asia/Shanghai',
     min_score: form.min_score,
-    max_replicas_mode: form.max_replicas_mode,
-    hard_max_replicas: form.hard_max_replicas,
-    expand_step_ratio: form.expand_step_ratio,
     min_gpu: form.min_gpu,
     max_gpu: form.max_gpu,
     fallback_gpu: form.fallback_gpu,
@@ -1578,43 +1542,16 @@ onMounted(() => {
             </div>
           </div>
         </section>
-        <section v-if="editing" class="mod-sec">
+        <section v-if="guideOpen" class="mod-sec guide-box">
           <div class="mod-sec-title">
-            <span>{{ t('page.forecast.modules.recommendTitle') }}</span>
+            <span>{{ t('page.forecast.modules.guideTitle') }}</span>
           </div>
-          <div class="mod-sec-desc">{{ t('page.forecast.modules.recommendDesc') }}</div>
-          <div class="flex-col gap-8px">
-            <div class="flex items-center gap-10px">
-              <NButton secondary :loading="recommendLoading" @click="readRecommendation">
-                {{ t('page.forecast.modules.recommendRead') }}
-              </NButton>
-              <span v-if="recommendLoading && recommendWaited > 0" class="text-12px opacity-70">
-                {{
-                  recommendProgress
-                    ? t('page.forecast.modules.recommendWaitingProgress', { n: recommendWaited, ...recommendProgress })
-                    : t('page.forecast.modules.recommendWaiting', { n: recommendWaited })
-                }}
-              </span>
-              <span v-if="recommendFailure" class="text-12px text-[#d03050]">{{ recommendFailure }}</span>
-            </div>
-            <template v-if="recommendDetail && !recommendLoading">
-              <div v-if="!recommendItems.length" class="text-12px opacity-70">
-                {{ t('page.overprovision.applyEmpty') }}
-              </div>
-              <template v-else>
-                <OverprovisionApplyTable
-                  v-model="recommendChosen"
-                  :items="recommendItems"
-                  :current="recommendCurrent"
-                />
-                <div>
-                  <NButton type="primary" secondary :disabled="!recommendChosen.length" @click="fillRecommendation">
-                    {{ t('page.forecast.modules.recommendFill', { n: recommendChosen.length }) }}
-                  </NButton>
-                </div>
-              </template>
-            </template>
-          </div>
+          <ul class="guide-list">
+            <li v-for="item in guide" :key="item.key" :class="{ done: item.done }">
+              <SvgIcon :icon="item.done ? 'carbon:checkmark-filled' : 'carbon:circle-dash'" />
+              <span>{{ t(`page.forecast.modules.guide_${item.key}`) }}</span>
+            </li>
+          </ul>
         </section>
         <div class="mod-group">
           <div class="mod-group-title">{{ t('page.forecast.modules.groupBase') }}</div>
@@ -1645,10 +1582,10 @@ onMounted(() => {
                 </span>
               </template>
               <NSelect v-model:value="form.decision_source" :options="decisionSourceOptions" />
-              <div class="live-note w-full">
-                {{ t(`page.forecast.modules.decisionSourceNote_${form.decision_source}`) }}
-              </div>
             </NFormItem>
+            <div class="live-note form-note">
+              {{ t(`page.forecast.modules.decisionSourceNote_${form.decision_source}`) }}
+            </div>
             <NFormItem v-if="clusters.length > 1">
               <template #label>
                 <span class="inline-flex items-center gap-4px">
@@ -1706,7 +1643,7 @@ onMounted(() => {
           </NForm>
         </section>
 
-        <section class="mod-sec">
+        <section v-if="predicts" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionData') }}</span>
             <IconTooltip icon="mdi-help-circle" placement="top">
@@ -1883,7 +1820,7 @@ onMounted(() => {
           <div class="mod-group-title">{{ t('page.forecast.modules.groupCalc') }}</div>
           <div class="mod-group-desc">{{ t('page.forecast.modules.groupCalcDesc') }}</div>
         </div>
-        <section class="mod-sec">
+        <section v-if="predicts" class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionCapacity') }}</span>
             <IconTooltip icon="mdi-help-circle" placement="top">
@@ -1915,17 +1852,6 @@ onMounted(() => {
               <NInputNumber v-model:value="form.pod_capacity_rps" :min="0" class="w-full" />
             </NFormItem>
             <template v-if="form.replica_mode === 'dynamic'">
-              <NFormItem>
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.capacityMode') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.capacityModeHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NSelect v-model:value="form.capacity_mode" :options="capacityModeOptions" />
-              </NFormItem>
               <NFormItem :label="t('page.forecast.modules.podCpuRequest')">
                 <NInputNumber v-model:value="form.pod_cpu_request_milli" :min="0" class="w-full" />
               </NFormItem>
@@ -1935,6 +1861,12 @@ onMounted(() => {
             </template>
           </NForm>
 
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.flowTitle') }}</div>
+            <ul class="flow-list">
+              <li v-for="(line, index) in replicaFlow" :key="index" :class="{ off: !line.on }">{{ line.text }}</li>
+            </ul>
+          </div>
           <div v-if="!editing && !cloneSource" class="cap-note">{{ t('page.forecast.modules.capNew') }}</div>
           <div class="cap-cards">
             <CapacityCard v-for="card in capacityCards" :key="card.key" :card="card" />
@@ -2286,6 +2218,14 @@ onMounted(() => {
                 : t('page.forecast.modules.jvmDisabled')
             }}
           </div>
+          <div class="order-box">
+            <div class="order-title">{{ t('page.forecast.modules.jvmEffectTitle') }}</div>
+            <ul class="flow-list">
+              <li :class="{ off: form.jvm_heap_pressure > 0 }">{{ t('page.forecast.modules.jvmEffectNone') }}</li>
+              <li :class="{ off: !(form.jvm_heap_pressure > 0) }">{{ t('page.forecast.modules.jvmEffectOn') }}</li>
+              <li>{{ t('page.forecast.modules.jvmEffectWhere') }}</li>
+            </ul>
+          </div>
           <div class="mb-6px mt-8px flex items-center gap-6px text-13px opacity-80">
             {{ t('page.forecast.modules.jvmMetricsTitle') }}
           </div>
@@ -2327,41 +2267,6 @@ onMounted(() => {
               </template>
               <NInputNumber v-model:value="form.max_replicas" :min="0" :precision="0" class="w-full" />
             </NFormItem>
-            <NFormItem>
-              <template #label>
-                <span class="inline-flex items-center gap-4px">
-                  {{ t('page.forecast.modules.maxReplicasMode') }}
-                  <IconTooltip icon="mdi-help-circle" placement="top">
-                    <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.maxReplicasModeHint') }}</div>
-                  </IconTooltip>
-                </span>
-              </template>
-              <NSelect v-model:value="form.max_replicas_mode" :options="maxModeOptions" />
-            </NFormItem>
-            <template v-if="form.max_replicas_mode === 'dynamic'">
-              <NFormItem>
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.hardMaxReplicas') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.hardMaxReplicasHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NInputNumber v-model:value="form.hard_max_replicas" :min="0" :precision="0" class="w-full" />
-              </NFormItem>
-              <NFormItem>
-                <template #label>
-                  <span class="inline-flex items-center gap-4px">
-                    {{ t('page.forecast.modules.expandStepRatio') }}
-                    <IconTooltip icon="mdi-help-circle" placement="top">
-                      <div class="max-w-360px leading-22px">{{ t('page.forecast.modules.expandStepRatioHint') }}</div>
-                    </IconTooltip>
-                  </span>
-                </template>
-                <NInputNumber v-model:value="form.expand_step_ratio" :min="0.01" :max="5" :step="0.05" class="w-full" />
-              </NFormItem>
-            </template>
           </NForm>
           <div class="live-note">{{ boundsNote }}</div>
           <div class="order-box">
@@ -2464,7 +2369,7 @@ onMounted(() => {
               </template>
               <NInputNumber v-model:value="form.ttl_seconds" :min="30" :max="86400" class="w-full" />
             </NFormItem>
-            <NFormItem>
+            <NFormItem v-if="predicts">
               <template #label>
                 <span class="inline-flex items-center gap-4px">
                   {{ t('page.forecast.modules.minScore') }}
@@ -2482,6 +2387,22 @@ onMounted(() => {
           <div class="mod-group-title">{{ t('page.forecast.modules.groupStrategy') }}</div>
           <div class="mod-group-desc">{{ t('page.forecast.modules.groupStrategyDesc') }}</div>
         </div>
+        <section class="mod-sec strategy-box">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.strategyTitle') }}</span>
+          </div>
+          <div class="strategy-tags">
+            <span v-for="row in strategy.rows" :key="row.key" class="strategy-tag">
+              <NTag size="small" :bordered="false" :type="strategyTagType(row.state)">
+                {{ strategyLabel(row) }}
+                <template v-if="row.count">· {{ row.count }}</template>
+              </NTag>
+              <span class="strategy-state">{{ t(`page.forecast.modules.strategyState_${row.state}`) }}</span>
+            </span>
+          </div>
+          <div class="live-note">{{ strategyText }}</div>
+          <div class="live-note">{{ modeText }}</div>
+        </section>
         <section class="mod-sec">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionPredict') }}</span>
@@ -2526,7 +2447,7 @@ onMounted(() => {
           </NForm>
         </section>
 
-        <section class="mod-sec">
+        <section class="mod-sec" :class="{ dim: fixedHolds }">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionPeriodsStrategy') }}</span>
             <IconTooltip icon="mdi-help-circle" placement="top">
@@ -2534,6 +2455,7 @@ onMounted(() => {
             </IconTooltip>
           </div>
           <div class="mod-sec-desc">{{ t('page.forecast.modules.descPeriodsStrategy') }}</div>
+          <div v-if="fixedHolds" class="live-note">{{ t('page.forecast.modules.heldByFixed') }}</div>
           <NForm :model="form" label-placement="top">
             <NFormItem :label="t('page.forecast.modules.timezone')">
               <NInput v-model:value="form.timezone" placeholder="UTC / Asia/Shanghai" />
@@ -2542,11 +2464,12 @@ onMounted(() => {
           <PeriodEditor ref="periodEditor" />
         </section>
 
-        <section class="mod-sec">
+        <section class="mod-sec" :class="{ dim: fixedHolds }">
           <div class="mod-sec-title">
             <span>{{ t('page.forecast.modules.sectionTriggers') }}</span>
           </div>
           <div class="mod-sec-desc">{{ t('page.forecast.modules.descTriggers') }}</div>
+          <div v-if="fixedHolds" class="live-note">{{ t('page.forecast.modules.heldByFixed') }}</div>
           <TriggerEditor ref="triggerEditor" />
         </section>
 
@@ -2726,6 +2649,28 @@ onMounted(() => {
   background: rgba(32, 128, 240, 0.08);
 }
 
+.guide-box {
+  border-color: var(--n-primary-color, #2080f0);
+}
+.guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  list-style: none;
+}
+.guide-list li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  opacity: 0.8;
+}
+.guide-list li.done {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
 .mod-group-title {
   font-size: 14px;
   font-weight: 700;
@@ -2752,6 +2697,37 @@ onMounted(() => {
   opacity: 0.8;
 }
 
+.dim :deep(.trigger-editor),
+.dim :deep(.period-editor) {
+  opacity: 0.5;
+}
+.form-note {
+  margin: -8px 0 12px;
+}
+.strategy-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 6px;
+}
+.strategy-tag {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.strategy-state {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.flow-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 20px;
+}
+.flow-list li.off {
+  opacity: 0.45;
+}
 .order-box ol {
   margin: 0;
   padding-left: 20px;

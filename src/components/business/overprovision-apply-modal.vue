@@ -4,18 +4,28 @@ import { NAlert, NButton, NModal, NSpace, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import OverprovisionApplyTable from '@/components/business/overprovision-apply-table.vue';
 import { fetchGetForecastModule, fetchUpdateForecastModule } from '@/service/api';
-import { type ApplyField, type ApplyTarget, applyItems, payloadOf } from '@/utils/overprovision-apply';
+import {
+  type ApplyCaliber,
+  type ApplyField,
+  type ApplyScheme,
+  type ApplyTarget,
+  applyItems,
+  payloadOf
+} from '@/utils/overprovision-apply';
 
 defineOptions({ name: 'OverprovisionApplyModal' });
 
 /**
- * The recommendations of the resource dashboard of a module put in the module in one step: the Requests of the CPU and the memory, the ratio of their Limits, the replicas. Each goes
- * in the field the person chooses (the usual one first); only the ticked rows are sent. What changes is the module's parameters; the workload in the cluster is not touched.
+ * The recommendations of one way of the resource dashboard put in the module: the replicas (the Pod stays), or the Pod (the Requests of the CPU and the memory and the ratio of their
+ * Limits; the replicas stay). The two are applied one at a time, each at the caliber chosen on the page. Each recommendation goes in the field the person chooses (the usual one
+ * first); only the ticked rows are sent. What changes is the module's parameters; the workload in the cluster is not touched.
  */
 interface Props {
   show: boolean;
   moduleId: number;
   detail: Api.Overprovision.Detail | null;
+  scheme: ApplyScheme;
+  caliber: ApplyCaliber;
 }
 const props = defineProps<Props>();
 const emit = defineEmits<{ 'update:show': [value: boolean]; applied: [] }>();
@@ -23,7 +33,8 @@ const { t } = useI18n();
 const message = useMessage();
 
 const visible = computed({ get: () => props.show, set: value => emit('update:show', value) });
-const items = computed(() => applyItems(props.detail));
+const items = computed(() => applyItems(props.detail, props.scheme, props.caliber));
+const caliberName = computed(() => (props.caliber === 'all' ? 'MAX' : props.caliber));
 const chosen = ref<ApplyTarget[]>([]);
 const module = ref<Api.Forecast.Module | null>(null);
 const saving = ref(false);
@@ -86,9 +97,21 @@ async function apply() {
 </script>
 
 <template>
-  <NModal v-model:show="visible" preset="card" :title="t('page.overprovision.applyTitle')" class="w-880px max-w-95vw">
+  <NModal
+    v-model:show="visible"
+    preset="card"
+    :title="
+      t(`page.overprovision.applyTitle${scheme === 'replicas' ? 'Replicas' : 'Config'}`, { caliber: caliberName })
+    "
+    class="w-880px max-w-95vw"
+  >
     <div class="flex-col gap-10px">
-      <div class="text-12px leading-20px opacity-75">{{ t('page.overprovision.applyDesc') }}</div>
+      <div class="text-12px leading-20px opacity-75">
+        {{
+          t(`page.overprovision.applyDesc${scheme === 'replicas' ? 'Replicas' : 'Config'}`, { caliber: caliberName })
+        }}
+        {{ t('page.overprovision.applyDesc') }}
+      </div>
       <NAlert v-if="module?.enabled" type="warning" :show-icon="false">
         {{ t('page.overprovision.applyEnabled') }}
       </NAlert>
