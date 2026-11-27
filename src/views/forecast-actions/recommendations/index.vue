@@ -168,6 +168,14 @@ const columnMap: Record<string, any> = {
     resizable: true,
     render: (row: Api.Forecast.Recommendation) => source(row.replicas_source, row.replicas_set, String(row.replicas))
   },
+  node_pool: {
+    title: () =>
+      helpTitle(t('page.forecast.recommendations.nodePool'), t('page.forecast.recommendations.nodePoolHelp')),
+    key: 'node_pool',
+    width: 160,
+    resizable: true,
+    render: (row: Api.Forecast.Recommendation) => row.node_pool || '-'
+  },
   spec: {
     title: () => helpTitle(t('page.forecast.recommendations.specVersion'), t('page.forecast.recommendations.help')),
     key: 'spec',
@@ -235,7 +243,19 @@ const columnMap: Record<string, any> = {
 const cfg = useTableColumnConfig({
   pageCode: 'forecast_recommendation',
   columnMap,
-  defaultKeys: ['module', 'cpu', 'memory', 'replicas', 'spec', 'created_at', 'gpu', 'algorithm', 'degraded', 'operate'],
+  defaultKeys: [
+    'module',
+    'cpu',
+    'memory',
+    'replicas',
+    'node_pool',
+    'spec',
+    'created_at',
+    'gpu',
+    'algorithm',
+    'degraded',
+    'operate'
+  ],
   // a width saved before the buttons grew must not clip them
   columnMinWidths: { operate: 150 }
 });

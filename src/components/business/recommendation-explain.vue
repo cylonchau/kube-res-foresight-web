@@ -118,6 +118,20 @@ interface Detail {
       score?: number;
     }>;
   };
+  /** the node pool recommended for the Pod (only for a module that uses node pools): the pool, why, and the pools that fitted less well */
+  node_pool?: {
+    pool?: {
+      name: string;
+      kind: string;
+      node_selector: Record<string, string>;
+      pods_per_node: number;
+      cpu_fill: number;
+      memory_fill: number;
+      efficiency: number;
+    };
+    reason: string;
+    alternatives?: Array<{ name: string; kind: string; pods_per_node: number; efficiency: number }>;
+  };
   /** how the Pod CPU and memory of the snapshot were decided apart from the replicas */
   resource_spec?: {
     version: number;
@@ -523,6 +537,34 @@ const sourceColumns = computed(() => [
       :scroll-x="760"
     />
     <div class="text-12px leading-20px opacity-70">{{ t('page.forecast.explain.precedence') }}</div>
+
+    <div v-if="parsed.node_pool" class="flex flex-col gap-4px">
+      <div class="text-13px font-medium">{{ t('page.forecast.explain.nodePoolTitle') }}</div>
+      <div v-if="parsed.node_pool.pool" class="flex flex-wrap items-center gap-8px text-13px">
+        <NTag size="small" :bordered="false" type="info">{{ parsed.node_pool.pool.name }}</NTag>
+        <span class="opacity-70">
+          {{ t(`page.nodePool.kind_${parsed.node_pool.pool.kind}`) }} ·
+          {{
+            Object.entries(parsed.node_pool.pool.node_selector)
+              .map(([key, value]) => `${key}=${value}`)
+              .join(', ')
+          }}
+        </span>
+      </div>
+      <div class="text-12px leading-20px opacity-80">{{ parsed.node_pool.reason }}</div>
+      <div v-if="parsed.node_pool.alternatives?.length" class="text-12px leading-20px opacity-70">
+        {{
+          t('page.forecast.explain.nodePoolOthers', {
+            list: parsed.node_pool.alternatives
+              .map(
+                item =>
+                  `${item.name} (${t('page.forecast.explain.nodePoolFill', { n: item.pods_per_node, percent: Math.round(item.efficiency * 100) })})`
+              )
+              .join('；')
+          })
+        }}
+      </div>
+    </div>
 
     <div v-if="parsed.triggers?.length" class="flex flex-col gap-6px">
       <div class="text-13px font-medium">{{ t('page.forecast.triggers.stateTitle') }}</div>

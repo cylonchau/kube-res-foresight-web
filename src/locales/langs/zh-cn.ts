@@ -3040,6 +3040,9 @@ const local = {
         source_oom_floor: 'OOM 地板',
         algorithm: '决策算法（分数）',
         effectiveMax: '有效最大副本数',
+        nodePool: '节点池',
+        nodePoolHelp:
+          '按这次推荐的单个 Pod 的 CPU、内存，放进哪个节点池后节点剩余的资源最少。只有开了“推荐节点池”的模块才有；运行模式决定会不会真的调到这个池子：准入时加到新 Pod 的 Node Selector 上，自动模式下 Operator 以 --adjust-pod-spec 启动时才会写到工作负载上。',
         specVersion: 'Pod 规格版本',
         specVersionTag: '规格 v{version}',
         specHeld: '规格保持',
@@ -3626,6 +3629,9 @@ const local = {
         specPinned: '快照采用',
         specKept: '保持不变：{reason}',
         specTaken: '采用：{reason}',
+        nodePoolTitle: '节点池推荐',
+        nodePoolOthers: '其他节点池：{list}',
+        nodePoolFill: '每节点 {n} 个 Pod，资源利用 {percent}%',
         specHelp:
           'Pod 的 CPU、内存规格在准入时设置，生效后保持不变：预测与它相差不到 {percent}% 不改动，降低要等规格生效满 {hours} 小时，增加、固定周期、旁路和 OOM 保护立即生效。副本数不受影响，每个周期随预测变化。',
         field: '字段',

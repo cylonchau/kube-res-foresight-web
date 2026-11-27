@@ -3195,6 +3195,9 @@ const local = {
         range: 'Window'
       },
       recommendations: {
+        nodePool: 'Node pool',
+        nodePoolHelp:
+          'The node pool in which the Pod of this recommendation (its CPU and memory) leaves the nodes with the least unused. Only for a module that recommends a node pool; the run mode decides whether it is moved there: admission puts the Node Selector on a new Pod, and in auto mode an operator started with --adjust-pod-spec writes it on the workload.',
         title: 'Resource recommendations',
         executions: 'Scaling records',
         allModules: 'All modules',
@@ -3842,6 +3845,9 @@ const local = {
         specPinned: 'In the snapshot',
         specKept: 'Kept: {reason}',
         specTaken: 'Taken: {reason}',
+        nodePoolTitle: 'Node pool recommendation',
+        nodePoolOthers: 'Other pools: {list}',
+        nodePoolFill: '{n} Pods per node, {percent}% of the resources used',
         specHelp:
           'The CPU and memory spec of the Pods is set at admission and then stays: a forecast within {percent}% of it changes nothing, a decrease waits until the spec has stood {hours} hours, and an increase, a fixed period, a bypass and the OOM protection act at once. Replicas are not affected: they follow the forecast every cycle.',
         field: 'Field',
