@@ -30,6 +30,7 @@ import CapacityCard, { type CapacityCardData } from '@/components/business/capac
 import TriggerEditor from '@/components/business/trigger-editor.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
 import ModuleBatchCopyModal from '@/components/business/module-batch-copy-modal.vue';
+import OverprovisionApplyTable from '@/components/business/overprovision-apply-table.vue';
 import ModuleNeedModal from '@/components/business/module-need-modal.vue';
 import RegistrationTombstonesModal from '@/components/business/registration-tombstones-modal.vue';
 import ModuleParamsModal from '@/components/business/module-params-modal.vue';
@@ -53,6 +54,7 @@ import {
   fetchGetConfig,
   fetchGetForecastModules,
   fetchGetModuleCapacity,
+  fetchGetModuleOverprovision,
   fetchGetModuleSources,
   fetchGetPeriods,
   fetchGetTriggers,
@@ -75,6 +77,7 @@ import {
   res as resToken
 } from '@/utils/formula';
 import { type DocForm, type ParamId, paramDoc } from '@/utils/param-docs';
+import { type ApplyField, type ApplyTarget, applyItems, formField } from '@/utils/overprovision-apply';
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
 import { EMPTY_SYSTEM, type SystemParams } from '@/utils/module-params';
@@ -724,6 +727,78 @@ function runPreview() {
 /** what a registered module still lacks, in words, for a tooltip or the notice of the form */
 function blockersText(codes?: string[] | null) {
   return (codes ?? []).map(code => t(`page.forecast.modules.blocker_${code}`)).join('；');
+}
+
+// ---- what the resource dashboard recommends for this module, put in the form (not saved: the person reads, changes and saves)
+const recommendDetail = ref<Api.Overprovision.Detail | null>(null);
+const recommendLoading = ref(false);
+const recommendWaited = ref(0);
+const recommendFailure = ref('');
+const recommendChosen = ref<ApplyTarget[]>([]);
+const recommendItems = computed(() => applyItems(recommendDetail.value));
+/** what the form holds now in each field a recommendation can go in, in the unit of the module (the memory is typed in MiB) */
+const recommendCurrent = computed(() => {
+  const out: Partial<Record<ApplyField, number>> = {
+    pod_cpu_request_milli: form.pod_cpu_request_milli,
+    min_cpu_milli: form.min_cpu_milli,
+    max_cpu_milli: form.max_cpu_milli,
+    fallback_cpu_milli: form.fallback_cpu_milli,
+    pod_memory_request_bytes: form.pod_memory_request_mib * MIB,
+    min_memory_bytes: form.min_memory_mib * MIB,
+    max_memory_bytes: form.max_memory_mib * MIB,
+    fallback_memory_bytes: form.fallback_memory_mib * MIB,
+    limit_cpu_ratio: form.limit_cpu_ratio,
+    limit_memory_ratio: form.limit_memory_ratio,
+    min_replicas: form.min_replicas,
+    max_replicas: form.max_replicas,
+    fallback_replicas: form.fallback_replicas,
+    fixed_replicas: form.fixed_replicas_enabled ? form.fixed_replicas : 0
+  };
+  return out;
+});
+let recommendSeq = 0;
+
+async function readRecommendation() {
+  const target = editing.value;
+  if (!target) return;
+  recommendSeq += 1;
+  const seq = recommendSeq;
+  recommendLoading.value = true;
+  recommendFailure.value = '';
+  recommendWaited.value = 0;
+  try {
+    const { data, error } = await fetchGetModuleOverprovision(
+      target.id,
+      {},
+      {
+        onWait: seconds => {
+          recommendWaited.value = seconds;
+        },
+        cancelled: () => seq !== recommendSeq
+      }
+    );
+    if (seq !== recommendSeq) return;
+    recommendDetail.value = data ?? null;
+    if (!data) {
+      const response = (error as { response?: { data?: { msg?: string } } } | null)?.response;
+      recommendFailure.value =
+        response?.data?.msg ||
+        (error as { message?: string } | null)?.message ||
+        t('page.forecast.modules.recommendFailed');
+    }
+  } finally {
+    if (seq === recommendSeq) recommendLoading.value = false;
+  }
+}
+
+/** the ticked recommendations go in the form: the fields are the ones the person edits below, and nothing is saved */
+function fillRecommendation() {
+  for (const target of recommendChosen.value) {
+    const { key, value } = formField(target);
+    (form as Record<string, unknown>)[key] = value;
+    if (target.field === 'fixed_replicas') form.fixed_replicas_enabled = true;
+  }
+  message.success(t('page.forecast.modules.recommendFilled', { n: recommendChosen.value.length }));
 }
 
 // ---- the parameters of another module onto this one (a module is switched off to take them; it is one step, and the form is then edited as usual)
@@ -1492,6 +1567,40 @@ onMounted(() => {
                 <li v-for="item in copyResult.skipped" :key="item.what">{{ item.what }}：{{ item.reason }}</li>
               </ul>
             </div>
+          </div>
+        </section>
+        <section v-if="editing" class="mod-sec">
+          <div class="mod-sec-title">
+            <span>{{ t('page.forecast.modules.recommendTitle') }}</span>
+          </div>
+          <div class="mod-sec-desc">{{ t('page.forecast.modules.recommendDesc') }}</div>
+          <div class="flex-col gap-8px">
+            <div class="flex items-center gap-10px">
+              <NButton secondary :loading="recommendLoading" @click="readRecommendation">
+                {{ t('page.forecast.modules.recommendRead') }}
+              </NButton>
+              <span v-if="recommendLoading && recommendWaited > 0" class="text-12px opacity-70">
+                {{ t('page.forecast.modules.recommendWaiting', { n: recommendWaited }) }}
+              </span>
+              <span v-if="recommendFailure" class="text-12px text-[#d03050]">{{ recommendFailure }}</span>
+            </div>
+            <template v-if="recommendDetail && !recommendLoading">
+              <div v-if="!recommendItems.length" class="text-12px opacity-70">
+                {{ t('page.overprovision.applyEmpty') }}
+              </div>
+              <template v-else>
+                <OverprovisionApplyTable
+                  v-model="recommendChosen"
+                  :items="recommendItems"
+                  :current="recommendCurrent"
+                />
+                <div>
+                  <NButton type="primary" secondary :disabled="!recommendChosen.length" @click="fillRecommendation">
+                    {{ t('page.forecast.modules.recommendFill', { n: recommendChosen.length }) }}
+                  </NButton>
+                </div>
+              </template>
+            </template>
           </div>
         </section>
         <div class="mod-group">

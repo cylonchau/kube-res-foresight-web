@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import GrafanaLink from '@/components/business/grafana-link.vue';
 import OverprovisionAiAssistant from '@/components/business/overprovision-ai-assistant.vue';
+import OverprovisionApplyModal from '@/components/business/overprovision-apply-modal.vue';
 import OverprovisionModulePanel from '@/components/business/overprovision-module-panel.vue';
 import TimeRangeField from '@/components/business/time-range-field.vue';
 import HelpLabel from '@/components/common/help-label.vue';
@@ -59,6 +60,8 @@ function reasonOf(error: unknown) {
   return response?.data?.msg || response?.data?.message || (error as any)?.message || '';
 }
 
+/** the recommendations put in the module (its parameters change, so the analysis is read again) */
+const applyShow = ref(false);
 let detailSeq = 0;
 /** how many seconds the platform has been reading from Prometheus for this page, 0 when it answered at once */
 const waitedSeconds = ref(0);
@@ -170,6 +173,9 @@ onMounted(() => {
             {{ p('slowRead', { n: waitedSeconds }) }}
           </span>
           <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
+          <NButton size="small" type="primary" secondary :disabled="!detail || detailLoading" @click="applyShow = true">
+            {{ p('applyButton') }}
+          </NButton>
           <NButton size="small" secondary :loading="detailLoading" @click="loadDetail">{{ p('reload') }}</NButton>
         </div>
       </div>
@@ -186,6 +192,13 @@ onMounted(() => {
         />
       </NCard>
     </div>
+    <OverprovisionApplyModal
+      v-if="moduleId"
+      v-model:show="applyShow"
+      :module-id="moduleId"
+      :detail="detail"
+      @applied="loadDetail"
+    />
 
     <!-- the AI helper belongs to this page; it asks nothing until the user presses "analyse" -->
     <OverprovisionAiAssistant

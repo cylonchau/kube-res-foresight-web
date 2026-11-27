@@ -12,8 +12,13 @@ export function fetchUpdateCluster(id: number, data: Api.Cluster.ClusterPayload)
   return request<Api.Cluster.Cluster>({ url: `/api/v1/clusters/${id}`, method: 'put', data });
 }
 
-export function fetchDeleteCluster(id: number) {
-  return request({ url: `/api/v1/clusters/${id}`, method: 'delete' });
+/** withModules: the modules of the cluster go with it (the ones that are switched on are switched off first); without it a cluster that still has modules is refused */
+export function fetchDeleteCluster(id: number, withModules = false) {
+  return request<{ deleted: boolean; modules: number }>({
+    url: `/api/v1/clusters/${id}`,
+    method: 'delete',
+    params: withModules ? { modules: 'delete' } : undefined
+  });
 }
 
 /** the access keys that can be bound to a cluster, with the cluster each is bound to now */

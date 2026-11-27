@@ -155,12 +155,23 @@ async function save() {
   }
 }
 
-async function remove(row: Api.Cluster.Cluster) {
-  const { error } = await fetchDeleteCluster(row.id);
+async function remove(row: Api.Cluster.Cluster, withModules = false) {
+  const { error } = await fetchDeleteCluster(row.id, withModules);
   if (!error) {
     message.success(t('common.deleteSuccess'));
     await load();
   }
+}
+
+/** a cluster that still has modules is deleted only when the person says the modules go with it (they are switched off and deleted, and so is what the platform holds of the cluster) */
+function removeWithModules(row: Api.Cluster.Cluster) {
+  window.$dialog?.warning({
+    title: t('common.delete'),
+    content: p('deleteWithModules', { name: row.name, n: row.modules }),
+    positiveText: p('deleteWithModulesYes'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: () => remove(row, true)
+  });
 }
 
 function namespaceSummary(row: Api.Cluster.Cluster) {
@@ -258,14 +269,18 @@ const columnMap: Record<string, any> = {
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         row.is_default
           ? null
-          : h(
-              NPopconfirm,
-              { onPositiveClick: () => remove(row) },
-              {
-                trigger: () => h(NButton, { size: 'tiny', type: 'error' }, () => t('common.delete')),
-                default: () => (row.modules ? p('deleteBlocked') : t('common.confirmDelete'))
-              }
-            )
+          : row.modules
+            ? h(NButton, { size: 'tiny', type: 'error', onClick: () => removeWithModules(row) }, () =>
+                t('common.delete')
+              )
+            : h(
+                NPopconfirm,
+                { onPositiveClick: () => remove(row) },
+                {
+                  trigger: () => h(NButton, { size: 'tiny', type: 'error' }, () => t('common.delete')),
+                  default: () => t('common.confirmDelete')
+                }
+              )
       ])
   }
 };
