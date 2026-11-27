@@ -15,6 +15,7 @@ import { useRouterPush } from '@/hooks/common/router';
 import { fetchGetGrafanaSettings, fetchGetModuleOverprovision } from '@/service/api';
 import { useTabStore } from '@/store/modules/tab';
 import { buildAnalysisQuestion } from '@/utils/overprovision-ai';
+import { progressParams } from '@/utils/pending-text';
 import { DEFAULT_WINDOW_LABEL, rangeOfLabel, windowOf } from '@/utils/overprovision-window';
 import { grafanaUrl } from '@/utils/resource-links';
 
@@ -65,6 +66,8 @@ const applyShow = ref(false);
 let detailSeq = 0;
 /** how many seconds the platform has been reading from Prometheus for this page, 0 when it answered at once */
 const waitedSeconds = ref(0);
+/** how far the platform's own reading has come (the queries of the module answered), when it has counted */
+const readProgress = ref<ReturnType<typeof progressParams>>(null);
 async function loadDetail() {
   const id = moduleId.value;
   detail.value = null;
@@ -79,8 +82,9 @@ async function loadDetail() {
   waitedSeconds.value = 0;
   try {
     const { data, error } = await fetchGetModuleOverprovision(id, win.value.params, {
-      onWait: seconds => {
+      onWait: (seconds, progress) => {
         waitedSeconds.value = seconds;
+        readProgress.value = progressParams(progress, stage => p(`readStage_${stage}`));
       },
       cancelled: () => seq !== detailSeq
     });
@@ -91,6 +95,7 @@ async function loadDetail() {
     if (seq === detailSeq) {
       detailLoading.value = false;
       waitedSeconds.value = 0;
+      readProgress.value = null;
     }
   }
 }
@@ -170,7 +175,11 @@ onMounted(() => {
         </span>
         <div class="filter-actions">
           <span v-if="detailLoading && waitedSeconds > 0" class="text-12px opacity-70">
-            {{ p('slowRead', { n: waitedSeconds }) }}
+            {{
+              readProgress
+                ? p('slowReadProgress', { n: waitedSeconds, ...readProgress })
+                : p('slowRead', { n: waitedSeconds })
+            }}
           </span>
           <GrafanaLink :url="toolbarGrafana" :label="p('invGrafanaOpen')" />
           <NButton size="small" type="primary" secondary :disabled="!detail || detailLoading" @click="applyShow = true">

@@ -1422,6 +1422,10 @@ const local = {
       applyField_fallback_replicas: 'Fallback replicas',
       applyField_fixed_replicas: 'Fixed replicas (switched on with it)',
       slowRead: 'Prometheus is slow: the platform keeps reading in the background, {n} s so far',
+      slowReadProgress:
+        'Prometheus is slow: the platform keeps reading in the background: {stage} {done}/{total} answered, {n} s so far',
+      readStage_metrics: 'metric queries',
+      readStage_modules: 'modules',
       reload: 'Reload',
       srcMapping: 'metric template: {name}',
       src_parameter: 'system parameter',
@@ -2090,6 +2094,7 @@ const local = {
         recommendFill: 'Put in the form ({n})',
         recommendFilled: '{n} put in the form: they take effect when you save',
         recommendWaiting: 'Prometheus is slow: {n} s so far',
+        recommendWaitingProgress: 'Prometheus is slow: {stage} {done}/{total} answered, {n} s so far',
         recommendFailed: 'The resource dashboard could not be read',
         batchCopy: 'Copy the configuration to the selected modules',
         batchCopyTitle: 'Copy the configuration of a module to the {n} selected modules',

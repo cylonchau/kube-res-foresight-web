@@ -8,6 +8,15 @@
 export interface PendingBody {
   pending: true;
   retry_after_seconds?: number;
+  /** how far the work has come, when the platform has counted it */
+  progress?: PendingProgress;
+}
+
+/** the stage a read is in (`metrics`: the queries of one module, `modules`: the modules of a table) and how many of its units are answered */
+export interface PendingProgress {
+  stage?: string;
+  done: number;
+  total: number;
 }
 
 export function isPending(value: unknown): value is PendingBody {
@@ -17,8 +26,8 @@ export function isPending(value: unknown): value is PendingBody {
 export interface UntilAnsweredOptions {
   /** the most it waits in all; the platform works for at most 5 minutes by default (http.background_read_seconds) */
   maxWaitMs?: number;
-  /** told how many seconds have passed each time it asks again */
-  onWait?: (seconds: number) => void;
+  /** told how many seconds have passed, and how far the platform's work has come, each time it asks again */
+  onWait?: (seconds: number, progress?: PendingProgress) => void;
   /** true when the answer is not wanted any more (the page moved on): it stops asking */
   cancelled?: () => boolean;
   /** how long to wait between two asks when the platform does not say */
@@ -55,7 +64,7 @@ export async function untilAnswered<R extends { data: unknown; error: unknown }>
         error: new Error('The platform is still reading from Prometheus; try again in a moment.')
       };
     }
-    onWait?.(Math.round(waited / 1000));
+    onWait?.(Math.round(waited / 1000), result.data.progress);
     const delay = (result.data.retry_after_seconds ?? 0) * 1000 || defaultDelayMs;
     await sleep(delay);
     if (cancelled?.()) return result;

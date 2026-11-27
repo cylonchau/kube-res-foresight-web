@@ -65,6 +65,7 @@ import SvgIcon from '@/components/custom/svg-icon.vue';
 import { formatDateTime } from '@/utils/date';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { copyCell } from '@/utils/copy-cell';
+import { progressParams } from '@/utils/pending-text';
 import { formatResource } from '@/utils/format';
 import {
   type CoefficientForm,
@@ -733,6 +734,7 @@ function blockersText(codes?: string[] | null) {
 const recommendDetail = ref<Api.Overprovision.Detail | null>(null);
 const recommendLoading = ref(false);
 const recommendWaited = ref(0);
+const recommendProgress = ref<ReturnType<typeof progressParams>>(null);
 const recommendFailure = ref('');
 const recommendChosen = ref<ApplyTarget[]>([]);
 const recommendItems = computed(() => applyItems(recommendDetail.value));
@@ -766,13 +768,15 @@ async function readRecommendation() {
   recommendLoading.value = true;
   recommendFailure.value = '';
   recommendWaited.value = 0;
+  recommendProgress.value = null;
   try {
     const { data, error } = await fetchGetModuleOverprovision(
       target.id,
       {},
       {
-        onWait: seconds => {
+        onWait: (seconds, progress) => {
           recommendWaited.value = seconds;
+          recommendProgress.value = progressParams(progress, stage => t(`page.overprovision.readStage_${stage}`));
         },
         cancelled: () => seq !== recommendSeq
       }
@@ -1580,7 +1584,11 @@ onMounted(() => {
                 {{ t('page.forecast.modules.recommendRead') }}
               </NButton>
               <span v-if="recommendLoading && recommendWaited > 0" class="text-12px opacity-70">
-                {{ t('page.forecast.modules.recommendWaiting', { n: recommendWaited }) }}
+                {{
+                  recommendProgress
+                    ? t('page.forecast.modules.recommendWaitingProgress', { n: recommendWaited, ...recommendProgress })
+                    : t('page.forecast.modules.recommendWaiting', { n: recommendWaited })
+                }}
               </span>
               <span v-if="recommendFailure" class="text-12px text-[#d03050]">{{ recommendFailure }}</span>
             </div>

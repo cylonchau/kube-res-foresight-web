@@ -3,7 +3,10 @@ import test from 'node:test';
 import { isPending, untilAnswered } from './pending.ts';
 
 const done = (data: unknown) => ({ data, error: null });
-const pending = (retry?: number) => ({ data: { pending: true, retry_after_seconds: retry }, error: null });
+const pending = (retry?: number, progress?: { stage?: string; done: number; total: number }) => ({
+  data: { pending: true as const, retry_after_seconds: retry, progress },
+  error: null
+});
 
 test('the sign of a read that is still being worked out is read, nothing else is', () => {
   assert.equal(isPending({ pending: true }), true);
@@ -83,4 +86,18 @@ test('it stops asking when the page moved on, and tells the seconds waited while
   assert.equal(calls, 3);
   assert.ok(isPending(result.data), 'the last result is returned as it is');
   assert.deepEqual(told, [0, 2]);
+});
+
+test('what the platform says of how far its work has come is handed on with the seconds', async () => {
+  const answers = [pending(1, { stage: 'metrics', done: 2, total: 7 }), pending(1), done({ ok: true })];
+  let calls = 0;
+  const told: Array<[number, unknown]> = [];
+  await untilAnswered(async () => answers[calls++], {
+    sleep: async () => {},
+    onWait: (seconds, progress) => told.push([seconds, progress])
+  });
+  assert.deepEqual(told, [
+    [0, { stage: 'metrics', done: 2, total: 7 }],
+    [0, undefined]
+  ]);
 });
