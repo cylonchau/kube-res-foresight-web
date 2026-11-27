@@ -29,7 +29,9 @@ import ParamLabel from '@/components/common/param-label.vue';
 import CapacityCard, { type CapacityCardData } from '@/components/business/capacity-card.vue';
 import TriggerEditor from '@/components/business/trigger-editor.vue';
 import ModuleMetrics from '@/components/business/module-metrics.vue';
+import ModuleBatchCopyModal from '@/components/business/module-batch-copy-modal.vue';
 import ModuleNeedModal from '@/components/business/module-need-modal.vue';
+import RegistrationTombstonesModal from '@/components/business/registration-tombstones-modal.vue';
 import ModuleParamsModal from '@/components/business/module-params-modal.vue';
 import type { QueryConfig } from '@/components/business/query-test-result.vue';
 import ListTablePanel from '@/components/business/list-table-panel.vue';
@@ -1015,10 +1017,19 @@ async function save() {
 const batchActions = computed(() => [
   { key: 'enable', label: t('common.enable') },
   { key: 'disable', label: t('common.disable') },
+  { key: 'copy', label: t('page.forecast.modules.batchCopy') },
   { key: 'delete', label: t('common.delete'), danger: true }
 ]);
 
+/** the parameters of one module onto the ones that are selected, and the deleted self-registered modules that are not made again */
+const batchCopyShow = ref(false);
+const tombstonesShow = ref(false);
+
 async function runBatch(action: string) {
+  if (action === 'copy') {
+    batchCopyShow.value = true;
+    return;
+  }
   const { data, error } = await fetchBatchModules({
     action: action as 'enable' | 'disable' | 'delete',
     ids: checkedRowKeys.value
@@ -1409,9 +1420,20 @@ onMounted(() => {
     >
       <template #suffix>
         <NButton size="small" @click="openPreview">{{ t('page.forecast.modules.previewMetric') }}</NButton>
+        <NButton size="small" @click="tombstonesShow = true">{{ t('page.forecast.modules.tombstones') }}</NButton>
         <BatchActions :count="checkedRowKeys.length" :actions="batchActions" @run="runBatch" />
       </template>
     </ListTablePanel>
+
+    <ModuleBatchCopyModal
+      v-model:show="batchCopyShow"
+      :target-ids="checkedRowKeys"
+      @done="
+        load();
+        checkedRowKeys = [];
+      "
+    />
+    <RegistrationTombstonesModal v-model:show="tombstonesShow" />
 
     <!-- create / edit -->
     <NModal v-model:show="visible" preset="card" :title="modalTitle" class="edit-modal-wide">

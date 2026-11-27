@@ -627,6 +627,32 @@ declare namespace Api {
       custom?: CustomQuery;
     }
 
+    /** one target of a batch copy: what was taken and left, or why it was not done */
+    interface BatchCopyRow {
+      id: number;
+      name: string;
+      ok: boolean;
+      error?: string;
+      result?: { copied: string[]; skipped: Array<{ what: string; reason: string }> };
+    }
+
+    interface BatchCopyResult {
+      results: BatchCopyRow[];
+      copied: number;
+      failed: number;
+    }
+
+    /** a module that registered itself and was deleted by a person: it is not registered again until it is allowed */
+    interface RegistrationTombstone {
+      id: number;
+      created_at: string;
+      cluster: string;
+      namespace: string;
+      workload_kind: string;
+      workload: string;
+      module_name: string;
+    }
+
     interface ModuleList {
       list: Module[];
       total: number;

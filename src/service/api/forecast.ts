@@ -25,6 +25,21 @@ export function fetchCopyModuleConfig(id: number, data: { from_id: number; group
   });
 }
 
+/** the parameters of one module onto several (each target is answered: one that is switched on is refused with its reason and the others are done) */
+export function fetchBatchCopyModuleConfig(data: { from_id: number; target_ids: number[]; groups: string[] }) {
+  return request<Api.Forecast.BatchCopyResult>({ url: `${base}/modules/batch-copy-config`, method: 'post', data });
+}
+
+/** the modules that registered themselves, were deleted by a person and are not registered again */
+export function fetchGetRegistrationTombstones() {
+  return request<Api.Forecast.RegistrationTombstone[]>({ url: `${base}/modules/tombstones`, method: 'get' });
+}
+
+/** lets the workload be registered again (the next report of the operator that carries it makes the module) */
+export function fetchDeleteRegistrationTombstone(id: number) {
+  return request({ url: `${base}/modules/tombstones/${id}`, method: 'delete' });
+}
+
 export function fetchCreateForecastModule(data: Api.Forecast.ModulePayload) {
   return request<Api.Forecast.Module>({ url: `${base}/modules`, method: 'post', data });
 }
