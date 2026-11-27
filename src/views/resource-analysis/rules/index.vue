@@ -11,6 +11,7 @@ import { formatBytes, formatCores } from '@/utils/format';
 import { operateWidth } from '@/utils/operate-width';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { stateType } from '@/utils/rule-state';
+import { operateProps } from '@/utils/operate-button';
 
 defineOptions({ name: 'ResourceAnalysisRules' });
 
@@ -195,14 +196,15 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: Api.Rule.Row) =>
-      h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () => r('detail'))
+      h(NButton, { size: 'tiny', ...operateProps('detail'), onClick: () => openDetail(row) }, () => r('detail'))
   }
 };
 const cfg = useTableColumnConfig({
   pageCode: 'resource_analysis_rules',
   columnMap,
   // the CPU and memory figures are in the detail of a module; they can be added to the list from the column settings
-  defaultKeys: ['name', 'source', 'mode', 'state', 'replicasNow', 'replicasNeed', 'certain', 'checked', 'operate'],
+  // the table shows the first five columns of a new page: the replicas now and needed are among them
+  defaultKeys: ['name', 'source', 'state', 'replicasNow', 'replicasNeed', 'mode', 'certain', 'checked', 'operate'],
   columnMinWidths: { operate: 70 }
 });
 

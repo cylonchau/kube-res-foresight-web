@@ -635,6 +635,14 @@ const local = {
       result: '结果',
       reason: '原因',
       calculate: '立即计算',
+      stripTitle: '后台资源评估',
+      stripReplicas: '副本',
+      stripCpu: 'CPU Requests',
+      stripMemory: '内存 Requests',
+      stripAt: '{at} 评估',
+      stripOpen: '调度详情',
+      stripNone: '后台还没有这个模块的资源评估（每 10 分钟算一次，需要模块启用）。',
+      stripNote: '后台定时算的固定公式结果，和下面现在读 Prometheus 的分析互相独立；下面读得慢时先看这一行。',
       switchToRule: '改为跟随固定公式',
       switchToAlgorithm: '改为跟随算法预测',
       switchConfirmRule:
@@ -2187,7 +2195,8 @@ const local = {
           d_decision_source:
             '副本数和 Pod 的 CPU、内存 Requests 跟随算法预测，还是跟随 P90、P95、P99 的固定公式；只跟随一个。',
           f_replica_mode: '副本模式',
-          d_replica_mode: '固定：副本上限就是最大副本数；动态：预测需要更多时上限可以抬高，最高到硬上限。',
+          d_replica_mode:
+            '固定容量公式：副本数只按请求量算；动态约束：吞吐、CPU、内存、JVM 堆各求一个副本数，取最大的。',
           f_fixed_replicas_enabled: '固定副本数开关',
           d_fixed_replicas_enabled:
             '开启后副本数一直是固定副本数，算法、预测、指标触发都不决定它（时间周期里的“固定”仍然优先）；关闭时固定副本数只保存，不参与计算。',
@@ -2383,7 +2392,7 @@ const local = {
         paceCooldownOnly: '{dir}：两次至少隔 {sec} 秒，一次不限个数。',
         paceNone: '{dir}：不限制。',
         paceOrder:
-          '上限扩展速度抬高的是“允许的最大副本数”，单次最大步长限制的是“一次动作实际增减几个”：前者决定能到多高，后者决定走多快，两者先后生效，不会互相覆盖。',
+          '最大副本数决定副本数最高能到多少，单次最大步长和冷却时间决定一次动作增减几个、隔多久：前者管“到多高”，后者管“走多快”，两者先后生效，不会互相覆盖。',
         fallbackFlowTitle: '平台失联与恢复的过程',
         flowOk: '平台正常：按平台给出的决策调整副本。',
         flowCache: '平台失联：{cache}内沿用 Operator 记住的上一次决策，只增不减。',

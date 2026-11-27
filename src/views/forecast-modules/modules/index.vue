@@ -78,6 +78,7 @@ import { type StrategyRow, type StrategyState, strategySummary } from '@/utils/s
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
 import { EMPTY_SYSTEM, type SystemParams } from '@/utils/module-params';
+import { operateProps } from '@/utils/operate-button';
 
 const PAGE_CODE = 'forecast_module_manage';
 const { t } = useI18n();
@@ -1369,16 +1370,20 @@ const columnMap: Record<string, any> = {
             default: () => t('common.confirmDelete')
           }
         ),
-        h(NButton, { size: 'tiny', type: 'info', onClick: () => clone(row) }, () => t('page.forecast.modules.clone')),
-        h(NButton, { size: 'tiny', onClick: () => (needTarget.value = row) }, () => t('page.forecast.modules.need')),
-        h(NButton, { size: 'tiny', onClick: () => openParams(row) }, () =>
+        h(NButton, { size: 'tiny', ...operateProps('copy'), onClick: () => clone(row) }, () =>
+          t('page.forecast.modules.clone')
+        ),
+        h(NButton, { size: 'tiny', ...operateProps('view'), onClick: () => (needTarget.value = row) }, () =>
+          t('page.forecast.modules.need')
+        ),
+        h(NButton, { size: 'tiny', ...operateProps('view'), onClick: () => openParams(row) }, () =>
           t('page.forecast.modules.paramsView.button')
         ),
         row.bypass
-          ? h(NButton, { size: 'tiny', type: 'success', onClick: () => resume(row) }, () =>
+          ? h(NButton, { size: 'tiny', ...operateProps('enable'), onClick: () => resume(row) }, () =>
               t('page.forecast.modules.resume')
             )
-          : h(NButton, { size: 'tiny', type: 'warning', onClick: () => (bypassTarget.value = row) }, () =>
+          : h(NButton, { size: 'tiny', ...operateProps('pause'), onClick: () => (bypassTarget.value = row) }, () =>
               t('page.forecast.modules.bypass')
             )
       ])

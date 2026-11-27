@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard, NSelect } from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import AssessmentStrip from '@/components/business/assessment-strip.vue';
 import GrafanaLink from '@/components/business/grafana-link.vue';
 import OverprovisionAiAssistant from '@/components/business/overprovision-ai-assistant.vue';
 import OverprovisionApplyModal from '@/components/business/overprovision-apply-modal.vue';
@@ -197,6 +198,7 @@ onMounted(() => {
 
     <div class="min-h-0 flex-1 overflow-y-auto">
       <NCard :bordered="false" size="small" class="rounded-16px shadow-sm">
+        <AssessmentStrip v-if="moduleId" :module-id="moduleId" class="mb-10px" />
         <OverprovisionModulePanel
           :detail="detail"
           :loading="detailLoading"

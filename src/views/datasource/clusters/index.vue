@@ -42,6 +42,7 @@ import {
 import { formatDateTime } from '@/utils/date';
 import { renderMiniMarkdown } from '@/utils/mini-markdown';
 import { operateWidth } from '@/utils/operate-width';
+import { operateProps } from '@/utils/operate-button';
 
 defineOptions({ name: 'DatasourceClusters' });
 
@@ -264,8 +265,8 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.Cluster.Cluster) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', type: 'warning', onClick: () => openChanges(row) }, () => p('viewChanges')),
-        h(NButton, { size: 'tiny', type: 'info', onClick: () => openEvents(row) }, () => p('viewEvents')),
+        h(NButton, { size: 'tiny', ...operateProps('view'), onClick: () => openChanges(row) }, () => p('viewChanges')),
+        h(NButton, { size: 'tiny', ...operateProps('view'), onClick: () => openEvents(row) }, () => p('viewEvents')),
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         row.is_default
           ? null
@@ -606,7 +607,7 @@ const changeColumns = computed(() => [
     width: 90,
     fixed: 'right' as const,
     render: (row: Api.Cluster.Change) =>
-      h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () => p('detail'))
+      h(NButton, { size: 'tiny', ...operateProps('detail'), onClick: () => openDetail(row) }, () => p('detail'))
   }
 ]);
 

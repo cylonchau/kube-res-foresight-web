@@ -10,6 +10,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatCpuMilli, formatMemoryBytes } from '@/utils/format';
 import { snapshotReasonText } from '@/utils/snapshot-text';
 import { operateWidth } from '@/utils/operate-width';
+import { operateProps } from '@/utils/operate-button';
 
 defineOptions({ name: 'SnapshotHistoryModal' });
 
@@ -140,7 +141,7 @@ const columns = computed<DataTableColumns<Api.Forecast.Snapshot>>(() => [
     width: operateWidth([t('page.forecast.recommendations.explain')]),
     align: 'center',
     render: row =>
-      h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row) }, () =>
+      h(NButton, { size: 'tiny', ...operateProps('detail'), onClick: () => openDetail(row) }, () =>
         t('page.forecast.recommendations.explain')
       )
   }

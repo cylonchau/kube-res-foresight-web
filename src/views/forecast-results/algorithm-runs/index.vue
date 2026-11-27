@@ -13,6 +13,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatPercent } from '@/utils/format';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
 import { operateWidth } from '@/utils/operate-width';
+import { operateProps } from '@/utils/operate-button';
 
 defineOptions({ name: 'ForecastAlgorithmRuns' });
 
@@ -169,8 +170,10 @@ const cfg = useTableColumnConfig({
       fixed: 'right',
       align: 'center',
       render: (row: Row) =>
-        h(NButton, { size: 'tiny', type: 'primary', disabled: !row.total, onClick: () => openRecords(row) }, () =>
-          t('page.forecast.algorithmRuns.records')
+        h(
+          NButton,
+          { size: 'tiny', ...operateProps('view'), disabled: !row.total, onClick: () => openRecords(row) },
+          () => t('page.forecast.algorithmRuns.records')
         )
     }
   },

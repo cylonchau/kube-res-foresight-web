@@ -15,6 +15,7 @@ import { formatDateTime } from '@/utils/date';
 import { formatResource } from '@/utils/format';
 import { helpTitle } from '@/utils/help-title';
 import { operateWidth } from '@/utils/operate-width';
+import { operateProps } from '@/utils/operate-button';
 
 defineOptions({ name: 'ForecastActionsFallbacks' });
 
@@ -244,7 +245,7 @@ const columnMap: Record<string, any> = {
     fixed: 'right',
     align: 'center',
     render: (row: FallbackRow) =>
-      h(NButton, { size: 'tiny', type: 'primary', onClick: () => openDetail(row.record) }, () =>
+      h(NButton, { size: 'tiny', ...operateProps('detail'), onClick: () => openDetail(row.record) }, () =>
         t('page.forecast.recommendations.explain')
       )
   }

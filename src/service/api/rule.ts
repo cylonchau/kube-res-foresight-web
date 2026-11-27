@@ -8,7 +8,7 @@ export function fetchGetRuleDecisions() {
 }
 
 /** the calculations of one module, newest first */
-export function fetchGetModuleRuleDecisions(moduleId: number, params?: { page?: number; pageSize?: number }) {
+export function fetchGetModuleRuleDecisions(moduleId: number, params?: { page?: number; page_size?: number }) {
   return request<{ list: Api.Rule.Decision[]; total: number }>({
     url: `${base}/modules/${moduleId}/rule-decisions`,
     method: 'get',

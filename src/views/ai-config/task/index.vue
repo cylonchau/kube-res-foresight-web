@@ -45,6 +45,7 @@ import {
 import { formatDateTime } from '@/utils/date';
 import { operateWidth } from '@/utils/operate-width';
 import { getAdaptivePageSize, getAdaptivePageSizes } from '@/utils/pagination';
+import { operateProps } from '@/utils/operate-button';
 
 defineOptions({ name: 'AiConfigTask' });
 
@@ -378,8 +379,12 @@ const columnMap: Record<string, any> = {
     align: 'center',
     render: (row: Api.Assistant.TaskRow) =>
       h(NSpace, { justify: 'center', size: 6, wrap: false }, () => [
-        h(NButton, { size: 'tiny', type: 'info', onClick: () => runNow(row) }, () => t('page.assistant.task.runNow')),
-        h(NButton, { size: 'tiny', onClick: () => openRuns(row) }, () => t('page.assistant.task.runs')),
+        h(NButton, { size: 'tiny', ...operateProps('run'), onClick: () => runNow(row) }, () =>
+          t('page.assistant.task.runNow')
+        ),
+        h(NButton, { size: 'tiny', ...operateProps('view'), onClick: () => openRuns(row) }, () =>
+          t('page.assistant.task.runs')
+        ),
         h(NButton, { size: 'tiny', type: 'primary', onClick: () => open(row) }, () => t('common.edit')),
         h(
           NPopconfirm,

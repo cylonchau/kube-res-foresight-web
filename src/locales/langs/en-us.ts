@@ -651,6 +651,16 @@ const local = {
       result: 'Result',
       reason: 'Reason',
       calculate: 'Calculate now',
+      stripTitle: 'Resource Assessment (background)',
+      stripReplicas: 'Replicas',
+      stripCpu: 'CPU Requests',
+      stripMemory: 'Memory Requests',
+      stripAt: 'assessed {at}',
+      stripOpen: 'Dispatch detail',
+      stripNone:
+        'No Resource Assessment of this module in the background yet (made every 10 minutes, for an enabled module).',
+      stripNote:
+        'The fixed formula the background makes on a schedule. It is independent of the analysis below, which asks Prometheus now; read this line while that one is slow.',
       switchToRule: 'Follow the fixed formula',
       switchToAlgorithm: 'Follow the algorithm forecasts',
       switchConfirmRule:
@@ -2299,7 +2309,7 @@ const local = {
             'Whether the replicas and the CPU and memory Requests of a Pod follow the algorithm forecasts or the fixed formula of the P90, P95 and P99; one only.',
           f_replica_mode: 'Replica mode',
           d_replica_mode:
-            'Fixed: the ceiling is the most replicas; dynamic: the ceiling may rise when the forecast needs more, up to the hard ceiling.',
+            'Fixed capacity formula: the replicas are worked out from the request rate only; dynamic constraints: throughput, CPU, memory and the JVM heap each give a count and the largest wins.',
           f_fixed_replicas_enabled: 'Fixed replicas switch',
           d_fixed_replicas_enabled:
             'On, the replicas stay at the fixed count and no algorithm, forecast or trigger decides them (a period that fixes them still wins); off, the count is only stored and takes no part.',
@@ -2517,7 +2527,7 @@ const local = {
         paceCooldownOnly: '{dir}: at least {sec} s between two, any number at a time.',
         paceNone: '{dir}: no limit.',
         paceOrder:
-          'The expansion speed raises the most replicas allowed; the maximum step limits how many replicas one action really adds or removes. The first decides how high the replicas may go, the second how fast; they apply one after the other and do not overwrite each other.',
+          'The most replicas decides how high the replicas may go; the maximum step and the cooldown decide how many one action adds or removes and how often. The first is how high, the second how fast; they apply one after the other and do not overwrite each other.',
         fallbackFlowTitle: 'An outage of the platform and the way back',
         flowOk: 'The platform answers: the replicas follow its decision.',
         flowCache:
